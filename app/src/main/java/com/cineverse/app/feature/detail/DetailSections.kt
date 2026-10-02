@@ -455,6 +455,7 @@ private fun SeasonChips(
 
 fun LazyListScope.aboutSection(
     detail: TitleDetail,
+    awards: com.cineverse.app.data.awards.Awards,
     onPerson: (Person) -> Unit,
     onOpen: (MediaItem) -> Unit,
 ) {
@@ -463,6 +464,9 @@ fun LazyListScope.aboutSection(
     }
     if (detail.crew.isNotEmpty()) {
         item(key = "crew") { CrewRow(detail.crew, onPerson) }
+    }
+    if (awards.any) {
+        item(key = "awards") { AwardsPanel(awards, Modifier.padding(bottom = 18.dp)) }
     }
     if (detail.brands.isNotEmpty()) {
         item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp)) }

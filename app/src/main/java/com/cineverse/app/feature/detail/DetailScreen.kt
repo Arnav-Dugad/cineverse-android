@@ -249,6 +249,7 @@ fun DetailScreen(
 
                 DetailTab.About -> aboutSection(
                     detail = detail,
+                    awards = state.awards,
                     onPerson = onPerson,
                     onOpen = onOpen,
                 )

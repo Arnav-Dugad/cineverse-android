@@ -104,6 +104,8 @@ class AppContainer(private val context: Context) {
 
     val crashes by lazy { com.cineverse.app.core.crash.CrashReporter(context) }
 
+    val awards by lazy { com.cineverse.app.data.awards.AwardsRepository(http) }
+
     // ---------- is there a network ----------
 
     private val _online = MutableStateFlow(true)

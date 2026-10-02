@@ -37,6 +37,7 @@ data class DetailState(
     val showNumbers: Boolean = false,
     val heatMode: HeatMode = HeatMode.Rating,
     val heatmap: Heatmap? = null,
+    val awards: com.cineverse.app.data.awards.Awards = com.cineverse.app.data.awards.Awards(),
     val loadingHeatmap: Boolean = false,
     val undo: UndoMark? = null,
 )
@@ -139,10 +140,25 @@ class DetailViewModel(
         if (imdbId.isBlank()) return@launch
         app.scores.cached(imdbId, type)?.let {
             _state.value = _state.value.copy(scores = it)
+            loadAwards(imdbId)
             return@launch
         }
         val scores = app.scores.of(imdbId, type)
         _state.value = _state.value.copy(scores = scores)
+        loadAwards(imdbId)
+    }
+
+    /**
+     * Trophies, from Wikidata, well off the critical path.
+     *
+     * TMDB has no awards feed, so this is a second service and a slow one. It
+     * runs after the page is already on screen and simply fills a panel in when
+     * it arrives; a title with nothing recorded shows no panel at all rather
+     * than an empty one.
+     */
+    private fun loadAwards(imdbId: String) = viewModelScope.launch {
+        val awards = app.awards.of(imdbId)
+        if (awards.any) _state.value = _state.value.copy(awards = awards)
     }
 
     // ---------- the heatmap ----------

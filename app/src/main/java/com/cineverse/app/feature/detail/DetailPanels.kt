@@ -338,3 +338,122 @@ fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
 
 private val DAY = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 private val EXACT = SimpleDateFormat("EEE d MMM, HH:mm zzz", Locale.getDefault())
+
+/**
+ * What it won.
+ *
+ * TMDB has no awards feed, so these come from Wikidata, and nothing here is
+ * invented: no trophy is drawn that Wikidata did not return, and no imitation
+ * award logo is ever shown. Wins first, grouped by programme, because "four
+ * Oscars" is the fact and "Best Director, Best Picture, Best Actor, Best
+ * Original Screenplay" is the detail underneath it.
+ *
+ * Nominations are listed only where they are not already wins. A win and a
+ * nomination for the same award is a win; counting both is how a panel ends up
+ * claiming more than happened.
+ */
+@Composable
+fun AwardsPanel(
+    awards: com.cineverse.app.data.awards.Awards,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    if (!awards.any) return
+
+    val byProgramme = remember(awards) {
+        awards.wins.groupBy { it.programme }.entries.sortedByDescending { it.value.size }
+    }
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenPadding)
+            .clip(CvShape.XLarge)
+            .background(colors.glass)
+            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .padding(16.dp)
+    ) {
+        Text("RECOGNITION", style = KickerStyle, color = colors.text3)
+        Spacer(Modifier.height(5.dp))
+        Text(
+            buildString {
+                if (awards.wins.isNotEmpty()) {
+                    append(awards.wins.size)
+                    append(if (awards.wins.size == 1) " win" else " wins")
+                }
+                if (awards.nominations.isNotEmpty()) {
+                    if (isNotEmpty()) append("  \u00b7  ")
+                    append(awards.nominations.size)
+                    append(if (awards.nominations.size == 1) " nomination" else " nominations")
+                }
+            },
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.text,
+        )
+
+        for ((programme, won) in byProgramme) {
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(colors.gold.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        won.size.toString(),
+                        style = MaterialTheme.typography.labelSmall.tabular(),
+                        color = colors.gold,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    programme,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            for (award in won.take(4)) {
+                Text(
+                    buildString {
+                        append(award.name.removePrefix(programme).trim(' ', '-', ':', ','))
+                        if (award.year.isNotBlank()) append("  \u00b7  ").append(award.year)
+                    }.ifBlank { award.name },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.text3,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 36.dp, top = 3.dp),
+                )
+            }
+        }
+
+        if (awards.nominations.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text(
+                // DISTINCT programmes. Four Academy Award nominations are four
+                // nominations and one programme; listing the name four times
+                // reads as a bug and says nothing the count did not.
+                "Also nominated for " +
+                    awards.nominations
+                        .map { it.programme }
+                        .distinct()
+                        .take(4)
+                        .joinToString(", ")
+                        .ifBlank { "several awards" },
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.text3,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "From Wikidata. Major programmes only.",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.text3.copy(alpha = 0.7f),
+        )
+    }
+}
