@@ -54,6 +54,10 @@ class CineVerseApp : Application(), SingletonImageLoader.Factory {
         // Installed FIRST, before anything else can throw, so the handler is in
         // place for the rest of start-up and not only for the part after it.
         container.crashes.install()
+        // The channels must exist before anything can post to them, and they are
+        // cheap to recreate: the system keeps whatever the user changed.
+        com.cineverse.app.notify.Notifications.ensureChannels(this)
+        com.cineverse.app.notify.WatchWorker.schedule(this)
     }
 
     /**

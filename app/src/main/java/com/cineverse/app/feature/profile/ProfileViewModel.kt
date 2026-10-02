@@ -19,6 +19,9 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     val library: StateFlow<Library> = app.library.library
     val update: StateFlow<UpdateState> = app.updates.state
 
+    /** Pass a line to the one snackbar the app has. */
+    fun say(message: String) = app.say(message)
+
     /** What is in the crash folder, read once when Settings opens. */
     val crashes: List<com.cineverse.app.core.crash.CrashReport> get() = app.crashes.reports()
 

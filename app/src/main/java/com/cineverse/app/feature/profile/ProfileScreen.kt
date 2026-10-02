@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -239,6 +240,90 @@ fun ProfileScreen(
                 checked = settings.notifyReleases,
                 onChange = viewModel::setNotifyReleases,
             )
+        }
+
+        // Asked FOR, not asked at launch.
+        //
+        // A permission prompt in the first five seconds of an app, before it has
+        // shown anything worth being notified about, is the prompt people deny
+        // by reflex and never revisit. This one sits under the two toggles it
+        // belongs to, so it is requested by someone who has just said they want
+        // the thing it enables.
+        item(key = "notifyPermission") {
+            val granted = com.cineverse.app.notify.Notifications.canPost(context)
+            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+            ) { allowed ->
+                if (allowed) haptics?.play(Haptic.Success) else haptics?.play(Haptic.Warning)
+            }
+            if (!granted && (settings.notifyNewEpisodes || settings.notifyReleases)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ScreenPadding, vertical = 10.dp)
+                        .clip(CvShape.Medium)
+                        .background(Palette.Red2.copy(alpha = 0.12f))
+                        .clickableNoRipple {
+                            haptics?.play(Haptic.Tap)
+                            launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Allow notifications",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = colors.text,
+                        )
+                        Text(
+                            "Android has not been given permission yet, so nothing can be sent.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.text3,
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                        null,
+                        tint = Palette.Red2,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
+        }
+
+        item(key = "checkNow") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickableNoRipple {
+                        haptics?.play(Haptic.Tap)
+                        com.cineverse.app.notify.WatchWorker.runNow(context)
+                        viewModel.say("Checking for new episodes and releases…")
+                    }
+                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.NotificationsActive,
+                    null,
+                    tint = colors.text2,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Check now",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.text,
+                    )
+                    Text(
+                        "Normally once a day, each morning, on Wi-Fi",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                    )
+                }
+            }
         }
 
         item(key = "app") { GroupHeading("App") }

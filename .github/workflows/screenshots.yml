@@ -1,0 +1,41 @@
+name: Record screenshots
+
+# Screenshot references have to be made by the SAME renderer that checks them.
+# Recording them on a developer's Windows machine and verifying them on a Linux
+# runner compares FreeType against DirectWrite, which fails on a commit that
+# changed nothing -- it did, four tests out of four, and the diff was a scatter
+# of single-pixel specks along the edges of glyphs.
+#
+# So they are recorded here, on the runner, and committed from here. Run this
+# from the Actions tab after a deliberate design change.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Record
+        run: ./gradlew :app:testDebugUnitTest --no-daemon -Proborazzi.test.record=true
+
+      - name: Commit whatever moved
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/test/screenshots
+          if git diff --cached --quiet; then
+            echo "No change in any reference."
+            exit 0
+          fi
+          git commit -m "Re-record screenshot references on the CI renderer"
+          git push

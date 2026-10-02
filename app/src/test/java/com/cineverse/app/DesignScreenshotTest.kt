@@ -21,6 +21,7 @@ import com.cineverse.app.data.model.MediaType
 import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.ThemeChoice
 import com.cineverse.app.data.scores.Scores
+import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -54,6 +55,24 @@ class DesignScreenshotTest {
 
     @get:Rule
     val compose = createComposeRule()
+
+    /**
+     * A tolerance, because text does not rasterise identically everywhere.
+     *
+     * The references are recorded on CI's own Linux runner, which is the only
+     * honest way to compare — but FreeType still produces faintly different
+     * antialiasing between runner images and between font versions. The first
+     * version of this test had no threshold and failed four of four on a commit
+     * that changed no design at all: the diff was a scatter of single-pixel
+     * specks along the edges of glyphs.
+     *
+     * 0.1% of pixels is far below anything a human could see and far above the
+     * noise. A real change — a colour, a radius, a weight, a position — moves
+     * thousands of pixels and still fails, which is the whole point.
+     */
+    private val OPTIONS = RoborazziOptions(
+        compareOptions = RoborazziOptions.CompareOptions(changeThreshold = 0.001f),
+    )
 
     private val film = MediaItem(
         id = 27205,
@@ -160,6 +179,9 @@ class DesignScreenshotTest {
                 }
             }
         }
-        compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")
+        compose.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/$name.png",
+            roborazziOptions = OPTIONS,
+        )
     }
 }

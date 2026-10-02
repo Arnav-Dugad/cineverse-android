@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.ThemeChoice
@@ -92,6 +93,7 @@ class SettingsRepository(
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
         val skippedVersion = intPreferencesKey("skippedVersion")
         val seenVersion = intPreferencesKey("seenVersion")
+        val notified = stringSetPreferencesKey("notified")
     }
 
     val settings: StateFlow<Settings> = context.dataStore.data
@@ -172,6 +174,22 @@ class SettingsRepository(
     val seenVersion: StateFlow<Int> = context.dataStore.data
         .map { it[Keys.seenVersion] ?: 0 }
         .stateIn(scope, SharingStarted.Eagerly, 0)
+
+    /**
+     * Everything the daily sweep has already said out loud.
+     *
+     * Capped at 400 keys, newest kept. An uncapped set grows by a few entries a
+     * day for ever and is read on every sweep; 400 is comfortably more than a
+     * year of episodes for a library this size, and the ones that fall off the
+     * end are months old and could not fire again anyway.
+     */
+    val notifiedKeys: StateFlow<Set<String>> = context.dataStore.data
+        .map { it[Keys.notified] ?: emptySet() }
+        .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+    suspend fun rememberNotified(keys: Set<String>) = context.dataStore.edit {
+        it[Keys.notified] = keys.toList().takeLast(400).toSet()
+    }
 
     val skippedVersion: StateFlow<Int> = context.dataStore.data
         .map { it[Keys.skippedVersion] ?: 0 }
