@@ -86,7 +86,21 @@ class UpdateRepository(
      *   both the six-hour gate and a previously skipped version, because asking
      *   explicitly is a different act from launching the app.
      */
+    /**
+     * A debug build must never offer an update.
+     *
+     * Its package is `com.cineverse.app.debug`, so a release APK installed over
+     * it is a DIFFERENT app — Android would put a second CineVerse on the home
+     * screen rather than updating this one. Offering it is worse than not having
+     * an updater: it is an action that cannot do what it says.
+     */
+    val canUpdate: Boolean get() = context.packageName == "com.cineverse.app"
+
     suspend fun check(force: Boolean = false): UpdateState {
+        if (!canUpdate) {
+            _state.value = UpdateState.UpToDate
+            return _state.value
+        }
         val sinceLast = System.currentTimeMillis() - settings.lastUpdateCheck.value
         if (!force && sinceLast < CHECK_INTERVAL_MS) return _state.value
         _state.value = UpdateState.Checking

@@ -20,6 +20,7 @@ import com.cineverse.app.data.firebase.EpisodeRepository
 import com.cineverse.app.data.firebase.Firebase
 import com.cineverse.app.data.firebase.LibraryRepository
 import com.cineverse.app.data.prefs.SettingsRepository
+import com.cineverse.app.data.recommend.Recommender
 import com.cineverse.app.data.scores.OmdbVerdict
 import com.cineverse.app.data.scores.ScoresRepository
 import com.cineverse.app.data.tmdb.TmdbApi
@@ -149,6 +150,17 @@ class AppContainer(private val context: Context) {
     }
 
     val tmdb: TmdbRepository by lazy { TmdbRepository(retrofit.create(TmdbApi::class.java)) }
+
+    val recommender: Recommender by lazy { Recommender(tmdb) }
+
+    /**
+     * Bumped once per launch, never on navigation.
+     *
+     * It is what makes the rails a different slice of the ranked pool each time
+     * the app is opened. Bumping it while someone is browsing would reshuffle a
+     * row under their thumb, which reads as a bug rather than as freshness.
+     */
+    val rotation: Int = (System.currentTimeMillis() / 1000L % 100_000L).toInt()
 
     // ---------- firebase ----------
 

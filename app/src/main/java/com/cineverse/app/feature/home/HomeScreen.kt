@@ -108,7 +108,7 @@ fun HomeScreen(
             }
         }
 
-        items(state.rails, key = { it.id }) { rail ->
+        items(state.personal + state.rails, key = { it.id }) { rail ->
             PosterRail(
                 items = rail.items,
                 title = rail.title,
@@ -118,6 +118,7 @@ fun HomeScreen(
                 isWatched = { library.isWatched(it.key) },
                 isSaved = { library.isSaved(it.key) },
                 ratingOf = { library.ratingOf(it.key) },
+                matchOf = { rail.match[it.key] ?: 0 },
                 onLongPress = onQuickActions,
             )
         }

@@ -9,6 +9,9 @@ import com.cineverse.app.data.model.ContinueRow
 import com.cineverse.app.data.model.MediaItem
 import com.cineverse.app.data.model.MediaType
 import com.cineverse.app.data.model.ShowProgress
+import com.cineverse.app.data.recommend.Recommender
+import com.cineverse.app.data.recommend.SeedReason
+import com.cineverse.app.data.recommend.TasteProfile
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,12 +29,23 @@ data class Rail(
     val kicker: String? = null,
     val items: List<MediaItem> = emptyList(),
     val seeAll: com.cineverse.app.nav.Route? = null,
+    /** Per-title match percentage, for a personalised row. */
+    val match: Map<String, Int> = emptyMap(),
 )
 
 @Immutable
 data class HomeState(
     val hero: List<MediaItem> = emptyList(),
     val continueWatching: List<ContinueRow> = emptyList(),
+    /**
+     * Kept apart from [rails] on purpose. The two are produced by independent
+     * coroutines — the catalogue from one fetch, these from the library
+     * arriving — and holding them in one list meant whichever finished second
+     * silently erased the other. Which it was depended on how warm the Firestore
+     * cache was, so the personalised rows appeared on some launches and not
+     * others, which is the worst kind of bug to chase.
+     */
+    val personal: List<Rail> = emptyList(),
     val rails: List<Rail> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -39,6 +53,9 @@ data class HomeState(
 )
 
 class HomeViewModel(private val app: AppContainer) : ViewModel() {
+
+    /** What the taste profile was last built from, so it rebuilds only on change. */
+    private var tasteSignature = ""
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
@@ -53,7 +70,22 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         // either changes — which is what makes a tick on the detail page move
         // the row on Home before you have finished going back.
         combine(app.episodes.progress, app.library.library) { shows, lib -> shows to lib }
-            .onEach { (shows, lib) -> rebuildContinue(shows, lib) }
+            .onEach { (shows, lib) ->
+                rebuildContinue(shows, lib)
+                // Recommendations cannot be built until the library has actually
+                // arrived — it is a Firestore listener, so at the moment `load()`
+                // runs it is still empty and a profile built from it is empty too.
+                // Rebuilt when the SHAPE of the taste changes (a title added,
+                // watched or rated), not on every emission: a tick that moves one
+                // episode must not re-fetch nine TMDB queries.
+                if (lib.loaded) {
+                    val signature = listOf(lib.saved.size, lib.watched.size, lib.ratings.size, shows.size).joinToString("|")
+                    if (signature != tasteSignature) {
+                        tasteSignature = signature
+                        loadRecommendations()
+                    }
+                }
+            }
             .launchIn(viewModelScope)
 
         app.online
@@ -112,43 +144,66 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             refreshing = false,
         )
 
-        // Taste-based rows come after the catalogue, because they need the
-        // library to have arrived and they must never delay first paint.
-        loadBecauseYouWatched()
+        // Recommendations are driven by the library arriving, not by this
+        // function finishing — see the combine above.
     }
 
     /**
-     * "Because you're watching Severance" — the website's best rail, and the
-     * one that makes the app feel like it knows you. Built from the show you
-     * are furthest into, not the most recently added, because that is the one
-     * your taste is actually expressed by.
+     * The recommendations.
+     *
+     * Two kinds, and the difference matters:
+     *
+     *  - **Top picks**, scored across every signal in the taste profile and
+     *    diversified, with a match percentage that actually separates the row.
+     *  - **Because you're watching X**, which is a narrower promise and is
+     *    filtered harder — a row named after a show has to look like that show.
+     *
+     * Both wait for the library to arrive and neither delays first paint: the
+     * catalogue is already on screen by the time these land.
      */
-    private fun loadBecauseYouWatched() = viewModelScope.launch {
-        val shows = app.episodes.progress.value.values
-            .filter { it.watchedCount >= 3 && !it.dropped }
-            .sortedByDescending { it.log.lastOrNull()?.stamp ?: 0L }
-            .take(2)
-        if (shows.isEmpty()) return@launch
-        val region = app.settings.settings.value.region
-        val extra = shows.mapNotNull { show ->
-            val similar = runCatching {
-                app.tmdb.detail(show.tmdbId, MediaType.Tv, region).recommendations
-            }.getOrDefault(emptyList())
-            val unseen = similar.filterNot { app.library.library.value.isWatched(it.key) }
-            if (unseen.isEmpty()) null else Rail(
-                id = "because_${show.tmdbId}",
-                title = show.title,
-                kicker = "Because you're watching",
-                items = unseen.take(20),
+    private fun loadRecommendations() = viewModelScope.launch {
+        val library = app.library.library.value
+        val shows = app.episodes.progress.value
+        val profile = TasteProfile.build(library, shows, app.rotation)
+        if (profile.isEmpty) return@launch
+
+        val picks = app.recommender.recommend(
+            profile = profile,
+            library = library,
+            adult = app.settings.settings.value.adult,
+        )
+
+        val extra = mutableListOf<Rail>()
+        if (picks.isNotEmpty()) {
+            val range = Recommender.scoreRange(picks)
+            extra += Rail(
+                id = "picks",
+                title = "Top picks for you",
+                kicker = "Chosen from ${profile.titlesSeen} titles you have tracked",
+                items = picks.map { it.item },
+                match = picks.associate { it.item.key to Recommender.matchBadge(it.score, range) },
             )
         }
-        if (extra.isEmpty()) return@launch
-        // Second from the top: close enough to be seen, far enough that the
-        // catalogue still leads.
-        val existing = _state.value.rails.filterNot { it.id.startsWith("because_") }
-        _state.value = _state.value.copy(
-            rails = existing.take(1) + extra + existing.drop(1)
-        )
+
+        for (seed in profile.seeds.take(2)) {
+            val related = app.recommender.becauseOf(seed, library)
+            if (related.size >= 6) {
+                extra += Rail(
+                    id = "because_${seed.type.wire}_${seed.id}",
+                    title = seed.title,
+                    kicker = when (seed.reason) {
+                        SeedReason.Watching -> "Because you're watching"
+                        SeedReason.Rated -> "Because you rated this highly"
+                        else -> "Because you watched"
+                    },
+                    items = related,
+                )
+            }
+        }
+
+        // Top picks leads; the catalogue follows. A personalised row below six
+        // generic ones is a personalised row nobody sees.
+        _state.value = _state.value.copy(personal = extra)
     }
 
     /**
