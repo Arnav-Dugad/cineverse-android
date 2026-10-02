@@ -109,6 +109,27 @@ data class Episode(
 ) {
     val rated: Boolean get() = voteCount > 0 && voteAverage > 0
     val label: String get() = "S$season E$number"
+
+    /**
+     * Has this episode actually been broadcast?
+     *
+     * A date in the future means no; NO DATE AT ALL also means no. TMDB files a
+     * season ahead of its run with placeholder rows that have no air date and
+     * often no name, and treating those as "aired but unwatched" is how a show
+     * you are completely caught up on reports four episodes outstanding. The
+     * date is compared in the device zone, which is the zone the viewer is in.
+     */
+    val hasAired: Boolean
+        get() {
+            if (airDate.isBlank()) return false
+            val day = runCatching { java.time.LocalDate.parse(airDate) }.getOrNull()
+                ?: return false
+            return !day.isAfter(java.time.LocalDate.now())
+        }
+
+    /** A row TMDB has filed but not yet described: no name, no date, no still. */
+    val isPlaceholder: Boolean
+        get() = airDate.isBlank() && (name.isBlank() || name.matches(Regex("Episode \\d+")))
 }
 
 @Immutable

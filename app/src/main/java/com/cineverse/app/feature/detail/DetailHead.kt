@@ -1,0 +1,445 @@
+package com.cineverse.app.feature.detail
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.cineverse.app.core.design.CvShape
+import com.cineverse.app.core.design.CvTheme
+import com.cineverse.app.core.design.Haptic
+import com.cineverse.app.core.design.KickerStyle
+import com.cineverse.app.core.design.LocalHaptics
+import com.cineverse.app.core.design.Motion
+import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.CvImage
+import com.cineverse.app.core.ui.CvLogo
+import com.cineverse.app.core.ui.Img
+import com.cineverse.app.core.ui.ScoreRow
+import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.clickableNoRipple
+import com.cineverse.app.core.ui.sharedPoster
+import com.cineverse.app.data.model.TitleDetail
+import com.cineverse.app.data.scores.Scores
+
+/**
+ * The top of a title page.
+ *
+ * Rebuilt to the shape the website settled on, which is centred rather than
+ * left-aligned: poster floating over the artwork, the title treatment under it,
+ * the tagline, then every piece of meta — our score, IMDb, the year, the
+ * certificate, the genres — as ONE wrapped row of chips rather than three
+ * separate lines in three separate styles.
+ *
+ * That last part is the whole idea. The old head had the score pills on one
+ * row, the genre chips on another and the year buried in a dot-separated string
+ * in a third; all three say "here is a fact about this title" and saying it
+ * three ways made the block taller and harder to scan. One chip style, one
+ * flow, wrapping where it needs to.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DetailHead(
+    detail: TitleDetail,
+    scores: Scores,
+    saved: Boolean,
+    watched: Boolean,
+    myRating: Int,
+    movieMinutes: Int,
+    onSave: () -> Unit,
+    onWatched: () -> Unit,
+    onRate: () -> Unit,
+    onShare: () -> Unit,
+    onPlayTrailer: () -> Unit,
+    onLists: () -> Unit,
+    onProgress: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = ScreenPadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // The poster OVERLAPS the artwork, which is what makes the top of the
+        // page read as one object rather than a picture with a card underneath
+        // it.
+        //
+        // The overlap is done by giving the poster a container shorter than
+        // itself and letting it overflow upward. An offset alone would move the
+        // poster and leave its full-height slot behind, so everything below it
+        // would sit 86dp lower than it looks — a gap exactly the size of the
+        // overlap, which is the shape of the bug this replaced.
+        Box(
+            Modifier.height(POSTER_HEIGHT - POSTER_OVERLAP),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Box(
+                Modifier
+                    .offset(y = -POSTER_OVERLAP)
+                    // REQUIRED, not plain size. A Box hands its own maximum
+                    // height down as a constraint, so `.height(258.dp)` inside a
+                    // 154dp parent is quietly coerced to 154 and the poster
+                    // comes out with its bottom third missing. `requiredHeight`
+                    // is the one that means what it says.
+                    .requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT)
+                    .sharedPoster(detail.key)
+                    .clip(CvShape.Large)
+                    .border(1.dp, colors.text.copy(alpha = 0.16f), CvShape.Large)
+            ) {
+                CvImage(
+                    Img.posterLarge(detail.posterPath),
+                    detail.title,
+                    Modifier.requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        if (detail.logoPath != null) {
+            CvLogo(
+                detail.logoPath,
+                detail.title,
+                Modifier.fillMaxWidth(0.86f).height(74.dp),
+                align = Alignment.Center,
+            )
+        } else {
+            Text(
+                detail.title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.text,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        if (detail.tagline.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "“${detail.tagline}”",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.text3,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Everything factual, in one flow.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (detail.voteAverage > 0) {
+                Chip(tint = colors.gold) {
+                    Icon(
+                        Icons.Rounded.Star,
+                        null,
+                        tint = colors.gold,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        String.format("%.1f", detail.voteAverage),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.gold,
+                    )
+                }
+            }
+            // The outside scores keep their own marks, which are the whole
+            // point of them, so they are placed as-is inside the same flow.
+            if (scores.any) ScoreRow(scores)
+
+            detail.year.takeIf { it.isNotBlank() }?.let { Chip { PlainText(it) } }
+            detail.certificate.takeIf { it.isNotBlank() }?.let { Chip { PlainText(it) } }
+            runtimeLabelFor(detail)?.let { Chip { PlainText(it) } }
+            for (genre in detail.genres.take(4)) {
+                Chip { PlainText(genre.name) }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // The actions wrap too, so a long "Play Trailer" and five circles never
+        // squeeze each other into unreachable targets on a narrow phone.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (detail.trailer != null) {
+                Row(
+                    Modifier
+                        .height(50.dp)
+                        .clip(CvShape.Pill)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Palette.Red, Palette.Red2)
+                            )
+                        )
+                        .clickableNoRipple { haptics?.play(Haptic.Tap); onPlayTrailer() }
+                        .padding(horizontal = 22.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Rounded.PlayArrow,
+                        null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        "Play Trailer",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                    )
+                }
+            }
+
+            ActionCircle(
+                icon = if (saved) Icons.Rounded.Bookmark else Icons.Rounded.Add,
+                active = saved,
+                description = if (saved) "In your list" else "Add to your list",
+                onLongPress = { haptics?.play(Haptic.Peek); onLists() },
+            ) { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() }
+
+            ActionCircle(
+                icon = Icons.Rounded.Check,
+                active = watched,
+                activeTint = colors.green,
+                description = if (watched) "Watched" else "Mark watched",
+            ) { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() }
+
+            ActionCircle(
+                icon = if (myRating > 0) Icons.Rounded.Star else Icons.Rounded.StarOutline,
+                active = myRating > 0,
+                activeTint = colors.gold,
+                label = if (myRating > 0) myRating.toString() else null,
+                description = "Rate",
+            ) { haptics?.play(Haptic.Tap); onRate() }
+
+            ActionCircle(icon = Icons.Rounded.Share, active = false, description = "Share") {
+                haptics?.play(Haptic.Tap); onShare()
+            }
+        }
+
+        if (!detail.isSeries && detail.runtime > 0 && (movieMinutes > 0 || !watched)) {
+            Spacer(Modifier.height(16.dp))
+            MovieProgressStrip(
+                minutes = movieMinutes,
+                runtime = detail.runtime,
+                onClick = { haptics?.play(Haptic.Tap); onProgress() },
+            )
+        }
+
+        if (detail.overview.isNotBlank()) {
+            Spacer(Modifier.height(20.dp))
+            ExpandableText(detail.overview)
+        }
+    }
+}
+
+/**
+ * The one-line read on a film you paused.
+ *
+ * It states the time rather than only drawing a bar, because "48m left" is the
+ * thing being decided and a bar at 62% is not.
+ */
+@Composable
+private fun MovieProgressStrip(minutes: Int, runtime: Int, onClick: () -> Unit) {
+    val colors = CvTheme.colors
+    val started = minutes > 0
+    val fraction = (minutes.toFloat() / runtime).coerceIn(0f, 1f)
+    val animated by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = Motion.landing(),
+        label = "filmProgress",
+    )
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(CvShape.Medium)
+            .background(colors.glass)
+            .border(1.dp, colors.hairline, CvShape.Medium)
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (started) "${runtime - minutes}m left" else "Set your place",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.text,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (started) "${(fraction * 100).toInt()}%" else "Not started",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+            )
+        }
+        if (started) {
+            Spacer(Modifier.height(9.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(CvShape.Pill)
+                    .background(colors.text.copy(alpha = 0.14f))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(animated)
+                        .height(4.dp)
+                        .clip(CvShape.Pill)
+                        .background(Palette.Red2)
+                )
+            }
+        }
+    }
+}
+
+/** One meta chip. Every fact on the page wears this, so none shouts over another. */
+@Composable
+private fun Chip(
+    tint: Color = Color.Unspecified,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val colors = CvTheme.colors
+    val fill = if (tint == Color.Unspecified) colors.glass else tint.copy(alpha = 0.16f)
+    val edge = if (tint == Color.Unspecified) colors.hairline else tint.copy(alpha = 0.35f)
+    Row(
+        Modifier
+            .height(32.dp)
+            .clip(CvShape.Pill)
+            .background(fill)
+            .border(1.dp, edge, CvShape.Pill)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun PlainText(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = CvTheme.colors.text2,
+        maxLines = 1,
+    )
+}
+
+@Composable
+private fun ActionCircle(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    active: Boolean,
+    description: String,
+    activeTint: Color = Color.Unspecified,
+    label: String? = null,
+    onLongPress: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val tint = when {
+        !active -> colors.text
+        activeTint != Color.Unspecified -> activeTint
+        else -> Palette.Red2
+    }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = Motion.snappy(),
+        label = "action",
+    )
+    Box(
+        Modifier
+            .size(50.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(CircleShape)
+            .background(if (active) tint.copy(alpha = 0.14f) else colors.glass)
+            .border(1.dp, if (active) tint.copy(alpha = 0.5f) else colors.hairline, CircleShape)
+            .then(
+                if (onLongPress == null) {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier.pointerInput(onClick, onLongPress) {
+                        detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() })
+                    }
+                }
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (label != null) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
+        } else {
+            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+private val POSTER_WIDTH = 172.dp
+private val POSTER_HEIGHT = 258.dp
+
+/** How far the poster reaches up into the artwork. */
+private val POSTER_OVERLAP = 104.dp
+
+private fun runtimeLabelFor(detail: TitleDetail): String? = when {
+    detail.isSeries && detail.numberOfSeasons > 0 ->
+        "${detail.numberOfSeasons} season${if (detail.numberOfSeasons == 1) "" else "s"}"
+    detail.runtime > 0 -> "${detail.runtime / 60}h ${detail.runtime % 60}m"
+    else -> null
+}

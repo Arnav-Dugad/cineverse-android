@@ -183,8 +183,9 @@ fun EpisodeRow(
                     .background(colors.surface2)
             ) {
                 // A still from an episode you have not seen gives it away, so
-                // the spoiler shield blurs it until it is watched.
-                val hide = spoilerShield && !watched
+                // the spoiler shield blurs it until it is watched. An episode
+                // that has not aired has nothing to spoil.
+                val hide = spoilerShield && !watched && episode.hasAired
                 CvImage(
                     Img.still(episode.stillPath),
                     episode.name,
@@ -192,7 +193,26 @@ fun EpisodeRow(
                         .fillMaxSize()
                         .then(if (hide) Modifier.blur(14.dp) else Modifier),
                 )
-                if (isNext) {
+                if (!episode.hasAired) {
+                    // Not "unwatched" — UNAIRED. The difference matters: an
+                    // episode that does not exist yet was being drawn exactly
+                    // like one you had skipped, so a show you were completely
+                    // caught up on looked like it had four outstanding.
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(5.dp)
+                            .clip(CvShape.Pill)
+                            .background(Color(0xB306060B))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "UPCOMING",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.cyan,
+                        )
+                    }
+                } else if (isNext) {
                     Box(
                         Modifier
                             .align(Alignment.TopStart)
@@ -229,15 +249,33 @@ fun EpisodeRow(
                     .padding(horizontal = 12.dp)
             ) {
                 Text(
-                    "E${episode.number}  ${episode.name}",
+                    buildString {
+                        append("E").append(episode.number)
+                        // A placeholder row has no name worth printing, and
+                        // "Episode 10" twice over reads as a rendering fault.
+                        if (episode.name.isNotBlank() && !episode.isPlaceholder) {
+                            append("  ").append(episode.name)
+                        }
+                    },
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (watched) colors.text2 else colors.text,
+                    color = when {
+                        !episode.hasAired -> colors.text3
+                        watched -> colors.text2
+                        else -> colors.text
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
                     buildString {
+                        if (!episode.hasAired) {
+                            append(
+                                if (episode.airDate.isBlank()) "Date not announced"
+                                else "Airs ${episode.airDate}"
+                            )
+                            return@buildString
+                        }
                         if (episode.runtime > 0) append("${episode.runtime}m")
                         if (episode.airDate.isNotBlank()) {
                             if (isNotEmpty()) append("  ·  ")
@@ -252,7 +290,7 @@ fun EpisodeRow(
                     color = colors.text3,
                     maxLines = 1,
                 )
-                if (!spoilerShield || watched) {
+                if (episode.hasAired && (!spoilerShield || watched)) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         episode.overview,
@@ -264,7 +302,14 @@ fun EpisodeRow(
                 }
             }
 
-            TickButton(watched = watched, onToggle = onToggle)
+            // No tick on an unaired episode. Offering one invites a mark that
+            // the website would immediately disagree with, and there is nothing
+            // honest to record about an episode nobody can have watched.
+            if (episode.hasAired) {
+                TickButton(watched = watched, onToggle = onToggle)
+            } else {
+                Spacer(Modifier.width(46.dp))
+            }
         }
     }
 }

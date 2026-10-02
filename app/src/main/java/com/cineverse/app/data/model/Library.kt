@@ -61,7 +61,21 @@ data class WatchedItem(
     val collectionName: String = "",
     val collectionPoster: String = "",
     val watchedAt: Long = 0L,
+    /**
+     * How many times this has been seen. The website writes `plays`; a document
+     * without it predates the field and means ONE viewing, never zero.
+     */
+    val plays: Int = 1,
+    /** The dates it was seen, oldest first. Shorter than [plays] on old rows. */
+    val playDates: List<Long> = emptyList(),
+    val lastPlayedAt: Long = 0L,
 ) {
+    /** The most recent viewing we know of, falling back to the first. */
+    val lastPlay: Long
+        get() = lastPlayedAt.takeIf { it > 0 }
+            ?: playDates.maxOrNull()
+            ?: watchedAt
+
     val key: String get() = "${type.wire}_$tmdbId"
 
     fun asItem() = MediaItem(

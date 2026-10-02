@@ -90,331 +90,6 @@ import com.cineverse.app.data.scores.Scores
  * else is a toggle you will press a thousand times and should therefore be a
  * target, not a label.
  */
-@Composable
-fun DetailHead(
-    detail: TitleDetail,
-    scores: Scores,
-    saved: Boolean,
-    watched: Boolean,
-    myRating: Int,
-    movieMinutes: Int,
-    onSave: () -> Unit,
-    onWatched: () -> Unit,
-    onRate: () -> Unit,
-    onShare: () -> Unit,
-    onPlayTrailer: () -> Unit,
-    onLists: () -> Unit,
-    onProgress: () -> Unit,
-) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-
-    Column(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding)) {
-        // Poster left, everything that describes the title right.
-        //
-        // The first cut stacked the scores and the genres BELOW this row, which
-        // on a title with a hero logo left a hand-sized hole beside the poster:
-        // the right column held a tagline and a date line and then 90dp of
-        // nothing, while the information that would have filled it sat
-        // underneath taking another two rows of height. Moving it into the
-        // column closes the hole and shortens the block at the same time.
-        Row(verticalAlignment = Alignment.Top) {
-            Box(
-                Modifier
-                    .width(112.dp)
-                    .height(168.dp)
-                    .sharedPoster(detail.key)
-                    .clip(CvShape.Large)
-                    .border(1.dp, colors.hairline, CvShape.Large)
-            ) {
-                CvImage(Img.posterLarge(detail.posterPath), detail.title, Modifier.fillMaxSize())
-            }
-            Column(
-                Modifier
-                    .padding(start = 14.dp)
-                    .height(168.dp)
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // The name, only where the hero did not already carry it as a
-                // logo. Printing both is the commonest way a title page ends up
-                // saying the same thing twice in two typefaces.
-                if (detail.logoPath == null) {
-                    Text(
-                        detail.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = colors.text,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                val meta = listOfNotNull(
-                    detail.year.takeIf { it.isNotBlank() },
-                    detail.certificate.takeIf { it.isNotBlank() },
-                    runtimeLabel(detail),
-                ).joinToString("  ·  ")
-                Text(meta, style = MaterialTheme.typography.labelMedium, color = colors.text2)
-
-                if (detail.tagline.isNotBlank()) {
-                    Text(
-                        "“${detail.tagline}”",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.text3,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                // Pushes the scores and the genres to the bottom of the column,
-                // so they sit on the poster baseline however tall the text above
-                // them turned out to be.
-                Spacer(Modifier.weight(1f))
-
-                // CineVerse own score first, then the outside ones as they land.
-                // It scrolls because three outside scores plus ours is wider
-                // than a phone, and truncating a score is worse than scrolling.
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (detail.voteAverage > 0) {
-                        Row(
-                            Modifier
-                                .height(28.dp)
-                                .clip(CvShape.Pill)
-                                .background(colors.gold.copy(alpha = 0.16f))
-                                .padding(horizontal = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                Icons.Rounded.Star,
-                                null,
-                                tint = colors.gold,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                String.format("%.1f", detail.voteAverage),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.gold,
-                            )
-                        }
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    ScoreRow(scores)
-                }
-
-                if (detail.genres.isNotEmpty()) {
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        for (genre in detail.genres.take(3)) {
-                            Box(
-                                Modifier
-                                    .clip(CvShape.Pill)
-                                    .background(colors.glass)
-                                    .border(1.dp, colors.hairline, CvShape.Pill)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    genre.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.text2,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (detail.trailer != null) {
-                Button(
-                    onClick = { haptics?.play(Haptic.Tap); onPlayTrailer() },
-                    shape = CvShape.Pill,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Palette.Red,
-                        contentColor = Color.White,
-                    ),
-                    modifier = Modifier.height(46.dp).weight(1f),
-                ) {
-                    Icon(Icons.Rounded.PlayArrow, null, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Trailer", style = MaterialTheme.typography.labelLarge)
-                }
-            }
-            // Tap saves, hold chooses where. The hold is the only way into the
-            // custom lists from here, so it gets the Peek signature that the
-            // rest of the app uses for "there is more behind this".
-            ActionButton(
-                icon = if (saved) Icons.Rounded.Bookmark else Icons.Rounded.Add,
-                active = saved,
-                description = if (saved) "In your list" else "Add to your list",
-                onLongPress = { haptics?.play(Haptic.Peek); onLists() },
-            ) { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() }
-
-            ActionButton(
-                icon = Icons.Rounded.Check,
-                active = watched,
-                activeTint = colors.green,
-                description = if (watched) "Watched" else "Mark watched",
-            ) { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() }
-
-            ActionButton(
-                icon = if (myRating > 0) Icons.Rounded.Star else Icons.Rounded.StarOutline,
-                active = myRating > 0,
-                activeTint = colors.gold,
-                label = if (myRating > 0) myRating.toString() else null,
-                description = "Rate",
-            ) { haptics?.play(Haptic.Tap); onRate() }
-
-            ActionButton(icon = Icons.Rounded.Share, active = false, description = "Share") {
-                haptics?.play(Haptic.Tap); onShare()
-            }
-        }
-
-        // A film you are part way through. Only for films, only when there is a
-        // runtime to be part way through, and only once there is progress or
-        // the title is unwatched — a finished film does not need a scrubber.
-        if (!detail.isSeries && detail.runtime > 0 && (movieMinutes > 0 || !watched)) {
-            Spacer(Modifier.height(16.dp))
-            MovieProgressStrip(
-                minutes = movieMinutes,
-                runtime = detail.runtime,
-                onClick = { haptics?.play(Haptic.Tap); onProgress() },
-            )
-        }
-
-        if (detail.overview.isNotBlank()) {
-            Spacer(Modifier.height(18.dp))
-            ExpandableText(detail.overview)
-        }
-    }
-}
-
-/**
- * The one-line read on a film you paused.
- *
- * It states the time rather than only drawing a bar, because "48m left" is the
- * thing being decided and a bar at 62% is not.
- */
-@Composable
-private fun MovieProgressStrip(minutes: Int, runtime: Int, onClick: () -> Unit) {
-    val colors = CvTheme.colors
-    val started = minutes > 0
-    val fraction = (minutes.toFloat() / runtime).coerceIn(0f, 1f)
-    val animated by animateFloatAsState(
-        targetValue = fraction,
-        animationSpec = Motion.landing(),
-        label = "filmProgress",
-    )
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(CvShape.Medium)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Medium)
-            .clickableNoRipple(onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (started) "${runtime - minutes}m left" else "Set your place",
-                style = MaterialTheme.typography.labelLarge,
-                color = colors.text,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (started) "${(fraction * 100).toInt()}%" else "Not started",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.text3,
-            )
-        }
-        if (started) {
-            Spacer(Modifier.height(9.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(CvShape.Pill)
-                    .background(colors.text.copy(alpha = 0.14f))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(animated)
-                        .height(4.dp)
-                        .clip(CvShape.Pill)
-                        .background(Palette.Red2)
-                )
-            }
-        }
-    }
-}
-
-private fun runtimeLabel(detail: TitleDetail): String? = when {
-    detail.isSeries && detail.numberOfSeasons > 0 ->
-        "${detail.numberOfSeasons} season${if (detail.numberOfSeasons == 1) "" else "s"}"
-    detail.runtime > 0 -> "${detail.runtime / 60}h ${detail.runtime % 60}m"
-    else -> null
-}
-
-@Composable
-private fun ActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    active: Boolean,
-    description: String,
-    activeTint: Color = Color.Unspecified,
-    label: String? = null,
-    onLongPress: (() -> Unit)? = null,
-    onClick: () -> Unit,
-) {
-    val colors = CvTheme.colors
-    val tint = when {
-        !active -> colors.text
-        activeTint != Color.Unspecified -> activeTint
-        else -> Palette.Red2
-    }
-    val scale by animateFloatAsState(
-        targetValue = if (active) 1f else 0.98f,
-        animationSpec = Motion.lively(),
-        label = "action",
-    )
-    Box(
-        Modifier
-            .size(46.dp)
-            .clip(CircleShape)
-            .background(if (active) tint.copy(alpha = 0.14f) else colors.glass)
-            .border(1.dp, if (active) tint.copy(alpha = 0.5f) else colors.hairline, CircleShape)
-            .then(
-                if (onLongPress == null) Modifier.clickableNoRipple(onClick)
-                else Modifier.pointerInput(onClick, onLongPress) {
-                    detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() })
-                }
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (label != null) {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
-        } else {
-            Icon(
-                icon,
-                contentDescription = description,
-                tint = tint,
-                modifier = Modifier.size(21.dp),
-            )
-        }
-    }
-}
-
 /** Three lines, then "Read more" — and only when the text actually overflows. */
 @Composable
 fun ExpandableText(text: String, collapsedLines: Int = 3) {
@@ -704,11 +379,14 @@ fun LazyListScope.aboutSection(
     onPerson: (Person) -> Unit,
     onOpen: (MediaItem) -> Unit,
 ) {
-    if (detail.providers.isNotEmpty()) {
-
-    }
     if (detail.cast.isNotEmpty()) {
         item(key = "cast") { CastRow(detail.cast, onPerson) }
+    }
+    if (detail.crew.isNotEmpty()) {
+        item(key = "crew") { CrewRow(detail.crew, onPerson) }
+    }
+    if (detail.brands.isNotEmpty()) {
+        item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp)) }
     }
     item(key = "facts") { Facts(detail) }
 }
@@ -716,45 +394,62 @@ fun LazyListScope.aboutSection(
 /**
  * The studios and networks behind a title.
  *
- * TMDB publishes a mark for most of them and the app was keeping only the name.
- * A row of names reads as a legal notice; the marks read as provenance, which is
- * what the information is for — "an A24 film" or "this is on HBO" is a thing
- * people decide by, and a logo says it in a glance where a sentence does not.
+ * TMDB publishes a mark for most of them and the mapper was keeping only the
+ * name. A row of names reads as a legal notice; the marks read as provenance,
+ * which is what the information is for.
  *
- * The marks are TINTED rather than plated. Almost every logo TMDB holds is dark
- * ink on transparency, drawn for a white page; dropping them straight onto this
- * one gives a row of black rectangles, and putting each on a white chip gives a
- * row of stickers. A luminance filter turns them into the page's own text
- * colour, so they read as part of the design rather than pasted into it.
+ * The hard part is that TMDB holds these logos in BOTH polarities. Most are
+ * dark ink drawn for a white page; a good number — Netflix, HBO, Apple — are
+ * white, drawn for a dark one. A single treatment cannot serve both: tinting
+ * everything to one ink turns the white ones into invisible rectangles on this
+ * page, which is exactly what happened, and leaving them untinted hides the
+ * dark ones instead.
+ *
+ * So each mark gets its own PLATE, and the plate is a very soft light wash
+ * rather than a white chip. Dark logos read against it the way they were drawn
+ * to; white logos keep their own shape and are readable because the wash is
+ * lighter than the page but far darker than paper. No logo is recoloured, so
+ * none of them is wrong.
  */
 @Composable
 fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier) {
     val colors = CvTheme.colors
     if (brands.isEmpty()) return
-    LazyRow(
-        modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = ScreenPadding),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        items(brands, key = { it.id }) { brand ->
-            CvImage(
-                Img.logo(brand.logoPath),
-                brand.name,
-                Modifier
-                    .height(22.dp)
-                    .widthIn(max = 96.dp),
-                contentScale = ContentScale.Fit,
-                background = Color.Transparent,
-                // Everything to one ink. `saturation 0` first so a coloured
-                // mark does not come through tinted the wrong hue, then the
-                // page's own secondary text colour at the alpha the rest of the
-                // meta line uses.
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                    colors.text2.copy(alpha = 0.72f)
-                ),
-            )
+    Column(modifier.fillMaxWidth()) {
+        SectionHeader("Made by")
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(brands, key = { it.id }) { brand ->
+                Box(
+                    Modifier
+                        .height(54.dp)
+                        .widthIn(min = 76.dp, max = 132.dp)
+                        .clip(CvShape.Medium)
+                        .background(colors.text.copy(alpha = 0.10f))
+                        .border(1.dp, colors.hairline, CvShape.Medium)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CvImage(
+                        Img.logo(brand.logoPath),
+                        brand.name,
+                        Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                        background = Color.Transparent,
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            brands.joinToString("  \u00b7  ") { it.name },
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.text3,
+            modifier = Modifier.padding(horizontal = ScreenPadding),
+        )
     }
 }
 
@@ -951,6 +646,93 @@ private fun CastRow(cast: List<Person>, onPerson: (Person) -> Unit) {
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Who made it, and what they did.
+ *
+ * Grouped by department and ordered the way a credit block is: the people who
+ * decided what the thing would be, then the people who decided what it looked
+ * and sounded like, then everyone else. TMDB returns crew in no useful order at
+ * all — a key grip can arrive before the director — so an ungrouped list is
+ * worse than none.
+ *
+ * One card per PERSON, not per credit. Somebody who wrote and directed appears
+ * once with both jobs, because seeing the same face twice in a row reads as a
+ * bug and loses the fact that it is the same person.
+ */
+@Composable
+private fun CrewRow(crew: List<Person>, onPerson: (Person) -> Unit) {
+    val colors = CvTheme.colors
+
+    val ordered = remember(crew) {
+        val rank = listOf(
+            "Director", "Creator", "Writer", "Screenplay", "Story", "Novel", "Teleplay",
+            "Producer", "Executive Producer", "Original Music Composer", "Composer",
+            "Director of Photography", "Cinematography", "Editor", "Production Design",
+            "Costume Design", "Casting",
+        )
+        crew.filter { !it.job.isNullOrBlank() }
+            .groupBy { it.id }
+            .map { (_, credits) ->
+                credits.first() to credits.mapNotNull { it.job }.distinct()
+            }
+            .sortedBy { (_, jobs) ->
+                jobs.minOfOrNull { job ->
+                    rank.indexOfFirst { it.equals(job, true) }.takeIf { it >= 0 } ?: 99
+                } ?: 99
+            }
+            .take(20)
+    }
+    if (ordered.isEmpty()) return
+
+    Column(Modifier.padding(bottom = 18.dp)) {
+        SectionHeader("Crew")
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(ordered, key = { it.first.id }) { (person, jobs) ->
+                Column(
+                    Modifier
+                        .width(84.dp)
+                        .clickableNoRipple { onPerson(person) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier
+                            .size(78.dp)
+                            .clip(CircleShape)
+                            .background(colors.surface2)
+                    ) {
+                        CvImage(
+                            Img.profile(person.profilePath),
+                            person.name,
+                            Modifier.fillMaxSize(),
+                        )
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        person.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Text(
+                        jobs.joinToString(", "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.text3,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                 }
             }
         }

@@ -48,6 +48,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
 import com.cineverse.app.feature.sheets.RatingSheet
 import com.cineverse.app.feature.sheets.ProgressSheet
 import com.cineverse.app.feature.sheets.ListSheet
@@ -111,6 +113,8 @@ fun DetailScreen(
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val listState = rememberLazyListState()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val onWifi by com.cineverse.app.core.net.rememberUnmetered()
     // Which sheet, if any, is up. Held here rather than in the view model: it is
     // screen state, it should not survive a process death, and a sheet that
     // reopens itself after the app was killed is a small haunting.
@@ -156,7 +160,13 @@ fun DetailScreen(
             contentPadding = PaddingValues(bottom = 140.dp),
         ) {
             item(key = "hero") {
-                DetailHero(detail = detail, collapsed = collapsed)
+                DetailHero(
+                    detail = detail,
+                    collapsed = collapsed,
+                    autoplay = settings.autoplay &&
+                        (!settings.autoplayOnWifiOnly || onWifi) &&
+                        collapsed < 0.4f,
+                )
             }
 
             item(key = "head") {
@@ -182,8 +192,25 @@ fun DetailScreen(
             // Directly under the actions and above the tabs, so it is on screen
             // whichever tab is selected. It used to live inside About, which is
             // two taps and a scroll from the question it answers.
-            item(key = "brands") {
-                BrandStrip(detail.brands, Modifier.padding(top = 18.dp))
+            // Only once it has been watched: there is no such thing as a
+            // rewatch of something unseen.
+            library.watched[detail.key]?.let { entry ->
+                item(key = "rewatch") {
+                    RewatchPanel(
+                        plays = entry.plays,
+                        lastWatched = entry.lastPlay,
+                        onLogRewatch = viewModel::logRewatch,
+                        modifier = Modifier.padding(top = 20.dp),
+                    )
+                }
+            }
+
+            // Only when TMDB has a real date. Counting down to a guess is worse
+            // than saying nothing.
+            detail.nextEpisode?.takeIf { it.airDate.isNotBlank() }?.let { next ->
+                item(key = "next") {
+                    NextEpisodePanel(next, Modifier.padding(top = 16.dp))
+                }
             }
 
             item(key = "providers") {
@@ -286,7 +313,7 @@ private fun tabsFor(detail: TitleDetail): List<DetailTab> =
     else listOf(DetailTab.About, DetailTab.More)
 
 @Composable
-private fun DetailHero(detail: TitleDetail, collapsed: Float) {
+private fun DetailHero(detail: TitleDetail, collapsed: Float, autoplay: Boolean) {
     val colors = CvTheme.colors
     // Clipped: the parallax translates the artwork, which would otherwise paint
     // outside the hero where nothing covers it. It also makes the fractional
@@ -295,7 +322,7 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(420.dp)
+            .height(372.dp)
             .clipToBounds()
     ) {
         CvImage(
@@ -312,6 +339,49 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
                 },
             contentScale = ContentScale.Crop,
         )
+        // The trailer, behind the scrim, once the artwork has had its moment.
+        //
+        // Ambient: muted, looping, no chrome, and unreachable by touch. It stops
+        // the moment the hero is scrolled away, because a video playing behind a
+        // page you are no longer looking at is a video draining a battery.
+        val trailerKey = detail.trailer?.key
+        if (autoplay && !trailerKey.isNullOrBlank() && !CvTheme.reducedMotion) {
+            var armed by remember(detail.key) { mutableStateOf(false) }
+            var playing by remember(detail.key) { mutableStateOf(false) }
+            var settled by remember(detail.key) { mutableStateOf(false) }
+            LaunchedEffect(detail.key) {
+                kotlinx.coroutines.delay(1_200)
+                armed = true
+            }
+            LaunchedEffect(playing) {
+                if (!playing) { settled = false; return@LaunchedEffect }
+                kotlinx.coroutines.delay(1_400)
+                settled = true
+            }
+            if (armed) {
+                val fade by animateFloatAsState(
+                    targetValue = if (settled) 1f else 0f,
+                    animationSpec = tween(900, easing = Motion.EaseOut),
+                    label = "detailTrailer",
+                )
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = fade * (1f - collapsed) }
+                ) {
+                    com.cineverse.app.feature.trailer.YouTubePlayer(
+                        videoKey = trailerKey,
+                        modifier = Modifier.fillMaxSize(),
+                        muted = true,
+                        showControls = false,
+                        loop = true,
+                        ambient = true,
+                        onPlaying = { playing = true },
+                    )
+                }
+            }
+        }
+
         // The artwork dissolves into the page rather than ending on it.
         //
         // The first attempt reached full ink at 84% and left the last 16% flat,
@@ -336,18 +406,6 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
                 )
         )
 
-        if (detail.logoPath != null) {
-            CvLogo(
-                detail.logoPath,
-                detail.title,
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = ScreenPadding, bottom = 18.dp)
-                    .height(74.dp)
-                    .fillMaxWidth(0.72f)
-                    .graphicsLayer { alpha = 1f - collapsed },
-            )
-        }
     }
 }
 

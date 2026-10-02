@@ -54,6 +54,7 @@ class DetailViewModel(
     val state: StateFlow<DetailState> = _state.asStateFlow()
 
     val library: StateFlow<Library> = app.library.library
+    val settings: StateFlow<com.cineverse.app.data.prefs.Settings> = app.settings.settings
     val progressFlow: StateFlow<Map<Int, ShowProgress>> = app.episodes.progress
 
     val progress: ShowProgress? get() = app.episodes.of(id)
@@ -241,6 +242,12 @@ class DetailViewModel(
     fun setRating(value: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         app.library.setRating(detail.key, value, detail.title)
+    }
+
+    fun logRewatch() = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        val plays = app.library.logRewatch(detail.key)
+        if (plays > 0) app.say("Logged — seen $plays times now")
     }
 
     fun setDropped(dropped: Boolean) = viewModelScope.launch {

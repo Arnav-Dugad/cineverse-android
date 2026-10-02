@@ -82,7 +82,7 @@ class EpisodeRepository(
                 // at its episode COUNT was right for 1..n numbering and wrong
                 // for absolute: season 2 of One Piece is numbered 62..77, so a
                 // cap of 16 matched none of it.
-                val numbers = next.episodeNumbers(s)
+                val numbers = next.episodeNumbers(s).filter { next.hasAired(s, it) }
                 val wanted = if (s == season) numbers.filter { it <= episode } else numbers
                 val episodes = wanted.filterNot { next.isWatched(s, it) }
                 if (episodes.isNotEmpty()) next = next.with(s, episodes, now, bulk = true)
@@ -95,7 +95,16 @@ class EpisodeRepository(
         write(show) { entry ->
             val count = entry.structure[season] ?: 0
             if (count <= 0) entry
-            else if (watched) entry.with(season, entry.episodeNumbers(season), System.currentTimeMillis(), bulk = true)
+            // Capped at what has AIRED. Marking a season watched used to tick
+            // episodes that have not been broadcast, which writes a claim the
+            // website would immediately contradict and leaves a show reading as
+            // finished months before it is.
+            else if (watched) entry.with(
+                season,
+                entry.episodeNumbers(season).filter { entry.hasAired(season, it) },
+                System.currentTimeMillis(),
+                bulk = true,
+            )
             else entry.without(season, entry.episodeNumbers(season))
         }
     }
@@ -105,7 +114,9 @@ class EpisodeRepository(
             var next = entry
             val now = System.currentTimeMillis()
             for (season in entry.structure.keys) {
-                val episodes = next.episodeNumbers(season).filterNot { next.isWatched(season, it) }
+                val episodes = next.episodeNumbers(season)
+                    .filter { next.hasAired(season, it) }
+                    .filterNot { next.isWatched(season, it) }
                 if (episodes.isNotEmpty()) next = next.with(season, episodes, now, bulk = true)
             }
             next
