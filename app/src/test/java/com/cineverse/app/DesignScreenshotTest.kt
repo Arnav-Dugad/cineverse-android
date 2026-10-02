@@ -13,6 +13,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.cineverse.app.core.design.CineVerseTheme
+import com.cineverse.app.core.ui.LocalPosterStyle
+import com.cineverse.app.core.ui.PosterStyle
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.ScoreRow
 import com.cineverse.app.core.ui.SectionHeader
@@ -131,6 +133,34 @@ class DesignScreenshotTest {
         }
     }
 
+    /**
+     * The same cards with the caption preference ON.
+     *
+     * Posters are configurable now, so the default state is no longer the only
+     * state worth pinning: a change that only affects captioned cards would
+     * otherwise sail past a suite that never renders one.
+     */
+    @Test
+    fun posterCards_captioned() = capture(
+        "poster_cards_captioned",
+        ThemeChoice.Dark,
+        style = PosterStyle(captions = true, meta = true),
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            PosterCard(film, onOpen = {}, modifier = Modifier.width(132.dp))
+            PosterCard(
+                longTitle,
+                onOpen = {},
+                modifier = Modifier.width(132.dp),
+                watched = true,
+                rating = 9,
+            )
+        }
+    }
+
     @Test
     fun sectionHeaders() = capture("section_headers", ThemeChoice.Dark) {
         Column(
@@ -159,9 +189,13 @@ class DesignScreenshotTest {
     private fun capture(
         name: String,
         theme: ThemeChoice,
+        style: PosterStyle = PosterStyle(),
         content: @androidx.compose.runtime.Composable () -> Unit,
     ) {
         compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalPosterStyle provides style,
+            ) {
             CineVerseTheme(
                 theme = theme,
                 dynamicColor = false,
@@ -177,6 +211,7 @@ class DesignScreenshotTest {
                 Box(Modifier.background(CvTheme.colors.ink)) {
                     content()
                 }
+            }
             }
         }
         compose.onRoot().captureRoboImage(
