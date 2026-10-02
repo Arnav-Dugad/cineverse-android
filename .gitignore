@@ -1,0 +1,28 @@
+# ---- secrets: never, under any circumstances ----
+# The release key signs every APK friends install. If it leaks, anyone can ship
+# an "update" that Android will happily install over CineVerse.
+*.jks
+*.keystore
+keystore.properties
+local.properties
+google-services.json
+
+# ---- build output ----
+build/
+.gradle/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ---- IDE ----
+.idea/
+*.iml
+.kotlin/
+captures/
+.externalNativeBuild/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db

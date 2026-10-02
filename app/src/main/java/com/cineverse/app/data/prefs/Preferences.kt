@@ -1,0 +1,246 @@
+package com.cineverse.app.data.prefs
+
+import android.content.Context
+import androidx.compose.runtime.Immutable
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.cineverse.app.core.design.MotionChoice
+import com.cineverse.app.core.design.ThemeChoice
+import com.cineverse.app.data.firebase.AuthRepository
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("cineverse")
+
+/**
+ * The app's settings.
+ *
+ * Stored on the device first, so they apply before anything has loaded, and
+ * mirrored to `users/{uid}.experiencePrefs` — the SAME document the website
+ * reads and writes. The newest `_updatedAt` wins, which is the rule the website
+ * already uses, so the two can be changed in either order on either device and
+ * converge.
+ *
+ * [detailOrder] is the clearest example of why that matters: arrange a title
+ * page on the laptop and the phone's About section is in your order the next
+ * time it opens.
+ */
+@Immutable
+data class Settings(
+    val theme: ThemeChoice = ThemeChoice.System,
+    val dynamicColor: Boolean = false,
+    val motion: MotionChoice = MotionChoice.System,
+    val haptics: Boolean = true,
+    val region: String = "IN",
+    val showRatings: Boolean = true,
+    val showWatched: Boolean = true,
+    val spoilerShield: Boolean = false,
+    /** The hero's trailer plays by itself. Off by default on mobile data. */
+    val autoplay: Boolean = true,
+    val autoplayOnWifiOnly: Boolean = true,
+    val posterCaptions: Boolean = true,
+    val mature: Boolean = false,
+    val matureBlur: Boolean = true,
+    val omdbKey: String = "",
+    /** The order a title page's About rows read in, shared with the website. */
+    val detailOrder: List<String> = emptyList(),
+    val notifyNewEpisodes: Boolean = true,
+    val notifyReleases: Boolean = true,
+    val updatedAt: Long = 0L,
+) {
+    val adult: Boolean get() = mature
+}
+
+class SettingsRepository(
+    private val context: Context,
+    private val store: FirebaseFirestore,
+    private val auth: AuthRepository,
+    private val scope: CoroutineScope,
+) {
+    private object Keys {
+        val theme = stringPreferencesKey("theme")
+        val dynamicColor = booleanPreferencesKey("dynamicColor")
+        val motion = stringPreferencesKey("motion")
+        val haptics = booleanPreferencesKey("haptics")
+        val region = stringPreferencesKey("region")
+        val showRatings = booleanPreferencesKey("showRatings")
+        val showWatched = booleanPreferencesKey("showWatched")
+        val spoilerShield = booleanPreferencesKey("spoilerShield")
+        val autoplay = booleanPreferencesKey("autoplay")
+        val autoplayWifi = booleanPreferencesKey("autoplayWifi")
+        val posterCaptions = booleanPreferencesKey("posterCaptions")
+        val mature = booleanPreferencesKey("mature")
+        val matureBlur = booleanPreferencesKey("matureBlur")
+        val omdbKey = stringPreferencesKey("omdbKey")
+        val detailOrder = stringPreferencesKey("detailOrder")
+        val notifyEpisodes = booleanPreferencesKey("notifyEpisodes")
+        val notifyReleases = booleanPreferencesKey("notifyReleases")
+        val updatedAt = longPreferencesKey("updatedAt")
+        val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
+        val skippedVersion = intPreferencesKey("skippedVersion")
+    }
+
+    val settings: StateFlow<Settings> = context.dataStore.data
+        .map { it.toSettings() }
+        .stateIn(scope, SharingStarted.Eagerly, Settings())
+
+    private fun Preferences.toSettings() = Settings(
+        theme = enumOf(this[Keys.theme], ThemeChoice.System),
+        dynamicColor = this[Keys.dynamicColor] ?: false,
+        motion = enumOf(this[Keys.motion], MotionChoice.System),
+        haptics = this[Keys.haptics] ?: true,
+        region = this[Keys.region] ?: "IN",
+        showRatings = this[Keys.showRatings] ?: true,
+        showWatched = this[Keys.showWatched] ?: true,
+        spoilerShield = this[Keys.spoilerShield] ?: false,
+        autoplay = this[Keys.autoplay] ?: true,
+        autoplayOnWifiOnly = this[Keys.autoplayWifi] ?: true,
+        posterCaptions = this[Keys.posterCaptions] ?: true,
+        mature = this[Keys.mature] ?: false,
+        matureBlur = this[Keys.matureBlur] ?: true,
+        omdbKey = this[Keys.omdbKey] ?: "",
+        detailOrder = this[Keys.detailOrder]?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
+        notifyNewEpisodes = this[Keys.notifyEpisodes] ?: true,
+        notifyReleases = this[Keys.notifyReleases] ?: true,
+        updatedAt = this[Keys.updatedAt] ?: 0L,
+    )
+
+    private inline fun <reified T : Enum<T>> enumOf(name: String?, fallback: T): T =
+        runCatching { enumValueOf<T>(name ?: "") }.getOrDefault(fallback)
+
+    /** Every change stamps `updatedAt` and pushes the snapshot to the cloud. */
+    private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        context.dataStore.edit {
+            block(it)
+            it[Keys.updatedAt] = System.currentTimeMillis()
+        }
+        push()
+    }
+
+    suspend fun setTheme(value: ThemeChoice) = edit { it[Keys.theme] = value.name }
+    suspend fun setDynamicColor(value: Boolean) = edit { it[Keys.dynamicColor] = value }
+    suspend fun setMotion(value: MotionChoice) = edit { it[Keys.motion] = value.name }
+    suspend fun setHaptics(value: Boolean) = edit { it[Keys.haptics] = value }
+    suspend fun setRegion(value: String) = edit { it[Keys.region] = value.uppercase().take(2) }
+    suspend fun setShowRatings(value: Boolean) = edit { it[Keys.showRatings] = value }
+    suspend fun setShowWatched(value: Boolean) = edit { it[Keys.showWatched] = value }
+    suspend fun setSpoilerShield(value: Boolean) = edit { it[Keys.spoilerShield] = value }
+    suspend fun setAutoplay(value: Boolean) = edit { it[Keys.autoplay] = value }
+    suspend fun setAutoplayWifiOnly(value: Boolean) = edit { it[Keys.autoplayWifi] = value }
+    suspend fun setPosterCaptions(value: Boolean) = edit { it[Keys.posterCaptions] = value }
+    suspend fun setMature(value: Boolean) = edit { it[Keys.mature] = value }
+    suspend fun setMatureBlur(value: Boolean) = edit { it[Keys.matureBlur] = value }
+    suspend fun setOmdbKey(value: String) = edit { it[Keys.omdbKey] = value.trim().take(32) }
+    suspend fun setNotifyEpisodes(value: Boolean) = edit { it[Keys.notifyEpisodes] = value }
+    suspend fun setNotifyReleases(value: Boolean) = edit { it[Keys.notifyReleases] = value }
+    suspend fun setDetailOrder(value: List<String>) = edit { it[Keys.detailOrder] = value.joinToString(",") }
+
+    /** Not synced: when this device last asked GitHub about an update. */
+    suspend fun markUpdateChecked() = context.dataStore.edit {
+        it[Keys.lastUpdateCheck] = System.currentTimeMillis()
+    }
+
+    val lastUpdateCheck: StateFlow<Long> = context.dataStore.data
+        .map { it[Keys.lastUpdateCheck] ?: 0L }
+        .stateIn(scope, SharingStarted.Eagerly, 0L)
+
+    suspend fun skipVersion(code: Int) = context.dataStore.edit { it[Keys.skippedVersion] = code }
+
+    val skippedVersion: StateFlow<Int> = context.dataStore.data
+        .map { it[Keys.skippedVersion] ?: 0 }
+        .stateIn(scope, SharingStarted.Eagerly, 0)
+
+    // ---------- the cloud mirror ----------
+
+    /** Pull the website's snapshot if it is newer than this device's. */
+    fun syncFromCloud() = scope.launch {
+        val uid = auth.uid.value ?: return@launch
+        runCatching {
+            val doc = store.collection("users").document(uid).get().await()
+            @Suppress("UNCHECKED_CAST")
+            val cloud = doc.get("experiencePrefs") as? Map<String, Any?> ?: return@launch
+            val cloudAt = (cloud["_updatedAt"] as? Number)?.toLong() ?: 0L
+            if (cloudAt <= settings.value.updatedAt) return@launch
+            context.dataStore.edit { prefs ->
+                (cloud["theme"] as? String)?.let {
+                    prefs[Keys.theme] = when (it) {
+                        "dark" -> ThemeChoice.Dark.name
+                        "light" -> ThemeChoice.Light.name
+                        else -> ThemeChoice.System.name
+                    }
+                }
+                (cloud["motion"] as? String)?.let {
+                    prefs[Keys.motion] = when (it) {
+                        "full" -> MotionChoice.Full.name
+                        "reduced" -> MotionChoice.Reduced.name
+                        else -> MotionChoice.System.name
+                    }
+                }
+                (cloud["haptics"] as? Boolean)?.let { prefs[Keys.haptics] = it }
+                (cloud["region"] as? String)?.let { prefs[Keys.region] = it }
+                (cloud["showRatings"] as? Boolean)?.let { prefs[Keys.showRatings] = it }
+                (cloud["showWatched"] as? Boolean)?.let { prefs[Keys.showWatched] = it }
+                (cloud["spoilerShield"] as? Boolean)?.let { prefs[Keys.spoilerShield] = it }
+                (cloud["autoplay"] as? Boolean)?.let { prefs[Keys.autoplay] = it }
+                (cloud["mature"] as? Boolean)?.let { prefs[Keys.mature] = it }
+                (cloud["matureBlur"] as? Boolean)?.let { prefs[Keys.matureBlur] = it }
+                (cloud["omdbKey"] as? String)?.let { prefs[Keys.omdbKey] = it }
+                (cloud["hidePosterCaptions"] as? Boolean)?.let { prefs[Keys.posterCaptions] = !it }
+                (cloud["detailOrder"] as? List<*>)?.let { order ->
+                    prefs[Keys.detailOrder] = order.filterIsInstance<String>().joinToString(",")
+                }
+                prefs[Keys.updatedAt] = cloudAt
+            }
+        }
+    }
+
+    /** Push this device's snapshot, in the shape the website expects to read. */
+    private suspend fun push() {
+        val uid = auth.uid.value ?: return
+        val current = settings.value
+        runCatching {
+            store.collection("users").document(uid).set(
+                mapOf(
+                    "experiencePrefs" to mapOf(
+                        "theme" to when (current.theme) {
+                            ThemeChoice.Dark -> "dark"
+                            ThemeChoice.Light -> "light"
+                            ThemeChoice.System -> "system"
+                        },
+                        "motion" to when (current.motion) {
+                            MotionChoice.Full -> "full"
+                            MotionChoice.Reduced -> "reduced"
+                            MotionChoice.System -> "system"
+                        },
+                        "haptics" to current.haptics,
+                        "region" to current.region,
+                        "showRatings" to current.showRatings,
+                        "showWatched" to current.showWatched,
+                        "spoilerShield" to current.spoilerShield,
+                        "autoplay" to current.autoplay,
+                        "mature" to current.mature,
+                        "matureBlur" to current.matureBlur,
+                        "omdbKey" to current.omdbKey,
+                        "hidePosterCaptions" to !current.posterCaptions,
+                        "detailOrder" to current.detailOrder,
+                        "_updatedAt" to System.currentTimeMillis(),
+                    )
+                ),
+                SetOptions.merge(),
+            ).await()
+        }
+    }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the settings are backed up. The library lives in Firestore and comes back
+  on sign-in, and the HTTP and artwork caches are worth nothing off the device —
+  they live under cacheDir, which Android already leaves out of a backup.
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="file" path="datastore" />
+</full-backup-content>

@@ -1,0 +1,28 @@
+name: Build
+
+# Every push and every pull request has to compile and pass lint. A repository
+# whose main branch does not build is a repository nobody can contribute to.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Compile and lint
+        run: ./gradlew assembleDebug lintDebug --no-daemon
+      - name: Keep the debug APK for a week
+        uses: actions/upload-artifact@v4
+        with:
+          name: cineverse-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7

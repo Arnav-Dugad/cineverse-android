@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CineVerse</string>
+    <string name="widget_continue">Continue watching</string>
+    <string name="widget_continue_description">The next episode of every show you are in the middle of, one tap from watched.</string>
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_search_long">Search films and series</string>
+    <string name="shortcut_list">My List</string>
+    <string name="shortcut_list_long">Everything you saved</string>
+    <string name="shortcut_next">Up next</string>
+    <string name="shortcut_next_long">Carry on where you left off</string>
+    <string name="channel_episodes">New episodes</string>
+    <string name="channel_releases">Releases</string>
+</resources>

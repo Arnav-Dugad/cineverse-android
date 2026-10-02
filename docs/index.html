@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Get CineVerse</title>
+<meta name="description" content="CineVerse for Android — track what you watch, know what's next.">
+<meta name="theme-color" content="#06060b">
+<meta property="og:title" content="Get CineVerse for Android">
+<meta property="og:description" content="Track what you watch, know what's next. Install it in one tap.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='none' stroke='%23e50914' stroke-width='11'/><path d='M40 32 L72 50 L40 68 Z' fill='%23ff2030'/></svg>">
+<style>
+  :root {
+    --ink: #06060b;
+    --ink2: #0c0c14;
+    --ink3: #14141f;
+    --text: #f0f0f5;
+    --text2: #9ca3af;
+    --text3: #767f8d;
+    --red: #e50914;
+    --red2: #ff2030;
+    --green: #34d399;
+    --line: rgba(255, 255, 255, .08);
+    --radius: 26px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--ink); }
+
+  body {
+    margin: 0;
+    padding: 0 16px 80px;
+    font-family: var(--font);
+    color: var(--text);
+    letter-spacing: -.005em;
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(60vmax 44vmax at 14% -8%, rgba(229, 9, 20, .13), transparent 70%),
+      radial-gradient(56vmax 40vmax at 92% 6%, rgba(124, 58, 237, .11), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header { padding: 64px 0 30px; text-align: center; }
+
+  .mark {
+    width: 72px; height: 72px; margin: 0 auto 22px;
+    display: grid; place-items: center;
+    border-radius: 22px;
+    background: linear-gradient(145deg, #14141f, #06060b);
+    border: 1px solid var(--line);
+  }
+  .mark svg { width: 42px; height: 42px; }
+
+  h1 { margin: 0; font-size: clamp(2rem, 8vw, 2.9rem); font-weight: 800; letter-spacing: -.035em; }
+  .tagline { margin: 10px 0 0; color: var(--text2); font-size: 1.02rem; line-height: 1.55; }
+
+  .card {
+    margin: 26px 0;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, .025);
+    backdrop-filter: blur(30px) saturate(185%);
+    -webkit-backdrop-filter: blur(30px) saturate(185%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+  }
+
+  .download {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; min-height: 58px;
+    padding: 0 26px;
+    border: 0; border-radius: 999px;
+    background: linear-gradient(135deg, var(--red), var(--red2));
+    color: #fff;
+    font: inherit; font-size: 1.02rem; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform .22s cubic-bezier(.16, 1, .3, 1), box-shadow .22s;
+  }
+  .download:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(229, 9, 20, .34); }
+  .download:active { transform: translateY(0); }
+  .download[aria-disabled="true"] { opacity: .55; pointer-events: none; }
+  .download svg { width: 20px; height: 20px; }
+
+  .meta { margin-top: 14px; text-align: center; color: var(--text3); font-size: .86rem; }
+  .meta b { color: var(--text2); font-weight: 650; }
+
+  h2 { margin: 36px 0 14px; font-size: 1.12rem; font-weight: 700; letter-spacing: -.02em; }
+
+  ol, ul { margin: 0; padding-left: 20px; color: var(--text2); line-height: 1.75; font-size: .95rem; }
+  li { margin-bottom: 8px; }
+  li b { color: var(--text); font-weight: 650; }
+
+  .note {
+    margin-top: 16px; padding: 14px 16px;
+    border-left: 2px solid var(--green);
+    border-radius: 0 12px 12px 0;
+    background: rgba(52, 211, 153, .07);
+    color: var(--text2); font-size: .89rem; line-height: 1.6;
+  }
+
+  .qr { display: grid; place-items: center; gap: 12px; padding: 8px 0 2px; }
+  .qr img { width: 172px; height: 172px; border-radius: 16px; background: #fff; padding: 10px; }
+  .qr span { color: var(--text3); font-size: .82rem; }
+
+  .features { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .feature {
+    padding: 15px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .02);
+  }
+  .feature strong { display: block; font-size: .92rem; font-weight: 650; margin-bottom: 4px; }
+  .feature span { color: var(--text3); font-size: .82rem; line-height: 1.5; }
+
+  footer { margin-top: 44px; text-align: center; color: var(--text3); font-size: .82rem; line-height: 1.7; }
+  footer a { color: var(--text2); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="42" fill="none" stroke="#e50914" stroke-width="10"/>
+        <path d="M41 32 L71 50 L41 68 Z" fill="#ff2030"/>
+      </svg>
+    </div>
+    <h1>CineVerse</h1>
+    <p class="tagline">Track what you watch. Know what's next.<br>For Android.</p>
+  </header>
+
+  <div class="card">
+    <a class="download" id="download" href="#" aria-disabled="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-7 2h14v2H5v-2z"/>
+      </svg>
+      <span id="label">Finding the newest version…</span>
+    </a>
+    <p class="meta" id="meta">Checking GitHub for the latest release.</p>
+
+    <div class="qr" id="qrWrap" hidden>
+      <img id="qr" alt="QR code linking to this page">
+      <span>Scan with the phone you want it on</span>
+    </div>
+  </div>
+
+  <h2>Installing it</h2>
+  <ol>
+    <li>Tap <b>Download</b> above on the Android phone you want it on.</li>
+    <li>Open the file when it finishes. Android will ask whether to allow
+      installs from your browser — this is normal for an app that does not come
+      from the Play Store. Say yes.</li>
+    <li>Open CineVerse and sign in with the same account you use on the web.
+      Your list, your watched history and every episode you have ticked are
+      already there.</li>
+  </ol>
+
+  <div class="note">
+    <b>Updates look after themselves.</b> CineVerse checks GitHub a few times a
+    day and offers you the new version with release notes and a progress bar.
+    You never have to come back to this page.
+  </div>
+
+  <h2>What it does</h2>
+  <div class="features">
+    <div class="feature"><strong>Everything, synced</strong><span>The same account and the same data as CineVerse on the web, live in both directions.</span></div>
+    <div class="feature"><strong>One-tap episodes</strong><span>Tick an episode from the app, or from a home-screen widget without opening it.</span></div>
+    <div class="feature"><strong>Real ratings</strong><span>IMDb, the Tomatometer and Metacritic beside CineVerse's own score.</span></div>
+    <div class="feature"><strong>Works offline</strong><span>Your whole library and everything you have opened, on a plane.</span></div>
+  </div>
+
+  <h2>Is this safe?</h2>
+  <ul>
+    <li>Every release is built by <b>GitHub Actions from the source in this
+      repository</b> — nobody uploads an APK by hand.</li>
+    <li>Each release publishes the APK's <b>SHA-256</b>, and the app checks it
+      before installing an update.</li>
+    <li>It asks for four permissions: internet, network state, vibration, and
+      permission to install its own updates.</li>
+  </ul>
+
+  <footer>
+    <a href="https://github.com/Arnav-Dugad/cineverse-android">Source on GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/Arnav-Dugad/cineverse-android/releases">All releases</a>
+    <br><br>
+    Film and television data from TMDB.<br>
+    Arnav Dugad
+  </footer>
+
+</div>
+
+<script>
+// The page has no build step and no dependencies: it asks GitHub for the newest
+// release and fills the button in. If GitHub is unreachable the button points at
+// the releases page, which always works.
+const REPO = 'Arnav-Dugad/cineverse-android';
+const button = document.getElementById('download');
+const label = document.getElementById('label');
+const meta = document.getElementById('meta');
+
+function fallback(reason) {
+  button.href = `https://github.com/${REPO}/releases/latest`;
+  button.removeAttribute('aria-disabled');
+  label.textContent = 'Open the releases page';
+  meta.textContent = reason;
+}
+
+(async () => {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    const release = await response.json();
+    const apk = (release.assets || []).find(a => a.name.endsWith('.apk'));
+    if (!apk) throw new Error('no apk');
+
+    button.href = apk.browser_download_url;
+    button.removeAttribute('aria-disabled');
+    label.textContent = `Download CineVerse ${release.tag_name.replace(/^v/, '')}`;
+
+    const mb = (apk.size / 1048576).toFixed(1);
+    const when = new Date(release.published_at).toLocaleDateString(undefined, {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+    meta.innerHTML = `<b>${mb} MB</b> · released ${when} · Android 12 and newer`;
+  } catch (error) {
+    fallback('Could not reach GitHub just now — the releases page has every version.');
+  }
+
+  // A QR of this page, so a laptop can hand the link to a phone. Generated by
+  // a public image service rather than shipping a QR library for one image.
+  const here = location.href.split('#')[0];
+  const qr = document.getElementById('qr');
+  qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=${encodeURIComponent(here)}`;
+  qr.onload = () => { document.getElementById('qrWrap').hidden = false; };
+})();
+</script>
+</body>
+</html>

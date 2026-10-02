@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CineVerse" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/cv_ink</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- The splash is the launcher icon on the app's own ink: no wordmark, no
+         spinner. It is on screen for the time it takes to read the stored
+         settings, which is why there is nothing in it worth looking at. -->
+    <style name="Theme.CineVerse.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/cv_ink</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.CineVerse</item>
+    </style>
+</resources>

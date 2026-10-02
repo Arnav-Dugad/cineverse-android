@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The mark: a play triangle inside a ring, which is the website's own logo.
+  Drawn inside the 108dp adaptive canvas with the usual 18dp of bleed on each
+  side, so none of it is clipped by a circular, squircle or squared mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#E50914"
+        android:pathData="M54,27 C68.912,27 81,39.088 81,54 C81,68.912 68.912,81 54,81 C39.088,81 27,68.912 27,54 C27,39.088 39.088,27 54,27 Z M54,34.5 C43.23,34.5 34.5,43.23 34.5,54 C34.5,64.77 43.23,73.5 54,73.5 C64.77,73.5 73.5,64.77 73.5,54 C73.5,43.23 64.77,34.5 54,34.5 Z" />
+    <path
+        android:fillColor="#FF2030"
+        android:pathData="M48.4,44.6 L65.2,54 L48.4,63.4 Z" />
+</vector>

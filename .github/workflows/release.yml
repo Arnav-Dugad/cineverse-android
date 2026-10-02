@@ -1,0 +1,113 @@
+name: Release
+
+# A release is `git tag v1.1.0 && git push --tags`. Everything below is what
+# turns that into an APK your friends can install and the app can update itself
+# from.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the v (e.g. 1.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NAME="${{ inputs.version }}"
+          else
+            NAME="${GITHUB_REF_NAME#v}"
+          fi
+          # The APK's versionCode decides whether the app offers an update, and
+          # it has to increase monotonically. major*10000 + minor*100 + patch
+          # orders correctly for anything this project will ship, and is
+          # readable in a release body.
+          MAJOR=$(echo "$NAME" | cut -d. -f1)
+          MINOR=$(echo "$NAME" | cut -d. -f2)
+          PATCH=$(echo "$NAME" | cut -d. -f3)
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Building $NAME (versionCode $CODE)"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: false
+
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 is not set. Add the repository secrets first."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/cineverse-release.jks"
+
+      - name: Build the signed APK
+        env:
+          CV_KEYSTORE_PATH: ${{ runner.temp }}/cineverse-release.jks
+          CV_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          CV_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          CV_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PversionName=${{ steps.version.outputs.name }} \
+            -PversionCode=${{ steps.version.outputs.code }}
+
+      - name: Name it, and take its checksum
+        id: apk
+        run: |
+          SRC=app/build/outputs/apk/release/app-release.apk
+          OUT="cineverse-${{ steps.version.outputs.name }}.apk"
+          mv "$SRC" "$OUT"
+          SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$OUT")
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "mb=$(echo "scale=1; $SIZE/1048576" | bc)" >> "$GITHUB_OUTPUT"
+
+      - name: Confirm it is actually signed
+        run: |
+          # A release that installs for nobody is worse than no release.
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --verbose \
+            "${{ steps.apk.outputs.file }}"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: CineVerse ${{ steps.version.outputs.name }}
+          files: ${{ steps.apk.outputs.file }}
+          generate_release_notes: true
+          body: |
+            ## CineVerse ${{ steps.version.outputs.name }}
+
+            **[Download the APK](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.name }}/${{ steps.apk.outputs.file }})** — ${{ steps.apk.outputs.mb }} MB
+
+            Already have CineVerse installed? Open it; it will offer this update
+            by itself within six hours, or straight away from **You → Check for
+            updates**.
+
+            First time? See the [install guide](https://${{ github.repository_owner }}.github.io/cineverse-android/).
+
+            <!-- The two lines below are read by the app's updater, not by you. -->
+            versionCode: ${{ steps.version.outputs.code }}
+            sha256: ${{ steps.apk.outputs.sha }}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Long-press the icon. Three things, which is the most anyone reads: the two
+  places people go without browsing, and the one action that is the whole point
+  of the app.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="next"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_next"
+        android:shortcutShortLabel="@string/shortcut_next"
+        android:shortcutLongLabel="@string/shortcut_next_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.cineverse.app"
+            android:targetClass="com.cineverse.app.MainActivity"
+            android:data="cineverse://continue" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutShortLabel="@string/shortcut_search"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.cineverse.app"
+            android:targetClass="com.cineverse.app.MainActivity"
+            android:data="cineverse://search" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="list"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_list"
+        android:shortcutShortLabel="@string/shortcut_list"
+        android:shortcutLongLabel="@string/shortcut_list_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.cineverse.app"
+            android:targetClass="com.cineverse.app.MainActivity"
+            android:data="cineverse://list" />
+    </shortcut>
+</shortcuts>
