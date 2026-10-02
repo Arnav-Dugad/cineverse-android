@@ -39,6 +39,21 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     fun setSpoilerShield(value: Boolean) = viewModelScope.launch { app.settings.setSpoilerShield(value) }
     fun setAutoplay(value: Boolean) = viewModelScope.launch { app.settings.setAutoplay(value) }
     fun setAutoplayWifi(value: Boolean) = viewModelScope.launch { app.settings.setAutoplayWifiOnly(value) }
+    fun setShowRatings(value: Boolean) = viewModelScope.launch { app.settings.setShowRatings(value) }
+    fun setShowWatched(value: Boolean) = viewModelScope.launch { app.settings.setShowWatched(value) }
+    fun setPosterCaptions(value: Boolean) = viewModelScope.launch { app.settings.setPosterCaptions(value) }
+    fun setMature(value: Boolean) = viewModelScope.launch { app.settings.setMature(value) }
+    fun setMatureBlur(value: Boolean) = viewModelScope.launch { app.settings.setMatureBlur(value) }
+    fun setRegion(value: String) = viewModelScope.launch { app.settings.setRegion(value) }
+    fun setHeroAutoAdvance(value: Boolean) = viewModelScope.launch { app.settings.setHeroAutoAdvance(value) }
+    fun setHeroSeconds(value: Int) = viewModelScope.launch { app.settings.setHeroSeconds(value) }
+    fun setGridDensity(value: com.cineverse.app.data.prefs.GridDensity) =
+        viewModelScope.launch { app.settings.setGridDensity(value) }
+    fun setStartTab(value: String) = viewModelScope.launch { app.settings.setStartTab(value) }
+    fun setConfetti(value: Boolean) = viewModelScope.launch { app.settings.setConfetti(value) }
+    fun setEpisodeSwipe(value: Boolean) = viewModelScope.launch { app.settings.setEpisodeSwipe(value) }
+    fun setCountdowns(value: Boolean) = viewModelScope.launch { app.settings.setCountdowns(value) }
+
     fun setNotifyEpisodes(value: Boolean) = viewModelScope.launch { app.settings.setNotifyEpisodes(value) }
     fun setNotifyReleases(value: Boolean) = viewModelScope.launch { app.settings.setNotifyReleases(value) }
 

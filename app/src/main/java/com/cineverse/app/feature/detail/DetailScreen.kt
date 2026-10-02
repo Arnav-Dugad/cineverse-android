@@ -207,7 +207,9 @@ fun DetailScreen(
 
             // Only when TMDB has a real date. Counting down to a guess is worse
             // than saying nothing.
-            detail.nextEpisode?.takeIf { it.airDate.isNotBlank() }?.let { next ->
+            detail.nextEpisode
+                ?.takeIf { settings.countdowns && it.airDate.isNotBlank() }
+                ?.let { next ->
                 item(key = "next") {
                     NextEpisodePanel(next, Modifier.padding(top = 16.dp))
                 }
@@ -230,6 +232,7 @@ fun DetailScreen(
                     state = state,
                     progress = progress,
                     spoilerShield = spoilerShield,
+                    swipeToCatchUp = settings.episodeSwipe,
                     onSeason = viewModel::selectSeason,
                     onToggle = viewModel::toggleEpisode,
                     onMarkUpTo = viewModel::markUpTo,
@@ -237,6 +240,7 @@ fun DetailScreen(
                     onHeatmapToggle = viewModel::toggleHeatmap,
                     onHeatMode = viewModel::setHeatMode,
                     onNumbers = viewModel::toggleNumbers,
+                    onAllEpisodes = viewModel::toggleAllEpisodes,
                     onOpenEpisode = { season, episode ->
                         viewModel.selectSeason(season)
                         viewModel.selectTab(DetailTab.Episodes)
@@ -277,6 +281,7 @@ fun DetailScreen(
         TitleSheet.Rate -> RatingSheet(
             title = detail.title,
             current = library.ratingOf(detail.key),
+            celebrate = settings.confetti,
             onSave = viewModel::setRating,
             onClear = { viewModel.setRating(0) },
             onDismiss = { sheet = TitleSheet.None },

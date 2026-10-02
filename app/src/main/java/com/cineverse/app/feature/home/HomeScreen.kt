@@ -114,6 +114,8 @@ fun HomeScreen(
                     logos = state.heroLogos,
                     trailers = state.heroTrailers,
                     autoplay = settings.autoplay && (!settings.autoplayOnWifiOnly || onWifi),
+                    autoAdvance = settings.heroAutoAdvance,
+                    holdMillis = settings.heroSeconds * 1_000L,
                     isSaved = { library.isSaved(it.key) },
                     onOpen = onOpen,
                     onSave = viewModel::toggleSaved,
@@ -187,6 +189,8 @@ private fun Hero(
     logos: Map<String, String>,
     trailers: Map<String, String>,
     autoplay: Boolean,
+    autoAdvance: Boolean,
+    holdMillis: Long,
     isSaved: (MediaItem) -> Boolean,
     onOpen: (MediaItem) -> Unit,
     onSave: (MediaItem) -> Unit,
@@ -219,11 +223,12 @@ private fun Hero(
     // wait, rather than fighting a timer that does not know it was overruled.
     var advance by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(items.size, advance, trailerVisible) {
+    LaunchedEffect(items.size, advance, trailerVisible, autoAdvance, holdMillis) {
+        if (!autoAdvance) return@LaunchedEffect
         // A slide with a trailer PLAYING holds four times as long. Cutting away
         // from a trailer two seconds after it appears is worse than never having
         // played it.
-        kotlinx.coroutines.delay(if (trailerVisible) 28_000L else Motion.HeroHoldMs)
+        kotlinx.coroutines.delay(if (trailerVisible) holdMillis * 4 else holdMillis)
         index = (index + 1) % items.size
         advance++
     }

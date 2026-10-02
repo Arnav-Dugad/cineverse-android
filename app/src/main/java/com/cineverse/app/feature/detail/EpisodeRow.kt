@@ -84,7 +84,11 @@ fun EpisodeRow(
     watchedAt: Long,
     spoilerShield: Boolean,
     onToggle: () -> Unit,
-    onMarkUpTo: () -> Unit,
+    /**
+     * Null turns the swipe off entirely, which is what the setting does. A
+     * gesture that is enabled but does nothing is worse than no gesture.
+     */
+    onMarkUpTo: (() -> Unit)?,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -145,7 +149,7 @@ fun EpisodeRow(
                                 offset.animateTo(0f, Motion.snappy())
                             }
                             when {
-                                value >= triggerPx -> { haptics?.play(Haptic.Success); onMarkUpTo() }
+                                value >= triggerPx -> { haptics?.play(Haptic.Success); onMarkUpTo?.invoke() }
                                 value <= -triggerPx && watched -> { haptics?.play(Haptic.Untick); onToggle() }
                             }
                             armed = false

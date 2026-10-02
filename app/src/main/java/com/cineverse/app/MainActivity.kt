@@ -64,7 +64,11 @@ class MainActivity : ComponentActivity() {
                 motion = settings.motion,
                 haptics = haptics,
             ) {
-                CineVerseNav(app, pending) { pending = null }
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.cineverse.app.core.ui.LocalGridDensity provides settings.gridDensity,
+                ) {
+                    CineVerseNav(app, pending) { pending = null }
+                }
             }
         }
     }

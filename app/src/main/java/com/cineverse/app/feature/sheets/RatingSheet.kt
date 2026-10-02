@@ -29,7 +29,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.cineverse.app.core.ui.Confetti
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,11 +79,16 @@ fun RatingSheet(
     onSave: (Int) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
+    celebrate: Boolean = true,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     var score by remember(current) { mutableIntStateOf(current.coerceIn(0, 10)) }
     var rowWidth by remember { mutableIntStateOf(0) }
+    // Fired on SAVE, not on reaching ten while scrubbing: sliding across the
+    // row passes through ten on the way to nowhere, and a burst for a score you
+    // did not commit to is a burst that means nothing.
+    var celebrate by remember { mutableStateOf(false) }
 
     fun pick(next: Int) {
         val clamped = next.coerceIn(1, 10)
@@ -212,7 +221,14 @@ fun RatingSheet(
                 onClick = {
                     haptics?.play(if (score == 10) Haptic.Celebrate else Haptic.Success)
                     onSave(score)
-                    onDismiss()
+                    if (score == 10 && celebrate) {
+                        // The sheet stays up for the burst, then closes itself.
+                        // Dismissing immediately would throw the confetti away
+                        // with the surface it was drawn on.
+                        celebrate = true
+                    } else {
+                        onDismiss()
+                    }
                 },
                 enabled = score > 0,
                 shape = CvShape.Pill,
@@ -231,5 +247,16 @@ fun RatingSheet(
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+
+    if (celebrate) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(1_250)
+            onDismiss()
+        }
+        // Over everything, consuming nothing.
+        Box(Modifier.fillMaxSize()) {
+            Confetti(play = true)
+        }
     }
 }

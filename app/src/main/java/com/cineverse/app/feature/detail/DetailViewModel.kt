@@ -33,6 +33,7 @@ data class DetailState(
     /** Season -> every episode, once the heatmap has asked for them. */
     val allSeasons: Map<Int, List<Episode>> = emptyMap(),
     val heatmapOpen: Boolean = false,
+    val allEpisodesOpen: Boolean = false,
     val showNumbers: Boolean = false,
     val heatMode: HeatMode = HeatMode.Rating,
     val heatmap: Heatmap? = null,
@@ -152,6 +153,18 @@ class DetailViewModel(
         if (open) loadAllSeasons()
     }
 
+    /**
+     * Open the whole-run list.
+     *
+     * Shares the same fetch as the heatmap, so opening one and then the other
+     * costs a single sweep of the show rather than two.
+     */
+    fun toggleAllEpisodes() {
+        val open = !_state.value.allEpisodesOpen
+        _state.value = _state.value.copy(allEpisodesOpen = open)
+        if (open) loadAllSeasons()
+    }
+
     fun toggleNumbers() {
         _state.value = _state.value.copy(showNumbers = !_state.value.showNumbers)
     }
@@ -167,7 +180,7 @@ class DetailViewModel(
      * twelve requests, and nobody who never opens the heatmap should pay for
      * them.
      */
-    private fun loadAllSeasons() = viewModelScope.launch {
+    internal fun loadAllSeasons() = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         val wanted = detail.seasons.map { it.number }
         if (_state.value.heatmap != null && _state.value.allSeasons.keys.containsAll(wanted)) return@launch

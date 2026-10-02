@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cineverse.app.core.design.tabular
+import androidx.compose.ui.graphics.graphicsLayer
 import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Haptic
@@ -192,6 +194,69 @@ fun ProfileScreen(
             )
         }
 
+        item(key = "density") {
+            ChoiceRow(
+                title = "Poster size",
+                options = com.cineverse.app.data.prefs.GridDensity.entries.map { it.label },
+                selected = settings.gridDensity.label,
+                onSelect = { label ->
+                    com.cineverse.app.data.prefs.GridDensity.entries
+                        .firstOrNull { it.label == label }
+                        ?.let(viewModel::setGridDensity)
+                },
+            )
+        }
+
+        item(key = "captions") {
+            SwitchRow(
+                title = "Titles under posters",
+                detail = "The name and year beneath every poster, rather than artwork alone.",
+                checked = settings.posterCaptions,
+                onChange = viewModel::setPosterCaptions,
+            )
+        }
+
+        item(key = "showRatings") {
+            SwitchRow(
+                title = "Ratings on posters",
+                detail = "The TMDB score in the corner of each card.",
+                checked = settings.showRatings,
+                onChange = viewModel::setShowRatings,
+            )
+        }
+
+        item(key = "showWatched") {
+            SwitchRow(
+                title = "Mark what you have seen",
+                detail = "A tick on posters you have already watched.",
+                checked = settings.showWatched,
+                onChange = viewModel::setShowWatched,
+            )
+        }
+
+        item(key = "startTab") {
+            ChoiceRow(
+                title = "Open on",
+                options = listOf("Home", "Discover", "My List", "Stats"),
+                selected = when (settings.startTab) {
+                    "discover" -> "Discover"
+                    "list" -> "My List"
+                    "stats" -> "Stats"
+                    else -> "Home"
+                },
+                onSelect = { label ->
+                    viewModel.setStartTab(
+                        when (label) {
+                            "Discover" -> "discover"
+                            "My List" -> "list"
+                            "Stats" -> "stats"
+                            else -> "home"
+                        }
+                    )
+                },
+            )
+        }
+
         item(key = "watching") { GroupHeading("Watching") }
 
         item(key = "spoilers") {
@@ -219,6 +284,89 @@ fun ProfileScreen(
                 checked = settings.autoplayOnWifiOnly,
                 onChange = viewModel::setAutoplayWifi,
                 enabled = settings.autoplay,
+            )
+        }
+
+        item(key = "heroAuto") {
+            SwitchRow(
+                title = "Hero moves by itself",
+                detail = "Off leaves the featured title alone until you swipe it.",
+                checked = settings.heroAutoAdvance,
+                onChange = viewModel::setHeroAutoAdvance,
+            )
+        }
+
+        item(key = "heroSeconds") {
+            StepperRow(
+                title = "Seconds per slide",
+                detail = "How long the hero holds each title.",
+                value = settings.heroSeconds,
+                range = 4..30,
+                step = 1,
+                enabled = settings.heroAutoAdvance,
+                onChange = viewModel::setHeroSeconds,
+            )
+        }
+
+        item(key = "countdowns") {
+            SwitchRow(
+                title = "Countdown to the next episode",
+                detail = "A live counter on the page of a show still airing.",
+                checked = settings.countdowns,
+                onChange = viewModel::setCountdowns,
+            )
+        }
+
+        item(key = "episodeSwipe") {
+            SwitchRow(
+                title = "Swipe an episode to catch up",
+                detail = "Drag a row sideways to mark everything up to it watched.",
+                checked = settings.episodeSwipe,
+                onChange = viewModel::setEpisodeSwipe,
+            )
+        }
+
+        item(key = "confetti") {
+            SwitchRow(
+                title = "Celebrate a perfect ten",
+                detail = "A burst of confetti when you rate something 10 out of 10.",
+                checked = settings.confetti,
+                onChange = viewModel::setConfetti,
+            )
+        }
+
+        item(key = "content") { GroupHeading("Content") }
+
+        item(key = "region") {
+            ChoiceRow(
+                title = "Region",
+                detail = "Decides which streaming services and certificates are shown.",
+                options = REGIONS.map { it.second },
+                selected = REGIONS.firstOrNull { it.first == settings.region }?.second
+                    ?: REGIONS.first().second,
+                onSelect = { label ->
+                    REGIONS.firstOrNull { it.second == label }?.let { viewModel.setRegion(it.first) }
+                },
+            )
+        }
+
+        item(key = "mature") {
+            SwitchRow(
+                title = "Include adult titles",
+                detail = "Off hides them from search, browsing and recommendations.",
+                checked = settings.mature,
+                onChange = viewModel::setMature,
+            )
+        }
+
+        item(key = "matureBlur") {
+            SwitchRow(
+                title = "Blur adult artwork",
+                detail = "Covers the poster until you tap it. Nothing is hidden, " +
+                    "it just does not appear uninvited on a screen somebody else can see.",
+                checked = settings.matureBlur,
+                onChange = viewModel::setMatureBlur,
+                enabled = settings.mature,
             )
         }
 
@@ -516,6 +664,105 @@ private fun CountTile(label: String, value: Int, modifier: Modifier = Modifier) 
     }
 }
 
+/**
+ * A number with two ends.
+ *
+ * A slider would be wrong here: the useful range is small, the values are whole
+ * seconds, and a thumb that has to land on "7" among twenty-six positions is a
+ * thumb that lands on 6 or 8. Two buttons and the figure between them is both
+ * exact and larger than any slider thumb.
+ */
+@Composable
+private fun StepperRow(
+    title: String,
+    detail: String,
+    value: Int,
+    range: IntRange,
+    step: Int,
+    onChange: (Int) -> Unit,
+    enabled: Boolean = true,
+) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    val alpha = if (enabled) 1f else 0.4f
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenPadding, vertical = 12.dp)
+            .graphicsLayer { this.alpha = alpha },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
+        }
+        Spacer(Modifier.width(12.dp))
+        Row(
+            Modifier
+                .clip(CvShape.Pill)
+                .background(colors.glass)
+                .border(1.dp, colors.hairline, CvShape.Pill),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StepButton("\u2212", enabled && value > range.first) {
+                haptics?.play(Haptic.Detent)
+                onChange((value - step).coerceIn(range))
+            }
+            Text(
+                value.toString(),
+                style = MaterialTheme.typography.labelLarge.tabular(),
+                color = colors.text,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.width(34.dp),
+            )
+            StepButton("+", enabled && value < range.last) {
+                haptics?.play(Haptic.Detent)
+                onChange((value + step).coerceIn(range))
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val colors = CvTheme.colors
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CvShape.Pill)
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (enabled) colors.text else colors.text3.copy(alpha = 0.4f),
+        )
+    }
+}
+
+/**
+ * The regions worth offering.
+ *
+ * Not every ISO country: a list of two hundred is a list nobody scrolls. These
+ * are the ones with meaningfully different streaming catalogues, with India
+ * first because that is where this app is used.
+ */
+private val REGIONS = listOf(
+    "IN" to "India",
+    "US" to "United States",
+    "GB" to "United Kingdom",
+    "CA" to "Canada",
+    "AU" to "Australia",
+    "DE" to "Germany",
+    "FR" to "France",
+    "ES" to "Spain",
+    "IT" to "Italy",
+    "BR" to "Brazil",
+    "JP" to "Japan",
+    "KR" to "South Korea",
+)
+
 @Composable
 private fun GroupHeading(text: String) {
     Text(
@@ -573,11 +820,15 @@ private fun ChoiceRow(
     options: List<String>,
     selected: String,
     onSelect: (String) -> Unit,
+    detail: String? = null,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        if (detail != null) {
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
+        }
         Spacer(Modifier.height(10.dp))
         Row(
             Modifier

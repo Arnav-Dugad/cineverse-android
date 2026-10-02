@@ -60,9 +60,36 @@ data class Settings(
     val detailOrder: List<String> = emptyList(),
     val notifyNewEpisodes: Boolean = true,
     val notifyReleases: Boolean = true,
+    /** The hero advances by itself. Off leaves it on one title until swiped. */
+    val heroAutoAdvance: Boolean = true,
+    /** How long each hero slide is held, in seconds, when nothing is playing. */
+    val heroSeconds: Int = 7,
+    /** How wide a poster is drawn: more per row, or fewer and larger. */
+    val gridDensity: GridDensity = GridDensity.Comfortable,
+    /** Which tab the app opens on. */
+    val startTab: String = "home",
+    /** The burst on a perfect ten. */
+    val confetti: Boolean = true,
+    /** Swipe an episode row to mark everything up to it. */
+    val episodeSwipe: Boolean = true,
+    /** The live countdown to the next episode on a title page. */
+    val countdowns: Boolean = true,
     val updatedAt: Long = 0L,
 ) {
     val adult: Boolean get() = mature
+}
+
+/**
+ * How tightly posters are packed.
+ *
+ * Not a pixel size: the minimum CELL width, which `GridCells.Adaptive` turns
+ * into a column count for whatever window it is given. Choosing a count
+ * directly would be wrong on a tablet and wrong again in landscape.
+ */
+enum class GridDensity(val label: String, val cellDp: Int) {
+    Dense("More per row", 100),
+    Comfortable("Comfortable", 118),
+    Large("Larger posters", 150),
 }
 
 class SettingsRepository(
@@ -88,6 +115,13 @@ class SettingsRepository(
         val omdbKey = stringPreferencesKey("omdbKey")
         val detailOrder = stringPreferencesKey("detailOrder")
         val notifyEpisodes = booleanPreferencesKey("notifyEpisodes")
+        val heroAutoAdvance = booleanPreferencesKey("heroAutoAdvance")
+        val heroSeconds = intPreferencesKey("heroSeconds")
+        val gridDensity = stringPreferencesKey("gridDensity")
+        val startTab = stringPreferencesKey("startTab")
+        val confetti = booleanPreferencesKey("confetti")
+        val episodeSwipe = booleanPreferencesKey("episodeSwipe")
+        val countdowns = booleanPreferencesKey("countdowns")
         val notifyReleases = booleanPreferencesKey("notifyReleases")
         val updatedAt = longPreferencesKey("updatedAt")
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
@@ -117,6 +151,15 @@ class SettingsRepository(
         omdbKey = this[Keys.omdbKey] ?: "",
         detailOrder = this[Keys.detailOrder]?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
         notifyNewEpisodes = this[Keys.notifyEpisodes] ?: true,
+        heroAutoAdvance = this[Keys.heroAutoAdvance] ?: true,
+        heroSeconds = (this[Keys.heroSeconds] ?: 7).coerceIn(4, 30),
+        gridDensity = runCatching {
+            GridDensity.valueOf(this[Keys.gridDensity] ?: GridDensity.Comfortable.name)
+        }.getOrDefault(GridDensity.Comfortable),
+        startTab = this[Keys.startTab] ?: "home",
+        confetti = this[Keys.confetti] ?: true,
+        episodeSwipe = this[Keys.episodeSwipe] ?: true,
+        countdowns = this[Keys.countdowns] ?: true,
         notifyReleases = this[Keys.notifyReleases] ?: true,
         updatedAt = this[Keys.updatedAt] ?: 0L,
     )
@@ -147,6 +190,14 @@ class SettingsRepository(
     suspend fun setMature(value: Boolean) = edit { it[Keys.mature] = value }
     suspend fun setMatureBlur(value: Boolean) = edit { it[Keys.matureBlur] = value }
     suspend fun setOmdbKey(value: String) = edit { it[Keys.omdbKey] = value.trim().take(32) }
+    suspend fun setHeroAutoAdvance(value: Boolean) = edit { it[Keys.heroAutoAdvance] = value }
+    suspend fun setHeroSeconds(value: Int) = edit { it[Keys.heroSeconds] = value.coerceIn(4, 30) }
+    suspend fun setGridDensity(value: GridDensity) = edit { it[Keys.gridDensity] = value.name }
+    suspend fun setStartTab(value: String) = edit { it[Keys.startTab] = value }
+    suspend fun setConfetti(value: Boolean) = edit { it[Keys.confetti] = value }
+    suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
+    suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }
+
     suspend fun setNotifyEpisodes(value: Boolean) = edit { it[Keys.notifyEpisodes] = value }
     suspend fun setNotifyReleases(value: Boolean) = edit { it[Keys.notifyReleases] = value }
     suspend fun setDetailOrder(value: List<String>) = edit { it[Keys.detailOrder] = value.joinToString(",") }

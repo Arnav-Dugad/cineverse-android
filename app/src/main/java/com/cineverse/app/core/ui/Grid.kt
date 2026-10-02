@@ -20,12 +20,29 @@ import androidx.compose.ui.unit.dp
 @ReadOnlyComposable
 fun posterCellWidth(): Dp {
     val width = LocalConfiguration.current.screenWidthDp
-    return when {
-        width >= 1000 -> 180.dp   // a tablet in landscape: 5-6 across
-        width >= 700 -> 160.dp    // a tablet, or a phone unfolded
-        width >= 600 -> 140.dp    // a large phone in landscape
-        else -> 118.dp            // a phone: 3 across
+    // The user's own preference is the base, and the window scales it. Letting
+    // the preference set an absolute size would make "More per row" mean eight
+    // columns on a tablet and three on a phone; letting the window decide alone
+    // ignores the setting entirely.
+    val base = LocalGridDensity.current.cellDp
+    val scale = when {
+        width >= 1000 -> 1.5f
+        width >= 700 -> 1.35f
+        width >= 600 -> 1.18f
+        else -> 1f
     }
+    return (base * scale).dp
+}
+
+/**
+ * How tightly posters are packed, from Settings.
+ *
+ * A composition local rather than a parameter: every grid in the app wants it,
+ * and threading it through nine screens to reach a cell width would be nine
+ * signatures changed for one number.
+ */
+val LocalGridDensity = androidx.compose.runtime.staticCompositionLocalOf {
+    com.cineverse.app.data.prefs.GridDensity.Comfortable
 }
 
 @Composable

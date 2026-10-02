@@ -238,6 +238,7 @@ fun LazyListScope.episodesSection(
     state: DetailState,
     progress: ShowProgress?,
     spoilerShield: Boolean,
+    swipeToCatchUp: Boolean,
     onSeason: (Int) -> Unit,
     onToggle: (Int, Int) -> Unit,
     onMarkUpTo: (Int, Int) -> Unit,
@@ -246,6 +247,7 @@ fun LazyListScope.episodesSection(
     onHeatMode: (com.cineverse.app.data.model.HeatMode) -> Unit,
     onNumbers: () -> Unit,
     onOpenEpisode: (Int, Int) -> Unit,
+    onAllEpisodes: () -> Unit,
 ) {
     val detail = state.detail ?: return
     val next = progress?.nextUp()
@@ -261,6 +263,21 @@ fun LazyListScope.episodesSection(
             onMode = onHeatMode,
             onNumbers = onNumbers,
             onOpenEpisode = onOpenEpisode,
+            modifier = Modifier.padding(bottom = 14.dp),
+        )
+    }
+
+    item(key = "allEpisodes") {
+        AllEpisodesPanel(
+            seasons = state.allSeasons,
+            seasonCount = detail.seasons.size,
+            progress = progress,
+            expanded = state.allEpisodesOpen,
+            loading = state.loadingHeatmap,
+            spoilerShield = spoilerShield,
+            onToggle = onAllEpisodes,
+            onToggleEpisode = onToggle,
+            onMarkUpTo = onMarkUpTo,
             modifier = Modifier.padding(bottom = 14.dp),
         )
     }
@@ -297,7 +314,9 @@ fun LazyListScope.episodesSection(
             watchedAt = progress?.watchedAt(episode.season, episode.number) ?: 0L,
             spoilerShield = spoilerShield,
             onToggle = { onToggle(episode.season, episode.number) },
-            onMarkUpTo = { onMarkUpTo(episode.season, episode.number) },
+            onMarkUpTo = if (swipeToCatchUp) {
+                { onMarkUpTo(episode.season, episode.number) }
+            } else null,
             onOpen = { onToggle(episode.season, episode.number) },
             modifier = Modifier.padding(horizontal = ScreenPadding - 4.dp),
         )
@@ -308,6 +327,22 @@ fun LazyListScope.episodesSection(
  * The season picker: a chip rail, not a dropdown — one tap instead of two, and
  * every season can show how far through it you are without being opened.
  */
+/**
+ * The seasons, as cards with their own artwork.
+ *
+ * A season poster is a real thing TMDB publishes and the app was ignoring it,
+ * offering a row of identical grey pills instead. For a show with twelve
+ * seasons that is twelve things that look the same, and picking the one you
+ * want means reading every label. The artwork makes it a glance.
+ *
+ * Progress is drawn ON the card as a bar rather than written as "6/10": the
+ * number is in the label underneath, and a bar answers "am I nearly done with
+ * this one" without being read at all.
+ *
+ * Counted against what has AIRED, not against the season's eventual length, so
+ * a season halfway through its run does not look half abandoned.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SeasonChips(
     detail: TitleDetail,
@@ -320,59 +355,103 @@ private fun SeasonChips(
     val haptics = LocalHaptics.current
     LazyRow(
         contentPadding = PaddingValues(horizontal = ScreenPadding),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(bottom = 12.dp),
     ) {
         items(detail.seasons, key = { it.number }) { season ->
             val active = season.number == selected
             val watched = progress?.watchedIn(season.number) ?: 0
-            val complete = watched >= season.episodeCount && season.episodeCount > 0
+            val aired = progress?.episodeNumbers(season.number)
+                ?.count { progress.hasAired(season.number, it) }
+                ?.takeIf { it > 0 }
+                ?: season.episodeCount
+            val complete = aired > 0 && watched >= aired
+            val fraction = if (aired > 0) (watched.toFloat() / aired).coerceIn(0f, 1f) else 0f
+            val lift by animateFloatAsState(
+                targetValue = if (active) 1f else 0.96f,
+                animationSpec = Motion.lively(),
+                label = "season",
+            )
+
             Column(
                 Modifier
-                    .clip(CvShape.Medium)
-                    .background(if (active) colors.text.copy(alpha = 0.12f) else colors.glass)
-                    .border(
-                        1.dp,
-                        if (active) colors.text.copy(alpha = 0.3f) else colors.hairline,
-                        CvShape.Medium,
-                    )
+                    .width(104.dp)
+                    .graphicsLayer { scaleX = lift; scaleY = lift }
                     .combinedClickable(
                         onClick = { haptics?.play(Haptic.Select); onSelect(season.number) },
                         onLongClick = {
                             haptics?.play(Haptic.Peek)
                             onMarkSeason(season.number, !complete)
                         },
-                    )
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                    ),
             ) {
-                Text(
-                    "Season ${season.number}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (active) colors.text else colors.text2,
-                )
-                Spacer(Modifier.height(3.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(156.dp)
+                        .clip(CvShape.Medium)
+                        .background(colors.surface2)
+                        .border(
+                            if (active) 2.dp else 1.dp,
+                            if (active) colors.text.copy(alpha = 0.85f) else colors.hairline,
+                            CvShape.Medium,
+                        )
+                ) {
+                    CvImage(
+                        Img.poster(season.posterPath ?: detail.posterPath),
+                        season.name,
+                        Modifier.fillMaxSize(),
+                    )
+                    // A season you have finished is dimmed and ticked, the same
+                    // treatment a watched poster gets everywhere else.
                     if (complete) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(colors.ink.copy(alpha = 0.55f))
+                        )
                         Icon(
                             Icons.Rounded.Check,
                             null,
                             tint = colors.green,
-                            modifier = Modifier.size(12.dp),
+                            modifier = Modifier.align(Alignment.Center).size(28.dp),
                         )
-                        Spacer(Modifier.width(3.dp))
                     }
-                    Text(
-                        "$watched / ${season.episodeCount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (complete) colors.green else colors.text3,
-                    )
+                    if (fraction > 0f && !complete) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(colors.ink.copy(alpha = 0.6f))
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(fraction)
+                                    .height(4.dp)
+                                    .background(Palette.Red2)
+                            )
+                        }
+                    }
                 }
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    if (season.number == 0) "Specials" else "Season ${season.number}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (active) colors.text else colors.text2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (aired <= 0) "Not aired" else "$watched / $aired",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (complete) colors.green else colors.text3,
+                    maxLines = 1,
+                )
             }
         }
     }
 }
-
-// ---------- About ----------
 
 fun LazyListScope.aboutSection(
     detail: TitleDetail,
