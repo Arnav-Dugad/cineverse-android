@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -71,6 +72,7 @@ fun ProfileScreen(
     val update by viewModel.update.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
+    val context = LocalContext.current
 
     LazyColumn(
         modifier.fillMaxSize(),
@@ -306,6 +308,73 @@ fun ProfileScreen(
                     tint = colors.text3,
                     modifier = Modifier.size(15.dp),
                 )
+            }
+        }
+
+        // Only when there is something to show. A permanent "Crash reports (0)"
+        // row is an invitation to worry about a thing that has not happened.
+        val crashes: List<com.cineverse.app.core.crash.CrashReport> = viewModel.crashes
+        if (crashes.isNotEmpty()) {
+            item(key = "crashes") {
+                Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
+                    Text(
+                        "CineVerse stopped unexpectedly",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.text,
+                    )
+                    Text(
+                        "${crashes.size} report${if (crashes.size == 1) "" else "s"} on this phone. " +
+                            "Nothing has been sent anywhere.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    for (report in crashes.take(3).toList()) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .clip(CvShape.Medium)
+                                .background(colors.glass)
+                                .clickableNoRipple {
+                                    haptics?.play(Haptic.Tap)
+                                    runCatching {
+                                        context.startActivity(
+                                            android.content.Intent(
+                                                android.content.Intent.ACTION_VIEW,
+                                                android.net.Uri.parse(viewModel.crashIssueUrl(report)),
+                                            )
+                                        )
+                                    }
+                                }
+                                .padding(13.dp)
+                        ) {
+                            Text(
+                                report.summary,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.text2,
+                                maxLines = 2,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Tap to open a report on GitHub",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Palette.Red2,
+                            )
+                        }
+                    }
+                    Text(
+                        "Delete these reports",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clickableNoRipple {
+                                haptics?.play(Haptic.Untick)
+                                viewModel.clearCrashes()
+                            },
+                    )
+                }
             }
         }
 

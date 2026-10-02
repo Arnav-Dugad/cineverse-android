@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CineVerse"
 include(":app")
+include(":baselineprofile")

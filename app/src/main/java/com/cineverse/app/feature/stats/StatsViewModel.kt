@@ -33,6 +33,7 @@ data class StatsState(
     val longestStreak: Int = 0,
     val totalMinutes: Int = 0,
     val loaded: Boolean = false,
+    val deep: DeepStats = DeepStats(),
 )
 
 /**
@@ -123,6 +124,7 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
             streak = streak,
             longestStreak = longest,
             totalMinutes = totalMinutes,
+            deep = buildDeepStats(lib, shows, totalMinutes, streak, longest),
             loaded = true,
         )
     }

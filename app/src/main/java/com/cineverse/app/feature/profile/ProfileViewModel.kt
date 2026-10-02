@@ -19,6 +19,14 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     val library: StateFlow<Library> = app.library.library
     val update: StateFlow<UpdateState> = app.updates.state
 
+    /** What is in the crash folder, read once when Settings opens. */
+    val crashes: List<com.cineverse.app.core.crash.CrashReport> get() = app.crashes.reports()
+
+    fun crashIssueUrl(report: com.cineverse.app.core.crash.CrashReport): String =
+        app.crashes.issueUrl(report)
+
+    fun clearCrashes() = app.crashes.clear()
+
     val currentVersion: String get() = app.updates.currentVersion
 
     fun setTheme(value: ThemeChoice) = viewModelScope.launch { app.settings.setTheme(value) }

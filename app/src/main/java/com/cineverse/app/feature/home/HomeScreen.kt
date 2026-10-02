@@ -273,9 +273,22 @@ private fun Hero(
                 kotlinx.coroutines.delay(3_000)
                 armed = true
             }
+            // Revealed a beat AFTER the first playing signal, not on it.
+            //
+            // YouTube shows its control overlay for the first few seconds of an
+            // embed and then auto-hides it. Fading in the moment playback starts
+            // meant a pause button and two skip arrows drifted into view over
+            // the hero and sat there. Waiting for them to go is the difference
+            // between an ambient backdrop and a video someone left running.
+            var settled by remember(item.key) { mutableStateOf(false) }
+            LaunchedEffect(playing) {
+                if (!playing) return@LaunchedEffect
+                kotlinx.coroutines.delay(3_500)
+                settled = true
+            }
             if (armed) {
                 val fade by animateFloatAsState(
-                    targetValue = if (playing) 1f else 0f,
+                    targetValue = if (settled) 1f else 0f,
                     animationSpec = tween(900, easing = Motion.EaseOut),
                     label = "trailerFade",
                 )

@@ -51,6 +51,9 @@ class CineVerseApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Installed FIRST, before anything else can throw, so the handler is in
+        // place for the rest of start-up and not only for the part after it.
+        container.crashes.install()
     }
 
     /**
@@ -89,6 +92,8 @@ class CineVerseApp : Application(), SingletonImageLoader.Factory {
 class AppContainer(private val context: Context) {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    val crashes by lazy { com.cineverse.app.core.crash.CrashReporter(context) }
 
     // ---------- is there a network ----------
 

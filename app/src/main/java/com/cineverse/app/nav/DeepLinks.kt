@@ -10,6 +10,7 @@ import com.cineverse.app.data.model.MediaType
  * Four sources, one answer:
  *
  *  - a launcher shortcut (`cineverse://search`, `://list`, `://continue`)
+ *  - the Today widget opening the stats page (`cineverse://stats`)
  *  - the widget opening a show (`cineverse://tv/95396`)
  *  - a link to the website (`https://cineverse.pages.dev/tv/95396`)
  *  - text shared from another app, which is treated as a search
@@ -36,6 +37,7 @@ object DeepLinks {
                 "search" -> Route.Search
                 "list" -> Route.MyList
                 "continue" -> Route.Home
+                "stats" -> Route.Stats
                 "movie", "tv" -> segments.firstOrNull()?.toIntOrNull()
                     ?.let { Route.Detail(it, host) }
                 else -> null

@@ -1,6 +1,7 @@
 import java.util.Properties
 
 plugins {
+    alias(libs.plugins.androidx.baselineprofile)
     // AGP 9 compiles Kotlin itself, so the Kotlin Android plugin is gone. The
     // two Kotlin COMPILER plugins are still applied by hand: Compose (required
     // since Kotlin 2.0) and serialization.
@@ -65,6 +66,31 @@ android {
             val release = signingConfigs.getByName("release")
             signingConfig = if (release.storeFile != null) release else signingConfigs.getByName("debug")
         }
+
+        // The two build types the baseline profile plugin adds, given their own
+        // application ids.
+        //
+        // They are installed and uninstalled by the generator, and by default
+        // they carry the SAME id as the real app -- so generating a profile on a
+        // phone that has CineVerse on it replaces that install and wipes its
+        // data, which signs the owner out of their own library. Found the hard
+        // way. A suffix costs nothing: an ART profile names classes, and class
+        // names do not change with the application id.
+        create("nonMinifiedRelease") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".benchmark"
+            isMinifyEnabled = false
+            isShrinkResources = false
+            matchingFallbacks += listOf("release")
+            // Profiling needs the stack frames that a profileable build keeps.
+            isProfileable = true
+        }
+        create("benchmarkRelease") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".benchmark"
+            matchingFallbacks += listOf("release")
+            isProfileable = true
+        }
     }
 
     buildFeatures {
@@ -101,6 +127,16 @@ kotlin {
 }
 
 dependencies {
+    // The other half of a baseline profile. Without this the generated
+    // `baseline-prof.txt` ships inside the APK and is never installed, which is
+    // a silent no-op rather than an error -- the kind of thing that looks done
+    // and is not.
+    implementation(libs.androidx.profileinstaller)
+
+    // The producer. Without this the generate task has no inputs and reports
+    // UP-TO-DATE forever, which looks exactly like success.
+    baselineProfile(project(":baselineprofile"))
+
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(platform(libs.compose.bom))
@@ -148,4 +184,18 @@ dependencies {
     implementation(libs.credentials)
     implementation(libs.credentials.play.services)
     implementation(libs.googleid)
+}
+
+baselineProfile {
+    /**
+     * Keep the profile under version control.
+     *
+     * The alternative is regenerating it on every CI run, which needs a device
+     * in CI and makes the output of a build depend on how busy that device was.
+     * A checked-in profile is reviewable, reproducible, and regenerated
+     * deliberately with `./gradlew :app:generateBaselineProfile` when the start-up
+     * path actually changes.
+     */
+    saveInSrc = true
+    automaticGenerationDuringBuild = false
 }

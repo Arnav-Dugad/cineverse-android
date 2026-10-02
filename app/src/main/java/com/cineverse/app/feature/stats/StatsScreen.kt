@@ -137,6 +137,25 @@ fun StatsScreen(
                 }
             }
         }
+
+        // The deep panels, in the website's order: what you are doing now
+        // first, the analysis after it. Each one is skipped entirely when it
+        // has nothing to say -- an empty "Rewatches" card is a card that only
+        // ever tells you the feature exists.
+        val deep = state.deep
+
+        if (deep.tv.tracked > 0) item(key = "tv") { TvPanel(deep.tv) }
+        if (deep.rating.any) item(key = "rating") { RatingPanel(deep.rating) }
+        if (deep.library.watched > 0) item(key = "library") { LibraryPanel(deep.library) }
+        if (deep.taste.decades.isNotEmpty()) item(key = "taste") { TastePanel(deep.taste) }
+        if (deep.rewatches.isNotEmpty()) item(key = "rewatch") { RewatchPanel(deep.rewatches) }
+        if (deep.shifts.size >= 2) item(key = "shifts") { ShiftPanel(deep.shifts) }
+        if (deep.directors.isNotEmpty()) item(key = "directors") { DirectorPanel(deep.directors) }
+        if (deep.franchises.isNotEmpty()) {
+            item(key = "franchises") { FranchisePanel(deep.franchises) {} }
+        }
+        if (deep.health.isNotEmpty()) item(key = "health") { HealthPanel(deep.health) }
+        if (deep.trophies.isNotEmpty()) item(key = "trophies") { TrophyPanel(deep.trophies) }
     }
 }
 

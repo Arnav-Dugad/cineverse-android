@@ -94,5 +94,18 @@
                 android:resource="@xml/continue_widget_info" />
         </receiver>
 
+        <!-- The streak and today, at a glance. -->
+        <receiver
+            android:name=".widget.TodayWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_today">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+
     </application>
 </manifest>
