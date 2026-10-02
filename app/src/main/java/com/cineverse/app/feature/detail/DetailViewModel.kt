@@ -285,7 +285,7 @@ class DetailViewModel(
 
     fun setMovieProgress(minutes: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
-        app.library.setMovieProgress(detail.id, minutes, detail.runtime)
+        app.library.setMovieProgress(detail.id, minutes, detail.runtime, detail)
     }
 
     fun clearMovieProgress() = viewModelScope.launch {

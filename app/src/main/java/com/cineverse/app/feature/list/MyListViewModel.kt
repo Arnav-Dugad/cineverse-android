@@ -91,8 +91,14 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
             val shows = values[5] as Map<Int, com.cineverse.app.data.model.ShowProgress>
 
             val all = when (seg) {
+                // EVERYTHING saved, watched or not.
+                //
+                // This used to hide anything already watched, which on a real
+                // library meant 62 of 144 saved titles were invisible with no
+                // way to reach them. The website shows all of them and offers
+                // "unwatched only" as a FILTER -- which this app now has too,
+                // in the filter sheet, where the user can see it is on.
                 ListSegment.Watchlist -> lib.saved.values
-                    .filterNot { lib.isWatched(it.key) }
                     // A custom list narrows the watchlist rather than replacing
                     // it, so the segment still means the same thing either way.
                     .filter { list.isBlank() || it.lists.contains(list) }

@@ -279,28 +279,41 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 season = season,
                 episode = episode,
                 remaining = (total - show.watchedCount).coerceAtLeast(0),
+                absolute = show.isAbsolute,
                 progress = if (total > 0) show.watchedCount.toFloat() / total else 0f,
                 lastAt = show.log.lastOrNull()?.stamp ?: show.updatedAt,
             )
         }
 
         for (progress in lib.movieProgress.values) {
-            if (progress.position <= 0) continue
-            val saved = lib.saved["movie_${progress.tmdbId}"] ?: lib.watched["movie_${progress.tmdbId}"]?.let {
-                null // already finished: it does not belong in Continue Watching
-            }
-            val item = saved?.asItem() ?: MediaItem(
+            val key = "movie_${progress.tmdbId}"
+            // Finished means finished. The previous version wrote this as
+            // `saved ?: watched?.let { null }`, which returns `saved` whenever
+            // the film is saved -- so a film that was BOTH on the watchlist and
+            // already watched stayed in Continue Watching for ever. The website
+            // filters on watched alone, and so does this.
+            if (lib.isWatched(key)) continue
+
+            // A position of zero is not an absence. The website records a film
+            // the moment you say you have started it, before you have said
+            // where you got to, and that film belongs in the row.
+            val saved = lib.saved[key]
+            val item = MediaItem(
                 id = progress.tmdbId,
                 type = MediaType.Movie,
-                title = lib.saved["movie_${progress.tmdbId}"]?.title ?: "",
+                // The progress document carries its own title and artwork, so a
+                // film that was never on the watchlist still draws correctly.
+                title = progress.title.ifBlank { saved?.title.orEmpty() },
+                posterPath = progress.poster.ifBlank { saved?.poster.orEmpty() }.ifBlank { null },
+                backdropPath = progress.backdrop.ifBlank { null },
             )
             if (item.title.isBlank()) continue
             rows += ContinueRow(
                 item = item,
                 progress = progress.fraction,
-                lastAt = progress.updatedAt,
+                lastAt = progress.updatedAt.takeIf { it > 0 } ?: progress.startedAt,
                 isMovie = true,
-                minutesLeft = (progress.runtime - progress.position).coerceAtLeast(0),
+                minutesLeft = progress.minutesLeft,
             )
         }
 

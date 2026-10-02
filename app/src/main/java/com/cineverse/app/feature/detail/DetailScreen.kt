@@ -166,7 +166,7 @@ fun DetailScreen(
                     saved = library.isSaved(detail.key),
                     watched = library.isWatched(detail.key),
                     myRating = library.ratingOf(detail.key),
-                    movieMinutes = library.movieProgress[detail.id]?.position ?: 0,
+                    movieMinutes = library.movieProgress[detail.id]?.minutes ?: 0,
                     onSave = viewModel::toggleSaved,
                     onWatched = viewModel::toggleWatched,
                     onRate = { sheet = TitleSheet.Rate },
@@ -258,7 +258,7 @@ fun DetailScreen(
         TitleSheet.Progress -> ProgressSheet(
             title = detail.title,
             runtime = detail.runtime,
-            current = library.movieProgress[detail.id]?.position ?: 0,
+            current = library.movieProgress[detail.id]?.minutes ?: 0,
             onSave = viewModel::setMovieProgress,
             onFinish = viewModel::finishMovie,
             onClear = viewModel::clearMovieProgress,

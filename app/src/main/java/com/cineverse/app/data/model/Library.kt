@@ -141,6 +141,39 @@ data class ShowProgress(
     val complete: Boolean
         get() = totalEpisodes > 0 && watchedCount >= totalEpisodes
 
+    /**
+     * The episode numbers a season actually uses.
+     *
+     * For most shows that is 1..count. For an ABSOLUTE-numbered show — One
+     * Piece, Doraemon, most long-running anime — TMDB numbers episodes
+     * continuously across seasons, so season 23 might run 1086..1110 and there
+     * is no episode 1 in it at all.
+     *
+     * Ported from the website's `episodeNumbersFor`. Everything that walks a
+     * season has to go through this: the five places in this app that counted
+     * `1..count` instead were asking whether One Piece episode 1 was in season
+     * 23, which it is not and never will be, so "next up" pointed at an episode
+     * that does not exist.
+     */
+    fun episodeNumbers(season: Int): List<Int> {
+        val count = structure[season] ?: return emptyList()
+        if (!isAbsolute) return (1..count).toList()
+        val before = structure.entries.filter { it.key < season }.sumOf { it.value }
+        return (1..count).map { before + it }
+    }
+
+    /** True when TMDB numbers this show continuously across its seasons. */
+    val isAbsolute: Boolean
+        get() {
+            if (numberingMode == "absolute") return true
+            if (numberingMode == "season" && episodeModelV >= MODEL_VERSION) return false
+            // The website's inference, for documents written before the mode was
+            // recorded: an aired episode number larger than its own season is
+            // only possible under continuous numbering.
+            val airedSeasonSize = structure[airedSeason] ?: 0
+            return airedSeasonSize > 0 && airedEpisode > airedSeasonSize
+        }
+
     fun isWatched(season: Int, episode: Int): Boolean =
         seasons[season]?.contains(episode) == true
 
@@ -158,8 +191,7 @@ data class ShowProgress(
     fun nextUp(): Pair<Int, Int>? {
         val seasonNumbers = structure.keys.sorted()
         for (season in seasonNumbers) {
-            val count = structure[season] ?: continue
-            for (episode in 1..count) {
+            for (episode in episodeNumbers(season)) {
                 if (isWatched(season, episode)) continue
                 if (!hasAired(season, episode)) return null
                 return season to episode
@@ -168,8 +200,12 @@ data class ShowProgress(
         return null
     }
 
-    private fun hasAired(season: Int, episode: Int): Boolean {
+    fun hasAired(season: Int, episode: Int): Boolean {
         if (airedSeason <= 0) return true
+        // Under continuous numbering the episode number alone settles it, and
+        // comparing seasons as well would call episode 1106 unaired simply
+        // because TMDB files it under a later season than the one now airing.
+        if (isAbsolute) return episode <= airedEpisode
         return season < airedSeason || (season == airedSeason && episode <= airedEpisode)
     }
 
@@ -224,15 +260,42 @@ data class ShowProgress(
     }
 }
 
-/** `users/{uid}/movieProgress/{id}` — where you stopped in a film. */
+/**
+ * `users/{uid}/movieProgress/movie_{id}` — where you stopped in a film.
+ *
+ * Two things about this document that cost a day to find:
+ *
+ *  - **[seconds], not minutes.** The website stores `position` and `runtime` in
+ *    SECONDS (`runtime: Math.round(minutes * 60)`). An earlier build of this app
+ *    read them as minutes, so a film 54 minutes in reported "5,217m left".
+ *  - **A delete is a TOMBSTONE, not a deletion.** Removing a film from Continue
+ *    Watching on the website writes `{ tmdbId, deleted: true, updatedAt }` over
+ *    the document rather than deleting it, so that an offline delete cannot be
+ *    resurrected by an older copy on another device. A reader that ignores the
+ *    flag shows every film the user has ever removed. All five of the author's
+ *    own documents were tombstones, and all five were on screen.
+ */
 @Immutable
 data class MovieProgress(
     val tmdbId: Int,
-    val position: Int = 0,
-    val runtime: Int = 0,
+    /** Seconds into the film. Zero is MEANINGFUL: it means started, not absent. */
+    val seconds: Int = 0,
+    /** The film's length in seconds, or 0 when it was never recorded. */
+    val runtimeSeconds: Int = 0,
+    val title: String = "",
+    val poster: String = "",
+    val backdrop: String = "",
+    val startedAt: Long = 0L,
     val updatedAt: Long = 0L,
+    /** The website's tombstone. A row carrying this is not in Continue Watching. */
+    val deleted: Boolean = false,
 ) {
-    val fraction: Float get() = if (runtime > 0) (position.toFloat() / runtime).coerceIn(0f, 1f) else 0f
+    val minutes: Int get() = seconds / 60
+    val runtimeMinutes: Int get() = runtimeSeconds / 60
+    val minutesLeft: Int get() = ((runtimeSeconds - seconds).coerceAtLeast(0)) / 60
+
+    val fraction: Float
+        get() = if (runtimeSeconds > 0) (seconds.toFloat() / runtimeSeconds).coerceIn(0f, 1f) else 0f
 }
 
 /** A row of Continue Watching: a show mid-run, or a film mid-play. */
@@ -248,7 +311,21 @@ data class ContinueRow(
     val lastAt: Long = 0L,
     val isMovie: Boolean = false,
     val minutesLeft: Int = 0,
+    /** True when the show numbers its episodes continuously across seasons. */
+    val absolute: Boolean = false,
 ) {
+    /**
+     * What to call the next episode.
+     *
+     * An absolute-numbered show must never read "S23 E1086" — nobody says that,
+     * and the season number is an artefact of how TMDB files the show rather
+     * than anything a viewer tracks. The website says "Episode 1086"; so does
+     * this.
+     */
     val label: String
-        get() = if (isMovie) "${minutesLeft}m left" else "S$season E$episode"
+        get() = when {
+            isMovie -> "${minutesLeft}m left"
+            absolute -> "EP $episode"
+            else -> "S$season E$episode"
+        }
 }

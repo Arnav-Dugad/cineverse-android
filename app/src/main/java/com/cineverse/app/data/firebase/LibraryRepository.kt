@@ -82,7 +82,11 @@ class LibraryRepository(
                         doc.id to score
                     }.toMap(),
                     lists = lists.map { it.toList() }.sortedBy { it.createdAt },
-                    movieProgress = progress.mapNotNull { it.toMovieProgress() }.associateBy { it.tmdbId },
+                    // Tombstones are dropped here rather than at every call
+                    // site, so nothing downstream can forget to check.
+                    movieProgress = progress.mapNotNull { it.toMovieProgress() }
+                        .filterNot { it.deleted }
+                        .associateBy { it.tmdbId },
                     loaded = true,
                 )
             }
@@ -233,20 +237,52 @@ class LibraryRepository(
 
     // ---------- films, mid-play ----------
 
-    suspend fun setMovieProgress(id: Int, position: Int, runtime: Int) {
+    /**
+     * Where you got to in a film, in MINUTES, written as the website stores it.
+     *
+     * The document id is `movie_{id}`, the figures are in seconds, and
+     * `deleted` is cleared explicitly — a film you removed and then started
+     * again has a tombstone sitting on it, and merging a position into that
+     * without clearing the flag writes a row that neither client will show.
+     */
+    suspend fun setMovieProgress(id: Int, minutes: Int, runtimeMinutes: Int, detail: TitleDetail? = null) {
         val uid = auth.uid.value ?: return
-        val ref = user(uid).collection("movieProgress").document(id.toString())
-        if (position <= 0) ref.delete().await()
-        else ref.set(
+        val ref = user(uid).collection("movieProgress").document("movie_$id")
+        val now = System.currentTimeMillis()
+        val held = library.value.movieProgress[id]
+        ref.set(
             mapOf(
-                "position" to position,
-                "runtime" to runtime,
+                "tmdbId" to id,
+                "position" to minutes.coerceAtLeast(0) * 60,
+                "runtime" to runtimeMinutes.coerceAtLeast(0) * 60,
+                "title" to (detail?.title ?: held?.title.orEmpty()),
+                "poster" to (detail?.posterPath ?: held?.poster.orEmpty()),
+                "backdrop" to (detail?.backdropPath ?: held?.backdrop.orEmpty()),
+                "startedAt" to (held?.startedAt?.takeIf { it > 0 } ?: now),
+                "updatedAt" to now,
+                "deleted" to false,
+            ),
+            com.google.firebase.firestore.SetOptions.merge(),
+        ).await()
+    }
+
+    /**
+     * Take a film out of Continue Watching.
+     *
+     * A TOMBSTONE, not a delete, because that is what the website writes and
+     * what its reconciliation expects: deleting the document outright lets an
+     * older offline copy on another device resurrect the row on next sign-in.
+     */
+    suspend fun clearMovieProgress(id: Int) {
+        val uid = auth.uid.value ?: return
+        user(uid).collection("movieProgress").document("movie_$id").set(
+            mapOf(
+                "tmdbId" to id,
+                "deleted" to true,
                 "updatedAt" to System.currentTimeMillis(),
             )
         ).await()
     }
-
-    suspend fun clearMovieProgress(id: Int) = setMovieProgress(id, 0, 0)
 }
 
 // ---------- reading documents ----------
@@ -333,12 +369,23 @@ internal fun DocumentSnapshot.toList(): UserList = UserList(
 )
 
 internal fun DocumentSnapshot.toMovieProgress(): MovieProgress? {
-    val id = id.toIntOrNull() ?: int("tmdbId").takeIf { it > 0 } ?: return null
+    // The document id is `movie_640`, so the id has to come from the field and
+    // the suffix is only a fallback.
+    val tmdbId = int("tmdbId").takeIf { it > 0 }
+        ?: id.substringAfterLast('_').toIntOrNull()
+        ?: return null
     return MovieProgress(
-        tmdbId = id,
-        position = int("position"),
-        runtime = int("runtime"),
+        tmdbId = tmdbId,
+        seconds = int("position"),
+        runtimeSeconds = int("runtime"),
+        // The row carries its own artwork and name, so Continue Watching can
+        // draw a film that is not in the watchlist and never was.
+        title = str("title"),
+        poster = str("poster"),
+        backdrop = str("backdrop"),
+        startedAt = millis("startedAt"),
         updatedAt = millis("updatedAt"),
+        deleted = getBoolean("deleted") == true,
     )
 }
 

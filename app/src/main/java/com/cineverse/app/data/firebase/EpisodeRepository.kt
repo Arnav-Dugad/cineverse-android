@@ -77,8 +77,14 @@ class EpisodeRepository(
             val now = System.currentTimeMillis()
             for (s in entry.structure.keys.sorted()) {
                 if (s > season) break
-                val last = if (s == season) episode else (entry.structure[s] ?: 0)
-                val episodes = (1..last).filterNot { next.isWatched(s, it) }
+                // An earlier season is taken WHOLE; only the season being
+                // marked up to is cut at an episode. Capping an earlier season
+                // at its episode COUNT was right for 1..n numbering and wrong
+                // for absolute: season 2 of One Piece is numbered 62..77, so a
+                // cap of 16 matched none of it.
+                val numbers = next.episodeNumbers(s)
+                val wanted = if (s == season) numbers.filter { it <= episode } else numbers
+                val episodes = wanted.filterNot { next.isWatched(s, it) }
                 if (episodes.isNotEmpty()) next = next.with(s, episodes, now, bulk = true)
             }
             next
@@ -89,8 +95,8 @@ class EpisodeRepository(
         write(show) { entry ->
             val count = entry.structure[season] ?: 0
             if (count <= 0) entry
-            else if (watched) entry.with(season, (1..count).toList(), System.currentTimeMillis(), bulk = true)
-            else entry.without(season, (1..count).toList())
+            else if (watched) entry.with(season, entry.episodeNumbers(season), System.currentTimeMillis(), bulk = true)
+            else entry.without(season, entry.episodeNumbers(season))
         }
     }
 
@@ -98,8 +104,8 @@ class EpisodeRepository(
         write(show) { entry ->
             var next = entry
             val now = System.currentTimeMillis()
-            for ((season, count) in entry.structure) {
-                val episodes = (1..count).filterNot { next.isWatched(season, it) }
+            for (season in entry.structure.keys) {
+                val episodes = next.episodeNumbers(season).filterNot { next.isWatched(season, it) }
                 if (episodes.isNotEmpty()) next = next.with(season, episodes, now, bulk = true)
             }
             next
