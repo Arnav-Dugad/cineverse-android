@@ -49,14 +49,22 @@ fun CvTopBar(tab: Tab, onSearch: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .then(
+                // Over the hero the bar is a scrim rather than a surface, so the
+                // artwork reaches the top of the screen. It has to be a STRONG
+                // scrim: at 0.7 fading immediately, a poster's caption scrolling
+                // underneath was legible straight through the wordmark. It holds
+                // nearly full page colour behind the bar itself and only releases
+                // below it.
                 if (overArt) Modifier.background(
                     Brush.verticalGradient(
-                        listOf(colors.ink.copy(alpha = 0.7f), Color.Transparent)
+                        0f to colors.ink.copy(alpha = 0.95f),
+                        0.62f to colors.ink.copy(alpha = 0.82f),
+                        1f to Color.Transparent,
                     )
                 ) else Modifier.background(colors.ink)
             )
             .windowInsetsPadding(WindowInsets.statusBars)
-            .height(52.dp)
+            .height(56.dp)
             .padding(horizontal = ScreenPadding - 6.dp),
     ) {
         Row(

@@ -255,17 +255,50 @@ class UpdateRepository(
             return Release(
                 versionName = tag.removePrefix("v"),
                 versionCode = code,
-                // The checksum line is for the app, not the reader.
-                notes = notes.lineSequence()
-                    .filterNot { it.trimStart().startsWith("versionCode:") }
-                    .filterNot { it.trimStart().startsWith("sha256:") }
-                    .joinToString("\n").trim(),
+                notes = cleanNotes(notes),
                 downloadUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 sizeBytes = (asset["size"]?.jsonPrimitive?.contentOrNull)?.toLongOrNull() ?: 0L,
                 sha256 = sha,
                 publishedAt = text("published_at").take(10),
             ).takeIf { it.downloadUrl.isNotBlank() }
         }
+
+        /**
+         * What the reader should actually see.
+         *
+         * Three things had to come out of a release body, and every one of them
+         * was found by reading the sheet on a real phone rather than by reading
+         * the code:
+         *
+         *  - the two machine-readable lines and the HTML comment explaining
+         *    them, which are addressed to this class and looked like a bug;
+         *  - Markdown, because a GitHub release body is Markdown and this sheet
+         *    is not a renderer — a note arrived reading
+         *    `**[Download the APK](https://…)**`;
+         *  - runs of blank lines, so what is left reads as prose.
+         *
+         * Flattening the four constructs that actually turn up is a few lines.
+         * A Markdown library for one paragraph of release notes would not be.
+         */
+        fun cleanNotes(body: String): String = body
+            .replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
+            .lineSequence()
+            .filterNot { it.trimStart().startsWith("versionCode:") }
+            .filterNot { it.trimStart().startsWith("sha256:") }
+            .toList()
+            .joinToString(separator = System.lineSeparator())
+            // [text](url) keeps the text and drops the address.
+            .replace(Regex("""\[([^\]]+)]\((?:[^)]*)\)"""), "$1")
+            // **bold**, *italic*, `code`
+            .replace(Regex("""\*\*([^*]+)\*\*"""), "$1")
+            .replace(Regex("""(?<!\*)\*([^*\n]+)\*(?!\*)"""), "$1")
+            .replace(Regex("""`([^`\n]+)`"""), "$1")
+            // Headings lose their hashes but keep their line.
+            .replace(Regex("""(?m)^\s{0,3}#{1,6}\s*"""), "")
+            // A list is a list; a hyphen at the start of a line is not a word.
+            .replace(Regex("""(?m)^\s{0,3}[-*+]\s+"""), "• ")
+            .replace(Regex("""(\s*\R){3,}"""), System.lineSeparator() + System.lineSeparator())
+            .trim()
 
         private val kotlinx.serialization.json.JsonPrimitive.contentOrNull: String?
             get() = runCatching { content }.getOrNull()
