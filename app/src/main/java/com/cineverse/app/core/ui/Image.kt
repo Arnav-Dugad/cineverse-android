@@ -65,9 +65,19 @@ fun CvImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
+    /**
+     * The plate behind the image. The default placeholder is right for a poster
+     * and wrong for anything with transparency in it, where it shows through as
+     * a grey slab.
+     */
+    background: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+    colorFilter: androidx.compose.ui.graphics.ColorFilter? = null,
 ) {
     val colors = CvTheme.colors
-    Box(modifier.background(colors.surface2)) {
+    val plate = if (background == androidx.compose.ui.graphics.Color.Unspecified) {
+        colors.surface2
+    } else background
+    Box(modifier.background(plate)) {
         if (url != null) {
             AsyncImage(
                 model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
@@ -76,6 +86,7 @@ fun CvImage(
                     .build(),
                 contentDescription = contentDescription,
                 contentScale = contentScale,
+                colorFilter = colorFilter,
                 modifier = Modifier.fillMaxSize(),
             )
         }

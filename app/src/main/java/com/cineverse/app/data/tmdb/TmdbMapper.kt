@@ -149,6 +149,7 @@ fun MovieDetailDto.toDetail(region: String): TitleDetail {
         spokenLanguages = languages.map { it.englishName ?: it.name }.filter { it.isNotBlank() },
         countries = countries.map { it.name },
         companies = companies.map { it.name },
+        brands = brandsOf(emptyList(), companies),
         homepage = homepage.orEmpty(),
         imdbId = externalIds?.imdbId.orEmpty(),
         adult = adult,
@@ -200,6 +201,7 @@ fun TvDetailDto.toDetail(region: String): TitleDetail {
         countries = countries.map { it.name },
         companies = companies.map { it.name },
         networks = networks.map { it.name },
+        brands = brandsOf(networks, companies),
         homepage = homepage.orEmpty(),
         imdbId = externalIds?.imdbId.orEmpty(),
         adult = adult,
@@ -284,4 +286,42 @@ fun PersonDetailDto.toDetail(): PersonDetail {
             .mapNotNull { credit(it, it.job.orEmpty()) }
             .distinctBy { it.item.key + it.role }.sortedWith(byNewest),
     )
+}
+
+/**
+ * Networks first, then studios, each once.
+ *
+ * Capped at six: TMDB lists every co-production shell on some films, and a
+ * fourteen-logo strip is noise rather than provenance. Anything without a logo
+ * is dropped — a name in a row of marks looks like a loading failure.
+ */
+private fun brandsOf(
+    networks: List<NetworkDto>,
+    companies: List<CompanyDto>,
+): List<com.cineverse.app.data.model.Brand> {
+    val seen = mutableSetOf<Int>()
+    return buildList {
+        for (network in networks) {
+            if (network.logoPath.isNullOrBlank() || !seen.add(network.id)) continue
+            add(
+                com.cineverse.app.data.model.Brand(
+                    id = network.id,
+                    name = network.name,
+                    logoPath = network.logoPath,
+                    isNetwork = true,
+                )
+            )
+        }
+        for (company in companies) {
+            if (company.logoPath.isNullOrBlank() || !seen.add(company.id)) continue
+            add(
+                com.cineverse.app.data.model.Brand(
+                    id = company.id,
+                    name = company.name,
+                    logoPath = company.logoPath,
+                    isNetwork = false,
+                )
+            )
+        }
+    }.take(6)
 }

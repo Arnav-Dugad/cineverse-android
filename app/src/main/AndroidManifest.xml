@@ -19,6 +19,33 @@
             <data android:scheme="https" />
         </intent>
         <package android:name="com.google.android.youtube" />
+
+        <!--
+            The streaming apps "Where to watch" can open directly.
+
+            Android 11 hides every other package unless it is declared here, and
+            the failure is SILENT: `getPackageInfo` throws NameNotFound exactly
+            as it would for an app that is not installed, so Netflix on the phone
+            looks identical to no Netflix at all and every button quietly falls
+            back to the website.
+        -->
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="in.startv.hotstar" />
+        <package android:name="com.jio.media.ondemand" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.apple.atve.androidtv.appletv" />
+        <package android:name="com.crunchyroll.crunchyroid" />
+        <package android:name="com.hulu.plus" />
+        <package android:name="com.wbd.stream" />
+        <package android:name="com.cbs.app" />
+        <package android:name="com.peacocktv.peacockandroid" />
+        <package android:name="com.graymatrix.did" />
+        <package android:name="com.sonyliv" />
+        <package android:name="com.mubi" />
+        <package android:name="com.aha.android" />
+        <package android:name="com.suntv.sunnxt" />
+        <package android:name="com.google.android.videos" />
     </queries>
 
     <application

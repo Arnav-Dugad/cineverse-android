@@ -9,6 +9,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -204,11 +206,26 @@ private fun Hero(
         return
     }
 
-    LaunchedEffect(items.size) {
-        while (true) {
-            kotlinx.coroutines.delay(Motion.HeroHoldMs)
-            index = (index + 1) % items.size
-        }
+    // Is the trailer for the slide now showing actually on screen?
+    //
+    // This drives how long the slide is held, and it had to, because the two
+    // numbers were in a race the trailer could not win: the hero advanced every
+    // seven seconds while the trailer needed about seven and a half to load,
+    // start and fade in. Every trailer was destroyed one frame before it became
+    // visible, which looked exactly like autoplay being broken.
+    var trailerVisible by remember { mutableStateOf(false) }
+
+    // Advancing is a plain counter so that a swipe can bump it and restart the
+    // wait, rather than fighting a timer that does not know it was overruled.
+    var advance by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(items.size, advance, trailerVisible) {
+        // A slide with a trailer PLAYING holds four times as long. Cutting away
+        // from a trailer two seconds after it appears is worse than never having
+        // played it.
+        kotlinx.coroutines.delay(if (trailerVisible) 28_000L else Motion.HeroHoldMs)
+        index = (index + 1) % items.size
+        advance++
     }
 
     val item = items[index.coerceIn(items.indices)]
@@ -224,7 +241,50 @@ private fun Hero(
     // the scrim does not reach. It painted as a bright band across the page —
     // measured at 188 levels out of 255 — and no amount of gradient could have
     // fixed it, because the overflow was never inside the gradient's box.
-    Box(Modifier.fillMaxWidth().height(540.dp).clipToBounds()) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(540.dp)
+            .clipToBounds()
+            // Swipe the hero.
+            //
+            // The dots underneath always implied it, and a carousel that shows
+            // position but cannot be driven is a carousel that feels broken. The
+            // threshold is accumulated so one long drag moves one slide rather
+            // than racing through the whole row, and reaching either end gives
+            // the Edge signature instead of silently wrapping — a wrap you
+            // did not ask for reads as having lost your place.
+            .pointerInput(items.size) {
+                var travel = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { travel = 0f },
+                    onDragCancel = { travel = 0f },
+                    // ONE slide per gesture, decided when the finger LIFTS.
+                    //
+                    // The first version stepped as the finger moved and reset
+                    // its counter at every threshold, so a brisk 550px flick
+                    // crossed the line six times and jumped six slides. A
+                    // carousel moves one card per swipe; that is the whole
+                    // contract, and it can only be honoured at the end of the
+                    // gesture, when the total distance is known.
+                    onDragEnd = {
+                        val step = when {
+                            travel <= -72f -> 1
+                            travel >= 72f -> -1
+                            else -> 0
+                        }
+                        travel = 0f
+                        if (step != 0) {
+                            haptics?.play(Haptic.Select)
+                            index = (index + step + items.size) % items.size
+                            // Restart the hold, so a slide you chose is not
+                            // whipped away by a timer already part way through.
+                            advance++
+                        }
+                    },
+                ) { _, delta -> travel += delta }
+            }
+    ) {
         Crossfade(
             targetState = item,
             animationSpec = tween(Motion.HeroFadeMs, easing = Motion.EaseOut),
@@ -267,10 +327,11 @@ private fun Hero(
         if (autoplay && trailerKey != null && !CvTheme.reducedMotion) {
             var armed by remember(item.key) { mutableStateOf(false) }
             var playing by remember(item.key) { mutableStateOf(false) }
-            // Three seconds of artwork first. Starting a video the instant the
-            // app opens is the behaviour people turn autoplay off to escape.
+            // A second and a bit of artwork first. Long enough that the app
+            // does not start a video the instant it opens, short enough that
+            // the trailer is up well inside the slide's own hold.
             LaunchedEffect(item.key) {
-                kotlinx.coroutines.delay(3_000)
+                kotlinx.coroutines.delay(1_200)
                 armed = true
             }
             // Revealed a beat AFTER the first playing signal, not on it.
@@ -282,9 +343,18 @@ private fun Hero(
             // between an ambient backdrop and a video someone left running.
             var settled by remember(item.key) { mutableStateOf(false) }
             LaunchedEffect(playing) {
-                if (!playing) return@LaunchedEffect
-                kotlinx.coroutines.delay(3_500)
+                if (!playing) {
+                    settled = false
+                    return@LaunchedEffect
+                }
+                kotlinx.coroutines.delay(1_400)
                 settled = true
+            }
+            // Tells the rotation above to wait. Cleared when the slide changes,
+            // so a trailer that never loaded cannot pin the hero for ever.
+            LaunchedEffect(settled, item.key) { trailerVisible = settled }
+            androidx.compose.runtime.DisposableEffect(item.key) {
+                onDispose { trailerVisible = false }
             }
             if (armed) {
                 val fade by animateFloatAsState(

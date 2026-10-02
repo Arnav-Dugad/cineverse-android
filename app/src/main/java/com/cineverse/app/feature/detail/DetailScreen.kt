@@ -179,6 +179,17 @@ fun DetailScreen(
                 )
             }
 
+            // Directly under the actions and above the tabs, so it is on screen
+            // whichever tab is selected. It used to live inside About, which is
+            // two taps and a scroll from the question it answers.
+            item(key = "brands") {
+                BrandStrip(detail.brands, Modifier.padding(top = 18.dp))
+            }
+
+            item(key = "providers") {
+                WhereToWatch(detail)
+            }
+
             stickyHeader(key = "tabs") {
                 SegmentedTabs(
                     tabs = tabsFor(detail),

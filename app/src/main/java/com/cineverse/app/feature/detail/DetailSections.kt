@@ -10,6 +10,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
@@ -51,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +77,8 @@ import com.cineverse.app.core.ui.shimmer
 import com.cineverse.app.data.model.MediaItem
 import com.cineverse.app.data.model.Person
 import com.cineverse.app.data.model.ShowProgress
+import com.cineverse.app.data.model.ProviderKind
+import com.cineverse.app.data.model.Brand
 import com.cineverse.app.data.model.TitleDetail
 import com.cineverse.app.data.scores.Scores
 
@@ -478,29 +484,28 @@ fun SegmentedTabs(
             .pointerInput(tabs, selected) {
                 detectHorizontalDragGestures(
                     onDragStart = { travel = 0f },
-                    onDragEnd = { travel = 0f },
                     onDragCancel = { travel = 0f },
-                ) { _, delta ->
-                    travel += delta
-                    // 56px of committed travel, then one step. Accumulating and
-                    // resetting means a long drag steps once per threshold
-                    // rather than racing through every tab at once.
-                    val step = when {
-                        travel <= -56f -> 1
-                        travel >= 56f -> -1
-                        else -> 0
-                    }
-                    if (step != 0) {
-                        travel = 0f
-                        val next = tabs.getOrNull(index + step)
-                        if (next != null) {
-                            haptics?.play(Haptic.Select)
-                            onSelect(next)
-                        } else {
-                            haptics?.play(Haptic.Edge)
+                    // One segment per gesture, settled on lift. Stepping as the
+                    // finger moves means a single brisk swipe crosses the
+                    // threshold several times and skips past the tab you wanted.
+                    onDragEnd = {
+                        val step = when {
+                            travel <= -56f -> 1
+                            travel >= 56f -> -1
+                            else -> 0
                         }
-                    }
-                }
+                        travel = 0f
+                        if (step != 0) {
+                            val next = tabs.getOrNull(index + step)
+                            if (next != null) {
+                                haptics?.play(Haptic.Select)
+                                onSelect(next)
+                            } else {
+                                haptics?.play(Haptic.Edge)
+                            }
+                        }
+                    },
+                ) { _, delta -> travel += delta }
             }
     ) {
         BoxWithConstraints(
@@ -700,7 +705,7 @@ fun LazyListScope.aboutSection(
     onOpen: (MediaItem) -> Unit,
 ) {
     if (detail.providers.isNotEmpty()) {
-        item(key = "providers") { Providers(detail) }
+
     }
     if (detail.cast.isNotEmpty()) {
         item(key = "cast") { CastRow(detail.cast, onPerson) }
@@ -708,40 +713,197 @@ fun LazyListScope.aboutSection(
     item(key = "facts") { Facts(detail) }
 }
 
+/**
+ * The studios and networks behind a title.
+ *
+ * TMDB publishes a mark for most of them and the app was keeping only the name.
+ * A row of names reads as a legal notice; the marks read as provenance, which is
+ * what the information is for — "an A24 film" or "this is on HBO" is a thing
+ * people decide by, and a logo says it in a glance where a sentence does not.
+ *
+ * The marks are TINTED rather than plated. Almost every logo TMDB holds is dark
+ * ink on transparency, drawn for a white page; dropping them straight onto this
+ * one gives a row of black rectangles, and putting each on a white chip gives a
+ * row of stickers. A luminance filter turns them into the page's own text
+ * colour, so they read as part of the design rather than pasted into it.
+ */
 @Composable
-private fun Providers(detail: TitleDetail) {
+fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier) {
     val colors = CvTheme.colors
-    Column(Modifier.padding(top = 10.dp, bottom = 18.dp)) {
+    if (brands.isEmpty()) return
+    LazyRow(
+        modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = ScreenPadding),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(brands, key = { it.id }) { brand ->
+            CvImage(
+                Img.logo(brand.logoPath),
+                brand.name,
+                Modifier
+                    .height(22.dp)
+                    .widthIn(max = 96.dp),
+                contentScale = ContentScale.Fit,
+                background = Color.Transparent,
+                // Everything to one ink. `saturation 0` first so a coloured
+                // mark does not come through tinted the wrong hue, then the
+                // page's own secondary text colour at the alpha the rest of the
+                // meta line uses.
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                    colors.text2.copy(alpha = 0.72f)
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Where to watch.
+ *
+ * Moved OUT of the About tab, where it was two taps and a scroll from the top of
+ * the page. "Can I actually watch this?" is the question people open a title
+ * page to answer, and it is the one thing on the page that is time-sensitive,
+ * so it now sits directly under the actions and is visible whatever tab is
+ * selected.
+ *
+ * Every logo is a BUTTON. On a phone that means the provider's own app opens on
+ * a search for this title where it is installed, their site where it is not, and
+ * TMDB's JustWatch page if the app has never heard of them — so a tap always
+ * lands somewhere. A row of logos that cannot be tapped is a row of stickers.
+ *
+ * Grouped the way the decision is actually made: what your subscriptions already
+ * cover, then free with adverts, then what costs money. Nobody scanning this row
+ * wants to rent something they could stream.
+ */
+@Composable
+fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    if (detail.providers.isEmpty()) return
+
+    // One pass, in the order a viewer cares about, de-duplicated: TMDB lists a
+    // provider under both flatrate and ads often enough that a raw render shows
+    // Netflix twice.
+    val groups = remember(detail.providers) {
+        val seen = mutableSetOf<Int>()
+        listOf(
+            "Included with your subscription" to ProviderKind.Stream,
+            "Free" to ProviderKind.Free,
+            "Free with adverts" to ProviderKind.Ads,
+            "Rent" to ProviderKind.Rent,
+            "Buy" to ProviderKind.Buy,
+        ).mapNotNull { (label, kind) ->
+            val matching = detail.providers.filter { it.kind == kind && seen.add(it.id) }
+            if (matching.isEmpty()) null else label to matching
+        }
+    }
+    if (groups.isEmpty()) return
+
+    Column(modifier.padding(top = 20.dp)) {
         SectionHeader("Where to watch")
-        Spacer(Modifier.height(12.dp))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ScreenPadding),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(detail.providers, key = { it.id }) { provider ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.width(64.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(52.dp)
-                            .clip(CvShape.Medium)
-                            .border(1.dp, colors.hairline, CvShape.Medium)
-                    ) {
-                        CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize())
-                    }
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        provider.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.text3,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+        Spacer(Modifier.height(10.dp))
+        // `group`, not `items`: the destructured name would shadow LazyRow's
+        // own `items` and the call below would not resolve.
+        for ((label, group) in groups) {
+            Text(
+                label.uppercase(),
+                style = KickerStyle,
+                color = colors.text3,
+                modifier = Modifier
+                    .padding(horizontal = ScreenPadding)
+                    .padding(bottom = 8.dp),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = ScreenPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(group, key = { it.id }) { provider ->
+                    ProviderTile(
+                        provider = provider,
+                        installed = remember(provider.name) {
+                            com.cineverse.app.data.model.Providers.isInstalled(context, provider.name)
+                        },
+                        onClick = {
+                            haptics?.play(Haptic.Tap)
+                            com.cineverse.app.data.model.Providers.open(
+                                context = context,
+                                providerName = provider.name,
+                                title = detail.title,
+                                regionLink = detail.providerLink,
+                            )
+                        },
                     )
                 }
             }
+            Spacer(Modifier.height(14.dp))
         }
+        Text(
+            "Availability from JustWatch, for your region. Tap to open.",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.text3,
+            modifier = Modifier.padding(horizontal = ScreenPadding),
+        )
+    }
+}
+
+@Composable
+private fun ProviderTile(
+    provider: com.cineverse.app.data.model.WatchProvider,
+    installed: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = Motion.snappy(),
+        label = "providerPress",
+    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(68.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(CvShape.Medium)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+    ) {
+        Box {
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(CvShape.Medium)
+                    .border(1.dp, colors.hairline, CvShape.Medium)
+            ) {
+                CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize())
+            }
+            // A dot, not a badge: it says the app is on this phone without
+            // taking a second line to say it.
+            if (installed) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 3.dp, y = (-3).dp)
+                        .size(13.dp)
+                        .clip(CircleShape)
+                        .background(colors.ink)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(colors.green)
+                )
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(
+            provider.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (installed) colors.text2 else colors.text3,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 

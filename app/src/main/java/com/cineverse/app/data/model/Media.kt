@@ -63,6 +63,27 @@ data class Video(
     val thumbnail: String get() = "https://img.youtube.com/vi/$key/hqdefault.jpg"
 }
 
+/**
+ * A studio or a network, with its mark.
+ *
+ * TMDB publishes a logo for most of them and the app was throwing it away,
+ * keeping only the name. A row of names reads as a legal notice; the marks read
+ * as provenance, which is what the information is actually for — "this is an
+ * A24 film" or "this is on HBO" is a thing people decide by.
+ *
+ * Logos are monochrome PNGs with transparency, almost all of them dark ink
+ * meant for a white page, so the strip tints them to the page's own text colour
+ * rather than dropping them on a white plate the way the rest of the web does.
+ */
+@Immutable
+data class Brand(
+    val id: Int,
+    val name: String,
+    val logoPath: String?,
+    /** A network broadcasts; a company makes. Shown in that order. */
+    val isNetwork: Boolean,
+)
+
 @Immutable
 data class WatchProvider(
     val id: Int,
@@ -138,6 +159,8 @@ data class TitleDetail(
     val countries: List<String> = emptyList(),
     val companies: List<String> = emptyList(),
     val networks: List<String> = emptyList(),
+    /** Studios and networks WITH their artwork, for the brand strip. */
+    val brands: List<Brand> = emptyList(),
     val homepage: String = "",
     val imdbId: String = "",
     val adult: Boolean = false,
