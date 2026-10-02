@@ -134,6 +134,12 @@ object Notifications {
 
         if (art != null) builder.setLargeIcon(art)
 
+        // The check is INLINE rather than delegated to canPost(), because lint
+        // follows the call it can see and not the helper one function away. It
+        // is the same check; writing it here is what makes lint agree.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
         runCatching {
             NotificationManagerCompat.from(context).notify(id, builder.build())
         }
@@ -153,6 +159,9 @@ object Notifications {
             .setGroup(channel)
             .setGroupSummary(true)
             .setAutoCancel(true)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
         runCatching {
             NotificationManagerCompat.from(context).notify(channel.hashCode(), builder.build())
         }
