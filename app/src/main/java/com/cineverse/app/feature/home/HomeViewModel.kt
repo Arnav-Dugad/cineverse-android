@@ -51,6 +51,8 @@ data class HomeState(
     val refreshing: Boolean = false,
     /** item key -> the title treatment path, once one has been found. */
     val heroLogos: Map<String, String> = emptyMap(),
+    /** item key -> its YouTube trailer key, for the hero to play behind itself. */
+    val heroTrailers: Map<String, String> = emptyMap(),
     val offline: Boolean = false,
 )
 
@@ -115,6 +117,8 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
      * plenty of titles have no treatment, and a blank space where the name was
      * is not a trade anyone would take.
      */
+    val settings: StateFlow<com.cineverse.app.data.prefs.Settings> = app.settings.settings
+
     fun ensureHeroLogo(item: MediaItem) {
         val held = _state.value
         if (held.heroLogos.containsKey(item.key)) return
@@ -122,14 +126,21 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         // frame cannot start eight identical requests.
         _state.value = held.copy(heroLogos = held.heroLogos + (item.key to ""))
         viewModelScope.launch {
-            val path = runCatching {
-                app.tmdb.detail(item.id, item.type, app.settings.settings.value.region).logoPath
-            }.getOrNull().orEmpty()
-            if (path.isNotBlank()) {
-                _state.value = _state.value.copy(
-                    heroLogos = _state.value.heroLogos + (item.key to path)
-                )
-            }
+            // The same request carries both: the title page already appends
+            // `images` and `videos`, so asking once gets the logo AND the
+            // trailer. Two calls for two fields off one document would be a
+            // waste of a request and of somebody's data.
+            val detail = runCatching {
+                app.tmdb.detail(item.id, item.type, app.settings.settings.value.region)
+            }.getOrNull() ?: return@launch
+            val path = detail.logoPath.orEmpty()
+            val trailer = detail.trailer?.key.orEmpty()
+            _state.value = _state.value.copy(
+                heroLogos = if (path.isBlank()) _state.value.heroLogos
+                else _state.value.heroLogos + (item.key to path),
+                heroTrailers = if (trailer.isBlank()) _state.value.heroTrailers
+                else _state.value.heroTrailers + (item.key to trailer),
+            )
         }
     }
 

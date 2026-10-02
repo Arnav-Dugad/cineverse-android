@@ -6,6 +6,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import com.cineverse.app.feature.trailer.YouTubePlayer
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +62,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.core.design.KickerStyle
+import com.cineverse.app.core.net.rememberUnmetered
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.CvLogo
 import com.cineverse.app.core.ui.ProgressBar
@@ -85,6 +89,8 @@ fun HomeScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val onWifi by rememberUnmetered()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
@@ -104,6 +110,8 @@ fun HomeScreen(
                     items = state.hero,
                     loading = state.loading,
                     logos = state.heroLogos,
+                    trailers = state.heroTrailers,
+                    autoplay = settings.autoplay && (!settings.autoplayOnWifiOnly || onWifi),
                     isSaved = { library.isSaved(it.key) },
                     onOpen = onOpen,
                     onSave = viewModel::toggleSaved,
@@ -175,6 +183,8 @@ private fun Hero(
     items: List<MediaItem>,
     loading: Boolean,
     logos: Map<String, String>,
+    trailers: Map<String, String>,
+    autoplay: Boolean,
     isSaved: (MediaItem) -> Boolean,
     onOpen: (MediaItem) -> Unit,
     onSave: (MediaItem) -> Unit,
@@ -243,6 +253,47 @@ private fun Hero(
                         .graphicsLayer { scaleX = drift; scaleY = drift },
                     contentScale = ContentScale.Crop,
                 )
+            }
+        }
+
+        // The trailer, behind everything, after a beat.
+        //
+        // It plays MUTED and with no controls, and it only becomes visible once
+        // YouTube has confirmed it is actually playing -- so a slow connection
+        // shows the backdrop for longer rather than showing a black rectangle
+        // where the artwork was. The same rule the website's video background
+        // follows, and the reason that one never flashes.
+        val trailerKey = trailers[item.key]?.takeIf { it.isNotBlank() }
+        if (autoplay && trailerKey != null && !CvTheme.reducedMotion) {
+            var armed by remember(item.key) { mutableStateOf(false) }
+            var playing by remember(item.key) { mutableStateOf(false) }
+            // Three seconds of artwork first. Starting a video the instant the
+            // app opens is the behaviour people turn autoplay off to escape.
+            LaunchedEffect(item.key) {
+                kotlinx.coroutines.delay(3_000)
+                armed = true
+            }
+            if (armed) {
+                val fade by animateFloatAsState(
+                    targetValue = if (playing) 1f else 0f,
+                    animationSpec = tween(900, easing = Motion.EaseOut),
+                    label = "trailerFade",
+                )
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = fade }
+                ) {
+                    YouTubePlayer(
+                        videoKey = trailerKey,
+                        modifier = Modifier.fillMaxSize(),
+                        muted = true,
+                        showControls = false,
+                        loop = true,
+                        ambient = true,
+                        onPlaying = { playing = true },
+                    )
+                }
             }
         }
 

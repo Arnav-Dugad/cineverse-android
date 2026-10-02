@@ -69,6 +69,7 @@ import com.cineverse.app.feature.search.SearchScreen
 import com.cineverse.app.feature.search.SearchViewModel
 import com.cineverse.app.feature.stats.StatsScreen
 import com.cineverse.app.feature.stats.StatsViewModel
+import com.cineverse.app.feature.trailer.TrailerScreen
 import com.cineverse.app.update.UpdateSheet
 import com.cineverse.app.update.WhatsNewSheet
 import com.cineverse.app.update.VersionHistorySheet
@@ -303,12 +304,21 @@ fun CineVerseNav(
                     onBack = { navController.popBackStack() },
                     onOpen = open,
                     onPerson = { navController.navigate(Route.Person(it.id)) },
-                    onPlayTrailer = { key ->
-                        com.cineverse.app.feature.detail.openTrailer(navController.context, key)
+                    onPlayTrailer = { key, title ->
+                        navController.navigate(Route.Trailer(key, title))
                     },
                     onShare = { detail ->
                         com.cineverse.app.feature.detail.shareTitle(navController.context, detail)
                     },
+                )
+            }
+
+            cvComposable<Route.Trailer> { entry ->
+                val route: Route.Trailer = entry.toRoute()
+                TrailerScreen(
+                    videoKey = route.key,
+                    title = route.title,
+                    onBack = { navController.popBackStack() },
                 )
             }
 

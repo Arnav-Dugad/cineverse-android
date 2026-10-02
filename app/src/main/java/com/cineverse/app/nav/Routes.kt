@@ -43,6 +43,9 @@ sealed interface Route {
     }
 
     @Serializable data class Person(val id: Int) : Route
+
+    /** A trailer, played in the app. The title is only there for the chrome. */
+    @Serializable data class Trailer(val key: String, val title: String) : Route
     @Serializable data class Collection(val id: Int) : Route
 
     /** A full-screen grid: "Top rated films", a genre, a studio's catalogue. */

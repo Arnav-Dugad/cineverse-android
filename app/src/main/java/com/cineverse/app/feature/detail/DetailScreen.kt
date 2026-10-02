@@ -102,7 +102,7 @@ fun DetailScreen(
     onBack: () -> Unit,
     onOpen: (MediaItem) -> Unit,
     onPerson: (Person) -> Unit,
-    onPlayTrailer: (String) -> Unit,
+    onPlayTrailer: (String, String) -> Unit,
     onShare: (TitleDetail) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -171,7 +171,9 @@ fun DetailScreen(
                     onWatched = viewModel::toggleWatched,
                     onRate = { sheet = TitleSheet.Rate },
                     onShare = { onShare(detail) },
-                    onPlayTrailer = { detail.trailer?.key?.let(onPlayTrailer) },
+                    onPlayTrailer = {
+                        detail.trailer?.key?.let { key -> onPlayTrailer(key, detail.title) }
+                    },
                     onLists = { sheet = TitleSheet.Lists },
                     onProgress = { sheet = TitleSheet.Progress },
                 )
