@@ -183,6 +183,7 @@ fun CineVerseNav(
                         navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
                     },
                     onQuickActions = open,
+                    contentPadding = padding,
                 )
             }
 

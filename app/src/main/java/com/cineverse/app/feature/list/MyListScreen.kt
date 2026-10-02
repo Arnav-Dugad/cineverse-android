@@ -37,6 +37,7 @@ import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.ui.PosterCard
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.MediaItem
@@ -149,7 +150,7 @@ fun MyListScreen(
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(118.dp),
                 contentPadding = PaddingValues(
-                    start = ScreenPadding, end = ScreenPadding, bottom = 120.dp,
+                    start = ScreenPadding, end = ScreenPadding, bottom = BottomBarSpace,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),

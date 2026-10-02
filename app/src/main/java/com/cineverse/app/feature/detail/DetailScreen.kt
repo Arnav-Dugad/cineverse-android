@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -214,10 +215,15 @@ private fun tabsFor(detail: TitleDetail): List<DetailTab> =
 @Composable
 private fun DetailHero(detail: TitleDetail, collapsed: Float) {
     val colors = CvTheme.colors
+    // Clipped: the parallax translates the artwork, which would otherwise paint
+    // outside the hero where nothing covers it. It also makes the fractional
+    // height exact — 420dp at 2.625 density is 1102.5px, and without a clip the
+    // image and its scrim round that opposite ways and leave one bright row.
     Box(
         Modifier
             .fillMaxWidth()
             .height(420.dp)
+            .clipToBounds()
     ) {
         CvImage(
             Img.backdrop(detail.backdropPath ?: detail.posterPath),
@@ -233,22 +239,30 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
                 },
             contentScale = ContentScale.Crop,
         )
-        // The artwork dissolves into the page rather than ending on it. The
-        // website spent a batch proving that an opaque hero meeting a lit page
-        // reads as a hard line; the fix is the same shape here.
+        // The artwork dissolves into the page rather than ending on it.
+        //
+        // The first attempt reached full ink at 84% and left the last 16% flat,
+        // which put a visible line across the picture — the same hard edge the
+        // website spent a whole batch learning to remove. The ramp starts at
+        // the halfway mark now and arrives at the page colour exactly at the
+        // bottom, so there is no frame where a sharp image sits on flat ink.
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         0f to colors.ink.copy(alpha = 0.55f),
-                        0.22f to Color.Transparent,
-                        0.58f to Color.Transparent,
-                        0.84f to colors.ink.copy(alpha = 0.82f),
+                        0.20f to Color.Transparent,
+                        0.48f to Color.Transparent,
+                        0.62f to colors.ink.copy(alpha = 0.18f),
+                        0.76f to colors.ink.copy(alpha = 0.52f),
+                        0.88f to colors.ink.copy(alpha = 0.84f),
+                        0.96f to colors.ink.copy(alpha = 0.97f),
                         1f to colors.ink,
                     )
                 )
         )
+
         if (detail.logoPath != null) {
             CvImage(
                 Img.logo(detail.logoPath),

@@ -43,6 +43,7 @@ import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.design.ThemeChoice
 import com.cineverse.app.core.ui.CvImage
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.update.UpdateState
@@ -71,7 +72,7 @@ fun ProfileScreen(
 
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = BottomBarSpace),
     ) {
         item(key = "account") {
             Row(

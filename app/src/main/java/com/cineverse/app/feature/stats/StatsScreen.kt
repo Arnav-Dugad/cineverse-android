@@ -35,6 +35,7 @@ import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.feature.list.EmptyState
@@ -68,7 +69,7 @@ fun StatsScreen(
 
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = BottomBarSpace),
         verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
         item(key = "hero") {

@@ -42,6 +42,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterCard
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.shimmer
@@ -79,7 +80,7 @@ fun PersonScreen(
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(118.dp),
                 contentPadding = PaddingValues(
-                    start = ScreenPadding, end = ScreenPadding, bottom = 120.dp,
+                    start = ScreenPadding, end = ScreenPadding, bottom = BottomBarSpace,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),

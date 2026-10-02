@@ -96,17 +96,28 @@ class AppContainer(private val context: Context) {
 
     init {
         val manager = context.getSystemService(ConnectivityManager::class.java)
-        _online.value = manager?.activeNetwork
-            ?.let { manager.getNetworkCapabilities(it) }
-            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: false
+        fun reread() {
+            // Ask the system what the ACTIVE network is rather than counting
+            // callbacks: a device with Wi-Fi and mobile data up raises and loses
+            // several, and a flag toggled by them drifts out of step with
+            // reality within minutes.
+            _online.value = manager?.activeNetwork
+                ?.let { manager.getNetworkCapabilities(it) }
+                ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: false
+        }
+        reread()
         runCatching {
             manager?.registerNetworkCallback(
                 NetworkRequest.Builder()
                     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                     .build(),
                 object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) { _online.value = true }
-                    override fun onLost(network: Network) { _online.value = false }
+                    override fun onAvailable(network: Network) = reread()
+                    override fun onLost(network: Network) = reread()
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        capabilities: NetworkCapabilities,
+                    ) = reread()
                 },
             )
         }
@@ -123,7 +134,7 @@ class AppContainer(private val context: Context) {
     // ---------- http ----------
 
     val http: OkHttpClient by lazy {
-        Http.client(context) { _online.value }.newBuilder()
+        Http.client(context).newBuilder()
             .addInterceptor(TmdbKeyInterceptor)
             .build()
     }

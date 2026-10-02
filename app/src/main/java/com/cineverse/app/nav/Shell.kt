@@ -6,6 +6,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -88,22 +89,27 @@ fun CvNavigationBar(
         exit = slideOutVertically(Motion.snappy()) { it },
         modifier = modifier,
     ) {
-        Box {
-            // The bar floats over content, so it needs a gradient under it or
-            // the labels sit on top of a poster. One scrim, not a solid block.
+        // The fade goes ABOVE the bar, not behind it.
+        //
+        // Two attempts got this wrong. A fixed-height Box left the bar floating
+        // off the screen's edge; a gradient as the bar's own background left
+        // poster captions legible straight through the labels, because the top
+        // of that gradient is where the icons are. A row of text behind a row of
+        // labels is the single ugliest thing a bottom bar can do, so the ramp
+        // happens in its own strip and the bar itself sits on solid page colour.
+        Column {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(104.dp)
-                    .align(Alignment.BottomCenter)
+                    .height(44.dp)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, colors.ink.copy(alpha = 0.86f), colors.ink)
+                            listOf(Color.Transparent, colors.ink.copy(alpha = 0.92f), colors.ink)
                         )
                     )
             )
             NavigationBar(
-                containerColor = Color.Transparent,
+                containerColor = colors.ink,
                 tonalElevation = 0.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {

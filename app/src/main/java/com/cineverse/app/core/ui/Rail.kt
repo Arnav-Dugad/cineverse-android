@@ -43,6 +43,15 @@ import com.cineverse.app.data.model.MediaItem
 val ScreenPadding = 18.dp
 
 /**
+ * How much room the bottom bar needs under a scrolling list.
+ *
+ * 44dp of fade, 80dp of bar and the gesture inset under that. The first guess
+ * was 120dp, which left the last row's captions tucked behind the labels — a
+ * list that cannot be scrolled to its own end is a list with a bug in it.
+ */
+val BottomBarSpace = 156.dp
+
+/**
  * A rail's heading.
  *
  * A kicker above it when there is something to say about where the row came from

@@ -8,6 +8,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -20,9 +21,13 @@ import java.util.concurrent.TimeUnit
  * serves repeats from disk without a request, which is why opening a title you
  * looked at this morning paints instantly and works on a plane.
  *
- * [OfflineFirst] is the other half: with no network, the client is allowed to
- * serve anything up to a week stale rather than failing. The app would rather
- * show you yesterday's trending row than an error page.
+ * [OfflineFallback] is the other half, and the shape of it matters. The obvious
+ * design — ask "are we online?" and force cache-only when the answer is no — was
+ * wrong, and running the app proved it: one wrong reading of connectivity and
+ * every request in the app returns `504 Unsatisfiable Request (only-if-cached)`,
+ * including requests that would have worked perfectly. The network is the source
+ * of truth about whether the network works, so the client ALWAYS tries it and
+ * reaches for the cache only once a request has actually failed.
  */
 object Http {
 
@@ -36,7 +41,7 @@ object Http {
 
     private const val CACHE_BYTES = 192L * 1024 * 1024
 
-    fun client(context: Context, isOnline: () -> Boolean): OkHttpClient {
+    fun client(context: Context): OkHttpClient {
         val cache = Cache(File(context.cacheDir, "http"), CACHE_BYTES)
         return OkHttpClient.Builder()
             .cache(cache)
@@ -44,7 +49,7 @@ object Http {
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(40, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .addInterceptor(OfflineFirst(isOnline))
+            .addInterceptor(OfflineFallback)
             .addNetworkInterceptor(CacheRules)
             .build()
     }
@@ -78,22 +83,30 @@ object Http {
     }
 
     /**
-     * Offline, the cache stops being an optimisation and becomes the product.
+     * When a request genuinely fails, serve what we already have.
+     *
      * A week is long enough to cover a flight and short enough that nobody is
-     * shown a "now playing" row from last month.
+     * shown a "now playing" row from last month. If the cache misses too, the
+     * 504 propagates and the screen above decides what to say — which for a rail
+     * is "nothing", and for a title page is a retry button.
      */
-    private class OfflineFirst(private val isOnline: () -> Boolean) : Interceptor {
+    private object OfflineFallback : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
-            if (isOnline()) return chain.proceed(chain.request())
-            val offline = chain.request().newBuilder()
-                .cacheControl(
-                    CacheControl.Builder()
-                        .onlyIfCached()
-                        .maxStale(7, TimeUnit.DAYS)
+            val request = chain.request()
+            return try {
+                chain.proceed(request)
+            } catch (error: IOException) {
+                chain.proceed(
+                    request.newBuilder()
+                        .cacheControl(
+                            CacheControl.Builder()
+                                .onlyIfCached()
+                                .maxStale(7, TimeUnit.DAYS)
+                                .build()
+                        )
                         .build()
                 )
-                .build()
-            return chain.proceed(offline)
+            }
         }
     }
 }

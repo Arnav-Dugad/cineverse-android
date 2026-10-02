@@ -40,6 +40,7 @@ import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.firebase.Library
@@ -101,7 +102,7 @@ fun BrowseScreen(
             state = gridState,
             columns = GridCells.Adaptive(118.dp),
             contentPadding = PaddingValues(
-                start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = 120.dp,
+                start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = BottomBarSpace,
             ),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),

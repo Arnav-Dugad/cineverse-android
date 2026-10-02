@@ -46,6 +46,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.PosterRail
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.core.ui.clickableNoRipple
@@ -77,7 +78,7 @@ fun DiscoverScreen(
 
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = BottomBarSpace),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item(key = "destinations") {

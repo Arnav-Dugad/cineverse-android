@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -88,7 +89,7 @@ fun HomeScreen(
     LazyColumn(
         modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(bottom = 120.dp),
+        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
         item(key = "hero") {
@@ -189,7 +190,12 @@ private fun Hero(
 
     val item = items[index.coerceIn(items.indices)]
 
-    Box(Modifier.fillMaxWidth().height(540.dp)) {
+    // CLIPPED, and that is not cosmetic: the Ken Burns drift scales the artwork
+    // to 1.14, which puts about 99px of it BELOW the hero on a 540dp box, where
+    // the scrim does not reach. It painted as a bright band across the page —
+    // measured at 188 levels out of 255 — and no amount of gradient could have
+    // fixed it, because the overflow was never inside the gradient's box.
+    Box(Modifier.fillMaxWidth().height(540.dp).clipToBounds()) {
         Crossfade(
             targetState = item,
             animationSpec = tween(Motion.HeroFadeMs, easing = Motion.EaseOut),
@@ -230,13 +236,17 @@ private fun Hero(
                 .background(
                     Brush.verticalGradient(
                         0f to colors.ink.copy(alpha = 0.72f),
-                        0.18f to Color.Transparent,
-                        0.52f to Color.Transparent,
-                        0.78f to colors.ink.copy(alpha = 0.78f),
+                        0.16f to Color.Transparent,
+                        0.44f to Color.Transparent,
+                        0.58f to colors.ink.copy(alpha = 0.22f),
+                        0.72f to colors.ink.copy(alpha = 0.58f),
+                        0.86f to colors.ink.copy(alpha = 0.88f),
+                        0.95f to colors.ink.copy(alpha = 0.98f),
                         1f to colors.ink,
                     )
                 )
         )
+
 
         Column(
             Modifier

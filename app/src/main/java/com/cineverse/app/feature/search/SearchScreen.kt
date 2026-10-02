@@ -53,6 +53,7 @@ import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
+import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.MediaItem
@@ -213,7 +214,7 @@ fun SearchScreen(
                     columns = GridCells.Adaptive(118.dp),
                     contentPadding = PaddingValues(
                         start = ScreenPadding, end = ScreenPadding,
-                        top = ScreenPadding, bottom = 120.dp,
+                        top = ScreenPadding, bottom = BottomBarSpace,
                     ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
