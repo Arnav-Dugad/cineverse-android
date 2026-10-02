@@ -38,11 +38,15 @@ object Firebase {
     private const val STORAGE_BUCKET = "movies-2b6dd.firebasestorage.app"
 
     /**
-     * Paste the Web client ID from Firebase console → Authentication → Google →
-     * Web SDK configuration to turn on one-tap Google sign-in. Left blank, the
-     * app simply does not offer it.
+     * The Web client ID from Firebase console → Authentication → Google → Web
+     * SDK configuration. It is a PUBLIC identifier — every Android app that uses
+     * Google sign-in ships one — and it only works alongside a package name and
+     * signing certificate registered in the Firebase project, which is what
+     * actually proves this is CineVerse. Blank turns the button off rather than
+     * showing an offer that cannot succeed.
      */
-    const val GOOGLE_WEB_CLIENT_ID = ""
+    const val GOOGLE_WEB_CLIENT_ID =
+        "229804615049-a38dra5mpoi2dbh9b35v6sraolt19vcu.apps.googleusercontent.com"
 
     val googleSignInAvailable: Boolean get() = GOOGLE_WEB_CLIENT_ID.isNotBlank()
 
