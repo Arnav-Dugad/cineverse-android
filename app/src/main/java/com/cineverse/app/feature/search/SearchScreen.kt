@@ -35,6 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import com.cineverse.app.feature.sheets.FilterSheet
+import com.cineverse.app.feature.sheets.FilterBar
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +83,7 @@ fun SearchScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
+    var filters by remember { mutableStateOf(false) }
     val colors = CvTheme.colors
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -211,34 +216,88 @@ fun SearchScreen(
                 }
             }
 
-            else -> {
-                LazyVerticalGrid(
-                    columns = posterGridCells(),
-                    contentPadding = PaddingValues(
-                        start = ScreenPadding, end = ScreenPadding,
-                        top = ScreenPadding, bottom = BottomBarSpace,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    items(state.results, key = { it.key }) { item ->
-                        PosterCard(
-                            item = item,
-                            onOpen = onOpen,
-                            width = posterCellWidth(),
-                            watched = library.isWatched(item.key),
-                            saved = library.isSaved(item.key),
-                            rating = library.ratingOf(item.key),
+            else -> Column {
+                FilterBar(
+                    filter = state.filter,
+                    onOpen = { filters = true },
+                    trailing = {
+                        Text(
+                            "${state.shown.size} of ${state.results.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.text3,
                         )
+                    },
+                )
+                if (state.filteredOut) {
+                    // A filter that hides everything has to say so, and has to
+                    // offer the way out in the same breath. Showing an empty
+                    // grid here is how a working search looks broken.
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "No results match your filters",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = colors.text2,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                Modifier
+                                    .clip(CvShape.Pill)
+                                    .background(colors.glass)
+                                    .clickableNoRipple {
+                                        viewModel.setFilter(state.filter.clear())
+                                    }
+                                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    "Clear filters",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.text,
+                                )
+                            }
+                        }
                     }
-                    if (state.hasMore) {
-                        item {
-                            LaunchedEffect(state.results.size) { viewModel.loadMore() }
-                            PosterSkeleton(width = posterCellWidth())
+                } else {
+                    LazyVerticalGrid(
+                        columns = posterGridCells(),
+                        contentPadding = PaddingValues(
+                            start = ScreenPadding, end = ScreenPadding,
+                            top = 4.dp, bottom = BottomBarSpace,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        items(state.shown, key = { it.key }) { item ->
+                            PosterCard(
+                                item = item,
+                                onOpen = onOpen,
+                                width = posterCellWidth(),
+                                watched = library.isWatched(item.key),
+                                saved = library.isSaved(item.key),
+                                rating = library.ratingOf(item.key),
+                            )
+                        }
+                        if (state.hasMore) {
+                            item {
+                                LaunchedEffect(state.results.size) { viewModel.loadMore() }
+                                PosterSkeleton(width = posterCellWidth())
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (filters) {
+        FilterSheet(
+            filter = state.filter,
+            genres = state.genres,
+            resultCount = state.shown.size,
+            showHideWatched = true,
+            sorts = SearchSorts,
+            onChange = viewModel::setFilter,
+            onDismiss = { filters = false },
+        )
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.sharedPoster
 import com.cineverse.app.core.ui.shimmer
 
 /**
@@ -42,7 +43,7 @@ import com.cineverse.app.core.ui.shimmer
  * down a page that might only have three is its own kind of lie.
  */
 @Composable
-fun DetailSkeleton(modifier: Modifier = Modifier) {
+fun DetailSkeleton(itemKey: String, modifier: Modifier = Modifier) {
     val colors = CvTheme.colors
     Column(modifier.fillMaxSize().background(colors.ink)) {
         // The hero, with the same mask the real one carries, so the join between
@@ -64,8 +65,18 @@ fun DetailSkeleton(modifier: Modifier = Modifier) {
         }
 
         Column(Modifier.padding(horizontal = ScreenPadding)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Bar(104.dp, 156.dp, CvShape.Large)
+            Row(verticalAlignment = Alignment.Top) {
+                // The poster claims the shared key even while it is still a
+                // placeholder, so a title opened cold still has its poster fly
+                // in from the rail rather than appearing out of a grey rectangle.
+                Box(
+                    Modifier
+                        .width(112.dp)
+                        .height(168.dp)
+                        .sharedPoster(itemKey)
+                        .clip(CvShape.Large)
+                        .shimmer()
+                )
                 Column(Modifier.padding(start = 14.dp).weight(1f)) {
                     Bar(180.dp, 26.dp)
                     Spacer(Modifier.height(8.dp))

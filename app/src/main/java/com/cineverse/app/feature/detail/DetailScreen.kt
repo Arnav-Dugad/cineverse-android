@@ -119,7 +119,7 @@ fun DetailScreen(
     val detail = state.detail
     if (detail == null) {
         if (state.loading) {
-            DetailSkeleton(modifier)
+            DetailSkeleton(viewModel.key, modifier)
             return
         }
         Box(modifier.fillMaxSize().background(colors.ink), contentAlignment = Alignment.Center) {

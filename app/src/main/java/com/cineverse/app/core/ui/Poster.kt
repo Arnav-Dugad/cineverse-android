@@ -100,6 +100,7 @@ fun PosterCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
+                .sharedPoster(item.key)
                 .clip(CvShape.Large)
                 .background(colors.surface2)
                 .border(1.dp, colors.hairline, CvShape.Large)

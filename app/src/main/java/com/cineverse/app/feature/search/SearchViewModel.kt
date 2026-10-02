@@ -5,7 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cineverse.app.AppContainer
 import com.cineverse.app.data.firebase.Library
+import com.cineverse.app.data.model.Genre
+import com.cineverse.app.data.model.MediaFilter
 import com.cineverse.app.data.model.MediaItem
+import com.cineverse.app.data.model.MediaType
+import com.cineverse.app.data.model.SortOrder
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,14 +25,33 @@ import kotlinx.coroutines.launch
 @Immutable
 data class SearchState(
     val query: String = "",
+    /** Everything TMDB returned, before the filter. */
     val results: List<MediaItem> = emptyList(),
+    /** What the user actually sees. */
+    val shown: List<MediaItem> = emptyList(),
     val history: List<String> = emptyList(),
     val loading: Boolean = false,
     val page: Int = 1,
     val totalPages: Int = 1,
+    val filter: MediaFilter = MediaFilter(),
+    val genres: List<Genre> = emptyList(),
 ) {
     val hasMore: Boolean get() = page < totalPages && results.isNotEmpty()
+
+    /** Filtered everything away, with more pages still to come. */
+    val filteredOut: Boolean get() = results.isNotEmpty() && shown.isEmpty()
 }
+
+/** The orders a SEARCH offers. Relevance leads, because TMDB already ranked it. */
+val SearchSorts = listOf(
+    SortOrder.Relevance,
+    SortOrder.Imdb,
+    SortOrder.Rating,
+    SortOrder.Votes,
+    SortOrder.Newest,
+    SortOrder.Oldest,
+    SortOrder.Title,
+)
 
 @OptIn(FlowPreview::class)
 class SearchViewModel(private val app: AppContainer) : ViewModel() {
@@ -50,12 +73,53 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
             .filter { it.length >= 2 }
             .onEach { query -> search(query, page = 1) }
             .launchIn(viewModelScope)
+
+        // Both genre lists, merged: a multi-search returns films and series in
+        // one list, so a genre filter that only knew one of them would silently
+        // drop half the matches.
+        viewModelScope.launch {
+            val merged = (app.tmdb.genres(MediaType.Movie) + app.tmdb.genres(MediaType.Tv))
+                .distinctBy { it.id }
+                .sortedBy { it.name }
+            _state.value = _state.value.copy(genres = merged)
+        }
+    }
+
+    fun setFilter(value: MediaFilter) {
+        _state.value = _state.value.copy(filter = value).withFilter()
+    }
+
+    /**
+     * Re-apply the filter to whatever is held.
+     *
+     * Kept as one function rather than inlined at each call site because the
+     * filter has to be re-run on three separate occasions — a new search, a
+     * further page, a changed filter — and a list that is filtered on two of
+     * them is worse than one that is filtered on none.
+     */
+    private fun SearchState.withFilter(): SearchState = copy(
+        shown = filter.apply(
+            results,
+            isWatched = { app.library.library.value.isWatched(it.key) },
+            imdbOf = ::imdbOf,
+        )
+    )
+
+    /** A title whose score has not arrived sorts last rather than as a zero. */
+    private fun imdbOf(item: MediaItem): Double {
+        val imdbId = app.tmdb.cachedDetail(
+            item.id, item.type, app.settings.settings.value.region,
+        )?.imdbId.orEmpty()
+        if (imdbId.isBlank()) return -1.0
+        return app.scores.cached(imdbId, item.type)?.imdb ?: -1.0
     }
 
     fun onQueryChange(value: String) {
         _state.value = _state.value.copy(query = value)
         if (value.isBlank()) {
-            _state.value = _state.value.copy(results = emptyList(), page = 1, totalPages = 1)
+            _state.value = _state.value.copy(
+                results = emptyList(), shown = emptyList(), page = 1, totalPages = 1,
+            )
         }
     }
 
@@ -82,7 +146,7 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
             loading = false,
             page = page,
             totalPages = total,
-        )
+        ).withFilter()
     }
 
     fun loadMore() {

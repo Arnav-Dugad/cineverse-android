@@ -1,5 +1,11 @@
 package com.cineverse.app.nav
 
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.navigation.NavGraphBuilder
+import com.cineverse.app.core.ui.LocalNavAnimatedScope
+import com.cineverse.app.core.ui.LocalSharedTransitionScope
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -7,7 +13,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,6 +92,22 @@ inline fun <reified T : ViewModel> cvViewModel(
     key = key,
     factory = viewModelFactory { initializer { create() } },
 )
+
+/**
+ * A destination that can take part in a shared-element transition.
+ *
+ * Every screen needs its own [AnimatedVisibilityScope] for a poster to travel
+ * into or out of it, and that scope is only available as the receiver of the
+ * destination lambda. Wrapping `composable` once here is the difference between
+ * one line of ceremony in one place and the same provider pasted into ten.
+ */
+private inline fun <reified T : Any> NavGraphBuilder.cvComposable(
+    crossinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) = composable<T> { entry ->
+    CompositionLocalProvider(LocalNavAnimatedScope provides this) {
+        content(entry)
+    }
+}
 
 @Composable
 fun CineVerseNav(
@@ -177,6 +198,12 @@ fun CineVerseNav(
             navController.navigate(Route.Detail(item.id, item.type.wire))
         }
 
+        // One shared-transition layout around the whole graph. It has to be
+        // OUTSIDE the NavHost: the two ends of a travelling poster live in
+        // different destinations, and a scope that only exists inside one of
+        // them can never match them up.
+        SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
         NavHost(
             navController = navController,
             startDestination = Route.Home,
@@ -191,7 +218,7 @@ fun CineVerseNav(
             popEnterTransition = { popEnter() },
             popExitTransition = { popExit() },
         ) {
-            composable<Route.Home> {
+            cvComposable<Route.Home> {
                 HomeScreen(
                     viewModel = cvViewModel("home") { HomeViewModel(app) },
                     onOpen = open,
@@ -204,7 +231,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Discover> {
+            cvComposable<Route.Discover> {
                 val model = cvViewModel("discover") { DiscoverViewModel(app) }
                 DiscoverScreen(
                     viewModel = model,
@@ -219,7 +246,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.MyList> {
+            cvComposable<Route.MyList> {
                 MyListScreen(
                     viewModel = cvViewModel("mylist") { MyListViewModel(app) },
                     onOpen = open,
@@ -228,7 +255,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Stats> {
+            cvComposable<Route.Stats> {
                 StatsScreen(
                     viewModel = cvViewModel("stats") { StatsViewModel(app) },
                     onSignIn = { navController.navigate(Route.Auth) },
@@ -236,7 +263,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Profile> {
+            cvComposable<Route.Profile> {
                 ProfileScreen(
                     viewModel = cvViewModel("profile") { ProfileViewModel(app) },
                     onSignIn = { navController.navigate(Route.Auth) },
@@ -249,7 +276,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Search> {
+            cvComposable<Route.Search> {
                 SearchScreen(
                     viewModel = cvViewModel("search") { SearchViewModel(app) },
                     onOpen = open,
@@ -257,7 +284,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Auth> {
+            cvComposable<Route.Auth> {
                 AuthScreen(
                     app = app,
                     onDone = { navController.popBackStack() },
@@ -265,7 +292,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Detail> { entry ->
+            cvComposable<Route.Detail> { entry ->
                 val route: Route.Detail = entry.toRoute()
                 val settings by app.settings.settings.collectAsStateWithLifecycle()
                 DetailScreen(
@@ -285,7 +312,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Person> { entry ->
+            cvComposable<Route.Person> { entry ->
                 val route: Route.Person = entry.toRoute()
                 PersonScreen(
                     viewModel = cvViewModel("person_${route.id}") { PersonViewModel(app, route.id) },
@@ -294,7 +321,7 @@ fun CineVerseNav(
                 )
             }
 
-            composable<Route.Browse> { entry ->
+            cvComposable<Route.Browse> { entry ->
                 val route: Route.Browse = entry.toRoute()
                 BrowseScreen(
                     viewModel = cvViewModel("browse_${route.title}") { BrowseViewModel(app, route) },
@@ -303,6 +330,8 @@ fun CineVerseNav(
                     onBack = { navController.popBackStack() },
                 )
             }
+        }
+        }
         }
     }
 
@@ -353,6 +382,17 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.pushExit() =
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter() =
     fadeIn(tween(Motion.Normal)) + scaleIn(tween(Motion.Normal), initialScale = 0.97f)
 
+/**
+ * Going back.
+ *
+ * A horizontal slide used to live here, and it fought the shared poster: the
+ * page would move one way while the poster inside it travelled another, and the
+ * two together read as a glitch. Scaling the page down instead lets the poster
+ * carry the motion on its own, and it is also the shape a PREDICTIVE back
+ * gesture wants — the system drives this same transition as the finger moves,
+ * so a page that shrinks toward where it came from tracks a thumb honestly and a
+ * page that slides sideways does not.
+ */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit() =
-    slideOutHorizontally(tween(Motion.Normal, easing = Motion.EaseOut)) { it / 6 } +
-        fadeOut(tween(Motion.Quick))
+    scaleOut(tween(Motion.Normal, easing = Motion.EaseOut), targetScale = 0.92f) +
+        fadeOut(tween(Motion.Normal))

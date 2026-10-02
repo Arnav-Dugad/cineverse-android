@@ -2,6 +2,7 @@ package com.cineverse.app.feature.list
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.Icon
@@ -25,6 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,13 +41,15 @@ import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.LocalHaptics
-import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.BottomBarSpace
+import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.posterCellWidth
 import com.cineverse.app.core.ui.posterGridCells
-import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.MediaItem
+import com.cineverse.app.feature.sheets.FilterBar
+import com.cineverse.app.feature.sheets.FilterSheet
 
 /**
  * Everything you own, in three segments: what you mean to watch, what you are in
@@ -61,6 +68,7 @@ fun MyListScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
+    var filters by remember { mutableStateOf(false) }
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -113,29 +121,54 @@ fun MyListScreen(
                     }
                 }
             }
-            Spacer(Modifier.size(10.dp))
-            Box(
+        }
+
+        FilterBar(
+            filter = state.filter,
+            onOpen = { filters = true },
+            trailing = {
+                Text(
+                    if (state.filter.isDefault) {
+                        "${state.all.size} title${if (state.all.size == 1) "" else "s"}"
+                    } else {
+                        "${state.items.size} of ${state.all.size}"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.text3,
+                )
+            },
+        )
+
+        // The custom lists, as a row of chips above the grid. Only on the
+        // watchlist, where membership means something, and only when there is
+        // more than nothing to choose between.
+        if (state.segment == ListSegment.Watchlist && library.lists.isNotEmpty()) {
+            Row(
                 Modifier
-                    .size(40.dp)
-                    .clip(CvShape.Circle)
-                    .background(colors.glass)
-                    .border(1.dp, colors.hairline, CvShape.Circle)
-                    .clickableNoRipple { haptics?.play(Haptic.Tap); viewModel.cycleSort() },
-                contentAlignment = Alignment.Center,
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = ScreenPadding)
+                    .padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Rounded.Sort, "Sort", tint = colors.text2, modifier = Modifier.size(19.dp))
+                ListChip("All", state.listId.isBlank()) {
+                    haptics?.play(Haptic.Select); viewModel.selectList("")
+                }
+                for (list in library.lists) {
+                    ListChip(list.name, state.listId == list.id) {
+                        haptics?.play(Haptic.Select); viewModel.selectList(list.id)
+                    }
+                }
             }
         }
 
-        Text(
-            state.sort.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.text3,
-            modifier = Modifier.padding(horizontal = ScreenPadding).padding(bottom = 8.dp),
-        )
-
         val items = state.items
-        if (items.isEmpty()) {
+        if (state.filteredOut) {
+            EmptyState(
+                title = "No titles match your filters",
+                body = "Loosen one of them, or reset them all.",
+                action = "Clear filters" to { viewModel.setFilter(state.filter.clear()) },
+            )
+        } else if (items.isEmpty()) {
             EmptyState(
                 title = when (state.segment) {
                     ListSegment.Watchlist -> "Nothing saved yet"
@@ -169,6 +202,18 @@ fun MyListScreen(
                 }
             }
         }
+    }
+
+    if (filters) {
+        FilterSheet(
+            filter = state.filter,
+            genres = state.genres,
+            resultCount = state.items.size,
+            showHideWatched = state.segment == ListSegment.Watchlist,
+            sorts = ListSorts,
+            onChange = viewModel::setFilter,
+            onDismiss = { filters = false },
+        )
     }
 }
 
@@ -212,5 +257,28 @@ fun EmptyState(
                 }
             }
         }
+    }
+}
+
+/** One custom list, as a chip. */
+@Composable
+private fun ListChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val colors = CvTheme.colors
+    Box(
+        Modifier
+            .height(34.dp)
+            .clip(CvShape.Pill)
+            .background(if (active) colors.text else colors.glass)
+            .border(1.dp, if (active) Color.Transparent else colors.hairline, CvShape.Pill)
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (active) colors.ink else colors.text2,
+            maxLines = 1,
+        )
     }
 }

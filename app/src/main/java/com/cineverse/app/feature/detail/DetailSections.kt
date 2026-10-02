@@ -66,6 +66,7 @@ import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.ScoreRow
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.sharedPoster
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.shimmer
@@ -116,6 +117,7 @@ fun DetailHead(
                 Modifier
                     .width(112.dp)
                     .height(168.dp)
+                    .sharedPoster(detail.key)
                     .clip(CvShape.Large)
                     .border(1.dp, colors.hairline, CvShape.Large)
             ) {

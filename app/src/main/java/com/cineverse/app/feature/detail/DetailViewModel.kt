@@ -58,6 +58,9 @@ class DetailViewModel(
 
     val progress: ShowProgress? get() = app.episodes.of(id)
 
+    /** The library key for this title, known before the title page has loaded. */
+    val key: String = "${type.wire}_$id"
+
     init {
         // Paint from the cache first if we have been here before, so coming back
         // to a title is instant rather than a spinner over a page you just read.
