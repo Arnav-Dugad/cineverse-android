@@ -106,6 +106,10 @@ class AppContainer(private val context: Context) {
 
     val awards by lazy { com.cineverse.app.data.awards.AwardsRepository(http) }
 
+    val statsSections by lazy {
+        com.cineverse.app.data.prefs.StatsSectionsRepository(Firebase.firestore(context), auth, scope)
+    }
+
     // ---------- is there a network ----------
 
     private val _online = MutableStateFlow(true)

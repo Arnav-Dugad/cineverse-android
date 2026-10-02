@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
                             corner = runCatching {
                                 com.cineverse.app.core.ui.PosterCorner.valueOf(settings.posterCorner)
                             }.getOrDefault(com.cineverse.app.core.ui.PosterCorner.Rounded),
+                            blurMature = settings.matureBlur,
                         ),
                 ) {
                     CineVerseNav(app, pending) { pending = null }

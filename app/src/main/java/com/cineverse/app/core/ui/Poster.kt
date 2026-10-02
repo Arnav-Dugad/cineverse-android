@@ -28,6 +28,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.blur
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -106,7 +109,34 @@ fun PosterCard(
                 .background(colors.surface2)
                 .border(1.dp, colors.hairline, style.corner.shape)
         ) {
-            CvImage(Img.poster(item.posterPath), item.title, Modifier.fillMaxSize())
+            // Revealed per card, and forgotten when the screen is. Persisting it
+            // would mean a setting that silently stops applying.
+            var revealed by remember(item.key) { mutableStateOf(false) }
+            val covered = style.blurMature && item.adult && !revealed
+
+            CvImage(
+                Img.poster(item.posterPath),
+                item.title,
+                Modifier
+                    .fillMaxSize()
+                    .then(if (covered) Modifier.blur(26.dp) else Modifier),
+            )
+
+            if (covered) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(colors.ink.copy(alpha = 0.45f))
+                        .clickableNoRipple { revealed = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Tap to show",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        color = colors.text2,
+                    )
+                }
+            }
 
             // A title with no artwork gets its name, not an empty grey box.
             if (!item.hasArt) {
@@ -245,6 +275,14 @@ data class PosterStyle(
     val match: Boolean = true,
     /** How round the corners are. */
     val corner: PosterCorner = PosterCorner.Rounded,
+    /**
+     * Cover adult artwork until it is tapped.
+     *
+     * Nothing is hidden and nothing is removed; the poster simply does not
+     * appear uninvited on a screen somebody else can see. One tap reveals it,
+     * for that card, for as long as the screen is up.
+     */
+    val blurMature: Boolean = true,
 )
 
 enum class PosterCorner(val label: String) {

@@ -126,6 +126,7 @@ fun CineVerseNav(
     var showHistory by remember { mutableStateOf(false) }
     var loadingHistory by remember { mutableStateOf(false) }
     val update by app.updates.state.collectAsStateWithLifecycle()
+    val settings by app.settings.settings.collectAsStateWithLifecycle()
     val history by app.updates.history.collectAsStateWithLifecycle()
     val whatsNew by app.updates.whatsNew.collectAsStateWithLifecycle()
 
@@ -207,7 +208,14 @@ fun CineVerseNav(
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
         NavHost(
             navController = navController,
-            startDestination = Route.Home,
+            // The tab the user chose, not always Home. This read Route.Home
+            // unconditionally, so "Open on" stored a value and changed nothing.
+            startDestination = when (settings.startTab) {
+                "discover" -> Route.Discover
+                "list" -> Route.MyList
+                "stats" -> Route.Stats
+                else -> Route.Home
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .background(colors.ink)

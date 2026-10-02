@@ -20,6 +20,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +43,9 @@ import com.cineverse.app.core.ui.CountUpDecimal
 import com.cineverse.app.core.ui.CountUpText
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.rounded.ExpandMore
+import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.ScreenPadding
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,6 +59,120 @@ import java.util.Locale
  * where one idea stops and the next starts, and on a page of twelve ideas that
  * is worth 16dp of margin apiece.
  */
+
+/**
+ * A panel that folds away, remembered across devices.
+ *
+ * Collapsed state lives on `users/{uid}.statsSections`, exactly where the
+ * website keeps it, so a page folded on the laptop opens folded on the phone.
+ * Default OPEN, so an account that has never touched this sees no change.
+ *
+ * A collapsed panel does not render its body at all. That is the whole point on
+ * this page: the heavy ones are genuinely expensive to lay out, and skipping
+ * them is the difference between folding a section for tidiness and folding it
+ * because the page is slow.
+ */
+@Composable
+fun CollapsiblePanel(
+    id: String,
+    kicker: String,
+    title: String,
+    collapsed: Boolean,
+    onToggle: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    help: String? = null,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    var helpOpen by remember { mutableStateOf(false) }
+    val turn by animateFloatAsState(
+        targetValue = if (collapsed) -90f else 0f,
+        animationSpec = Motion.lively(),
+        label = "fold",
+    )
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenPadding)
+            .clip(CvShape.XLarge)
+            .background(colors.glass)
+            .border(1.dp, colors.hairline, CvShape.XLarge)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickableNoRipple {
+                    haptics?.play(com.cineverse.app.core.design.Haptic.Tap)
+                    onToggle(id)
+                }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(kicker.uppercase(), style = KickerStyle, color = colors.text3)
+                Spacer(Modifier.height(5.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text)
+            }
+            if (help != null) {
+                // A question mark, not a paragraph. Most of these figures are
+                // obvious and the ones that are not are only unclear once.
+                Box(
+                    Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(colors.text.copy(alpha = 0.08f))
+                        .clickableNoRipple { helpOpen = !helpOpen },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "?",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            Icon(
+                androidx.compose.material.icons.Icons.Rounded.ExpandMore,
+                contentDescription = if (collapsed) "Expand" else "Collapse",
+                tint = colors.text3,
+                modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = turn },
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = helpOpen && help != null,
+            enter = androidx.compose.animation.expandVertically(Motion.size()) +
+                androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.shrinkVertically(Motion.size()) +
+                androidx.compose.animation.fadeOut(),
+        ) {
+            Text(
+                help.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.text2,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 14.dp),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !collapsed,
+            enter = androidx.compose.animation.expandVertically(Motion.size()) +
+                androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.shrinkVertically(Motion.size()) +
+                androidx.compose.animation.fadeOut(),
+        ) {
+            Column(
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                content = content,
+            )
+        }
+    }
+}
 
 @Composable
 fun Panel(
@@ -81,9 +202,9 @@ fun Panel(
 // ---------- rating intelligence ----------
 
 @Composable
-fun RatingPanel(intel: RatingIntel) {
+fun RatingPanelBody(intel: RatingIntel) {
     val colors = CvTheme.colors
-    Panel("Your critical voice", "Rating intelligence") {
+    Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column {
                 CountUpDecimal(
@@ -161,9 +282,9 @@ fun RatingPanel(intel: RatingIntel) {
 // ---------- the library ----------
 
 @Composable
-fun LibraryPanel(intel: LibraryIntel) {
+fun LibraryPanelBody(intel: LibraryIntel) {
     val colors = CvTheme.colors
-    Panel("Collection", "Library anatomy") {
+    Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Ring(intel.completion / 100f, "${intel.completion}%")
             Spacer(Modifier.width(16.dp))
@@ -209,9 +330,9 @@ fun LibraryPanel(intel: LibraryIntel) {
 // ---------- television ----------
 
 @Composable
-fun TvPanel(intel: TvIntel) {
+fun TvPanelBody(intel: TvIntel) {
     val colors = CvTheme.colors
-    Panel("Episode intelligence", "TV tracker") {
+    Column {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Stat("Tracked", intel.tracked.toString(), Modifier.weight(1f))
             Stat("Finished", intel.finished.toString(), Modifier.weight(1f))
@@ -276,8 +397,8 @@ fun TvPanel(intel: TvIntel) {
 // ---------- taste ----------
 
 @Composable
-fun TastePanel(taste: TasteMap) {
-    Panel("Across everything you keep", "Taste map") {
+fun TastePanelBody(taste: TasteMap) {
+    Column {
         SliceGroup("Decades", taste.decades, Palette.Red2)
         if (taste.languages.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
@@ -323,9 +444,9 @@ private fun SliceGroup(title: String, slices: List<Slice>, tint: Color) {
 // ---------- rewatches ----------
 
 @Composable
-fun RewatchPanel(rewatches: List<Rewatch>) {
+fun RewatchPanelBody(rewatches: List<Rewatch>) {
     val colors = CvTheme.colors
-    Panel("What you go back to", "Rewatches") {
+    Column {
         for (item in rewatches) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -368,9 +489,9 @@ fun RewatchPanel(rewatches: List<Rewatch>) {
 // ---------- taste changes ----------
 
 @Composable
-fun ShiftPanel(shifts: List<TasteShift>) {
+fun ShiftPanelBody(shifts: List<TasteShift>) {
     val colors = CvTheme.colors
-    Panel("Month by month", "Taste changes") {
+    Column {
         for (shift in shifts) {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 5.dp),
@@ -403,17 +524,17 @@ fun ShiftPanel(shifts: List<TasteShift>) {
 // ---------- collection health ----------
 
 @Composable
-fun HealthPanel(lines: List<HealthLine>) {
+fun HealthPanelBody(lines: List<HealthLine>) {
     val colors = CvTheme.colors
     val clean = lines.all { it.missing == 0 }
-    Panel("Quality control", "Collection health") {
+    Column {
         if (clean) {
             Text(
                 "Nothing missing. Every watched title has its artwork, dates, genres and credits.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.green,
             )
-            return@Panel
+            return
         }
         for (line in lines) {
             Row(
@@ -446,9 +567,9 @@ fun HealthPanel(lines: List<HealthLine>) {
 // ---------- people ----------
 
 @Composable
-fun DirectorPanel(directors: List<PersonCount>) {
+fun DirectorPanelBody(directors: List<PersonCount>) {
     val colors = CvTheme.colors
-    Panel("Who you watch", "Directors you return to") {
+    Column {
         for (person in directors) {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 5.dp),
@@ -475,8 +596,8 @@ fun DirectorPanel(directors: List<PersonCount>) {
 // ---------- franchises ----------
 
 @Composable
-fun FranchisePanel(franchises: List<Franchise>, onOpen: (Franchise) -> Unit) {
-    Panel("Series you follow", "Franchises") {
+fun FranchisePanelBody(franchises: List<Franchise>, onOpen: (Franchise) -> Unit) {
+    Column {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(franchises, key = { it.id }) { franchise ->
                 Column(Modifier.width(86.dp)) {
@@ -514,10 +635,9 @@ fun FranchisePanel(franchises: List<Franchise>, onOpen: (Franchise) -> Unit) {
 // ---------- trophies ----------
 
 @Composable
-fun TrophyPanel(trophies: List<Trophy>) {
+fun TrophyPanelBody(trophies: List<Trophy>) {
     val colors = CvTheme.colors
-    val earned = trophies.count { it.earned }
-    Panel("Milestones", "$earned of ${trophies.size} earned") {
+    Column {
         for (trophy in trophies) {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp),

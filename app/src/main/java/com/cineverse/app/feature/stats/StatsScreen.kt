@@ -38,6 +38,7 @@ import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.CountUpString
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.data.prefs.StatsSection
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.feature.list.EmptyState
 
@@ -56,6 +57,7 @@ fun StatsScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val folded by viewModel.sections.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
 
     if (state.loaded && !state.signedIn) {
@@ -138,24 +140,133 @@ fun StatsScreen(
             }
         }
 
-        // The deep panels, in the website's order: what you are doing now
-        // first, the analysis after it. Each one is skipped entirely when it
-        // has nothing to say -- an empty "Rewatches" card is a card that only
-        // ever tells you the feature exists.
+        // The deep panels, in the website's order and folding the same way.
+        //
+        // Collapsed state lives on `users/{uid}.statsSections`, exactly where
+        // the website keeps it, so a page folded on the laptop opens folded
+        // here. Default open, so an account that has never touched it sees no
+        // change at all.
         val deep = state.deep
+        val fold: (String) -> Unit = viewModel::toggleSection
 
-        if (deep.tv.tracked > 0) item(key = "tv") { TvPanel(deep.tv) }
-        if (deep.rating.any) item(key = "rating") { RatingPanel(deep.rating) }
-        if (deep.library.watched > 0) item(key = "library") { LibraryPanel(deep.library) }
-        if (deep.taste.decades.isNotEmpty()) item(key = "taste") { TastePanel(deep.taste) }
-        if (deep.rewatches.isNotEmpty()) item(key = "rewatch") { RewatchPanel(deep.rewatches) }
-        if (deep.shifts.size >= 2) item(key = "shifts") { ShiftPanel(deep.shifts) }
-        if (deep.directors.isNotEmpty()) item(key = "directors") { DirectorPanel(deep.directors) }
-        if (deep.franchises.isNotEmpty()) {
-            item(key = "franchises") { FranchisePanel(deep.franchises) {} }
+        if (deep.tv.tracked > 0) item(key = "tv") {
+            CollapsiblePanel(
+                id = StatsSection.TV,
+                kicker = "Episode intelligence",
+                title = "TV tracker",
+                collapsed = StatsSection.TV in folded,
+                onToggle = fold,
+                help = "Counted from the episodes you have ticked, against what " +
+                    "has actually AIRED rather than a season's eventual length. " +
+                    "A show still running does not look half abandoned.",
+            ) { TvPanelBody(deep.tv) }
         }
-        if (deep.health.isNotEmpty()) item(key = "health") { HealthPanel(deep.health) }
-        if (deep.trophies.isNotEmpty()) item(key = "trophies") { TrophyPanel(deep.trophies) }
+
+        if (deep.rating.any) item(key = "critic") {
+            CollapsiblePanel(
+                id = StatsSection.CRITIC,
+                kicker = "Your critical voice",
+                title = "Rating intelligence",
+                collapsed = StatsSection.CRITIC in folded,
+                onToggle = fold,
+                help = "Your own 1-10 scores, never TMDB's. The distribution is " +
+                    "drawn against your commonest score rather than against ten, " +
+                    "or a library where nothing is rated 1 would show nine empty bars.",
+            ) {
+                RatingPanelBody(deep.rating)
+                if (deep.library.watched > 0) {
+                    Spacer(Modifier.height(20.dp))
+                    LibraryPanelBody(deep.library)
+                }
+            }
+        }
+
+        if (deep.taste.decades.isNotEmpty()) item(key = "taste") {
+            CollapsiblePanel(
+                id = StatsSection.TASTE,
+                kicker = "Across everything you keep",
+                title = "Taste map",
+                collapsed = StatsSection.TASTE in folded,
+                onToggle = fold,
+                help = "Decades, languages and countries across everything marked " +
+                    "watched. Shares are of the titles shown, not of your whole library.",
+            ) { TastePanelBody(deep.taste) }
+        }
+
+        if (deep.rewatches.isNotEmpty()) item(key = "rewatch") {
+            CollapsiblePanel(
+                id = StatsSection.REWATCH,
+                kicker = "What you go back to",
+                title = "Rewatches",
+                collapsed = StatsSection.REWATCH in folded,
+                onToggle = fold,
+                help = "Only shows with a season played more than once. The hours " +
+                    "are the EXTRA viewings; the first time through is already in " +
+                    "your total.",
+            ) { RewatchPanelBody(deep.rewatches) }
+        }
+
+        if (deep.shifts.size >= 2) item(key = "evolution") {
+            CollapsiblePanel(
+                id = StatsSection.EVOLUTION,
+                kicker = "Month by month",
+                title = "Taste changes",
+                collapsed = StatsSection.EVOLUTION in folded,
+                onToggle = fold,
+                help = "Your leading genre and language in each of your six most " +
+                    "recent active months. Months with nothing in them are skipped.",
+            ) { ShiftPanelBody(deep.shifts) }
+        }
+
+        if (deep.directors.isNotEmpty()) item(key = "directors") {
+            CollapsiblePanel(
+                id = StatsSection.DIRECTORS,
+                kicker = "Who you watch",
+                title = "Directors you return to",
+                collapsed = StatsSection.DIRECTORS in folded,
+                onToggle = fold,
+                help = "Directors with at least two films in your watched list, " +
+                    "from the credits stored when you marked each one.",
+            ) { DirectorPanelBody(deep.directors) }
+        }
+
+        if (deep.franchises.isNotEmpty()) item(key = "franchises") {
+            CollapsiblePanel(
+                id = StatsSection.FRANCHISES,
+                kicker = "Series you follow",
+                title = "Franchises",
+                collapsed = StatsSection.FRANCHISES in folded,
+                onToggle = fold,
+                help = "Collections with two or more films watched. TMDB decides " +
+                    "what counts as a collection.",
+            ) { FranchisePanelBody(deep.franchises) {} }
+        }
+
+        if (deep.health.isNotEmpty()) item(key = "health") {
+            CollapsiblePanel(
+                id = StatsSection.HEALTH,
+                kicker = "Quality control",
+                title = "Collection health",
+                collapsed = StatsSection.HEALTH in folded,
+                onToggle = fold,
+                help = "What is missing from the documents your library is made of. " +
+                    "The bars show what is PRESENT, because 92% complete is the " +
+                    "same fact told the useful way round.",
+            ) { HealthPanelBody(deep.health) }
+        }
+
+        if (deep.trophies.isNotEmpty()) item(key = "achievements") {
+            CollapsiblePanel(
+                id = StatsSection.ACHIEVEMENTS,
+                kicker = "Milestones",
+                title = "${deep.trophies.count { it.earned }} of ${deep.trophies.size} earned",
+                collapsed = StatsSection.ACHIEVEMENTS in folded,
+                onToggle = fold,
+                help = "Every one is derived from your account rather than awarded " +
+                    "for opening the app, and each shows how far away it is even " +
+                    "before it is earned.",
+            ) { TrophyPanelBody(deep.trophies) }
+        }
     }
 }
 

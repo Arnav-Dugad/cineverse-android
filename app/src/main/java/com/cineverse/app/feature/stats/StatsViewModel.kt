@@ -47,6 +47,11 @@ data class StatsState(
  */
 class StatsViewModel(private val app: AppContainer) : ViewModel() {
 
+    /** Which panels are folded, live from the same document the website uses. */
+    val sections: StateFlow<Set<String>> = app.statsSections.collapsed
+
+    fun toggleSection(id: String) = app.statsSections.toggle(id)
+
     val state: StateFlow<StatsState> =
         combine(
             app.library.library,

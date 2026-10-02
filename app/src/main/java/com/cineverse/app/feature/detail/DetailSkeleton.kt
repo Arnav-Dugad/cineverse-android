@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,10 +47,13 @@ import com.cineverse.app.core.ui.shimmer
 @Composable
 fun DetailSkeleton(itemKey: String, modifier: Modifier = Modifier) {
     val colors = CvTheme.colors
-    Column(modifier.fillMaxSize().background(colors.ink)) {
-        // The hero, with the same mask the real one carries, so the join between
-        // artwork and page is already in the right place.
-        Box(Modifier.fillMaxWidth().height(420.dp)) {
+    Column(
+        modifier.fillMaxSize().background(colors.ink),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // The hero, with the same mask the real one carries, so the join
+        // between artwork and page is already in the right place.
+        Box(Modifier.fillMaxWidth().height(372.dp)) {
             Box(Modifier.fillMaxSize().shimmer())
             Box(
                 Modifier
@@ -64,88 +69,71 @@ fun DetailSkeleton(itemKey: String, modifier: Modifier = Modifier) {
             )
         }
 
+        // EXACTLY the real head's geometry, down to the overlap.
+        //
+        // This used to be a 112x168 poster on the left, which was right for the
+        // head the page used to have. After the head was centred and enlarged
+        // the shared poster flew from the rail into the skeleton's slot and
+        // then JUMPED to the real one, because the shared element retargets
+        // when the destination changes mid-flight. A skeleton whose job is to
+        // reserve the right room has to reserve the right room.
+        Box(
+            Modifier.height(POSTER_HEIGHT - POSTER_OVERLAP),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Box(
+                Modifier
+                    .offset(y = -POSTER_OVERLAP)
+                    .requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT)
+                    .sharedPoster(itemKey)
+                    .clip(CvShape.Large)
+                    .shimmer()
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Bar(220.dp, 44.dp, CvShape.Small)
+        Spacer(Modifier.height(12.dp))
+        Bar(170.dp, 14.dp)
+
+        Spacer(Modifier.height(16.dp))
+        // The chip flow.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Bar(66.dp, 32.dp, CvShape.Pill)
+            Bar(84.dp, 32.dp, CvShape.Pill)
+            Bar(62.dp, 32.dp, CvShape.Pill)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Bar(78.dp, 32.dp, CvShape.Pill)
+            Bar(96.dp, 32.dp, CvShape.Pill)
+        }
+
+        Spacer(Modifier.height(20.dp))
+        // One wide button and four circles, on one line, as the real row is.
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f).height(48.dp).clip(CvShape.Pill).shimmer())
+            repeat(4) { Box(Modifier.size(48.dp).clip(CircleShape).shimmer()) }
+        }
+
+        Spacer(Modifier.height(20.dp))
         Column(Modifier.padding(horizontal = ScreenPadding)) {
-            Row(verticalAlignment = Alignment.Top) {
-                // The poster claims the shared key even while it is still a
-                // placeholder, so a title opened cold still has its poster fly
-                // in from the rail rather than appearing out of a grey rectangle.
-                Box(
-                    Modifier
-                        .width(112.dp)
-                        .height(168.dp)
-                        .sharedPoster(itemKey)
-                        .clip(CvShape.Large)
-                        .shimmer()
-                )
-                Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                    Bar(180.dp, 26.dp)
-                    Spacer(Modifier.height(8.dp))
-                    Bar(120.dp, 14.dp)
-                    Spacer(Modifier.height(8.dp))
-                    Bar(150.dp, 12.dp)
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-            // The score pills.
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Bar(62.dp, 30.dp, CvShape.Pill)
-                Bar(74.dp, 30.dp, CvShape.Pill)
-                Bar(74.dp, 30.dp, CvShape.Pill)
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Bar(72.dp, 26.dp, CvShape.Pill)
-                Bar(58.dp, 26.dp, CvShape.Pill)
-            }
-
-            Spacer(Modifier.height(18.dp))
-            // The action row: one wide button and four circles, exactly as it is.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(46.dp)
-                        .clip(CvShape.Pill)
-                        .shimmer()
-                )
-                repeat(4) {
-                    Box(Modifier.size(46.dp).clip(CircleShape).shimmer())
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
             Bar(Dp.Unspecified, 14.dp)
             Spacer(Modifier.height(7.dp))
             Bar(Dp.Unspecified, 14.dp)
             Spacer(Modifier.height(7.dp))
             Bar(220.dp, 14.dp)
-
-            Spacer(Modifier.height(22.dp))
-            // The segmented control.
-            Box(Modifier.fillMaxWidth().height(44.dp).clip(CvShape.Pill).shimmer())
-
-            Spacer(Modifier.height(18.dp))
-            // Two episode rows, which is enough to say what kind of page this is.
-            repeat(2) {
-                Row(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-                    Bar(130.dp, 74.dp, CvShape.Medium)
-                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                        Bar(Dp.Unspecified, 15.dp)
-                        Spacer(Modifier.height(7.dp))
-                        Bar(160.dp, 12.dp)
-                        Spacer(Modifier.height(7.dp))
-                        Bar(90.dp, 12.dp)
-                    }
-                }
-            }
         }
     }
 }
+
+private val POSTER_WIDTH = 172.dp
+private val POSTER_HEIGHT = 258.dp
+private val POSTER_OVERLAP = 104.dp
 
 /** One placeholder. An unspecified width fills the row. */
 @Composable
