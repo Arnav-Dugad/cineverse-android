@@ -47,6 +47,7 @@ import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.PosterRail
 import com.cineverse.app.core.ui.BottomBarSpace
+import com.cineverse.app.core.ui.PullToRefresh
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.core.ui.clickableNoRipple
@@ -76,12 +77,17 @@ fun DiscoverScreen(
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
 
-    LazyColumn(
-        modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 8.dp, bottom = BottomBarSpace),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+    PullToRefresh(
+        refreshing = state.refreshing,
+        onRefresh = viewModel::refresh,
+        modifier = modifier.fillMaxSize(),
     ) {
-        item(key = "destinations") {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp, bottom = BottomBarSpace),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            item(key = "destinations") {
             Column {
                 Text(
                     "BROWSE",
@@ -102,16 +108,16 @@ fun DiscoverScreen(
                     }
                 }
             }
-        }
+            }
 
-        item(key = "surprise") {
+            item(key = "surprise") {
             SurpriseCard {
                 haptics?.play(Haptic.Celebrate)
                 onSurprise()
             }
-        }
+            }
 
-        item(key = "moods") {
+            item(key = "moods") {
             Column {
                 SectionHeader("By mood")
                 Spacer(Modifier.height(12.dp))
@@ -144,9 +150,9 @@ fun DiscoverScreen(
                     }
                 }
             }
-        }
+            }
 
-        items(state.rails, key = { it.first }) { (id, rail) ->
+            items(state.rails, key = { it.first }) { (id, rail) ->
             PosterRail(
                 items = rail.items,
                 title = rail.title,
@@ -156,6 +162,7 @@ fun DiscoverScreen(
                 isWatched = { library.isWatched(it.key) },
                 isSaved = { library.isSaved(it.key) },
             )
+            }
         }
     }
 }

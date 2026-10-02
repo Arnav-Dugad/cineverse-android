@@ -1,6 +1,5 @@
 package com.cineverse.app.core.ui
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,7 +15,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.Icon
@@ -157,26 +157,18 @@ fun PosterRail(
         } else {
             var revealed by remember(items.firstOrNull()?.key) { mutableStateOf(false) }
             LaunchedEffect(items.firstOrNull()?.key) { revealed = true }
-            val state = rememberLazyListState()
+            // Scroll position is remembered per rail: coming back from a title
+            // page to find the row you were half way along back at its start is
+            // the single most irritating thing a rail can do.
+            val state = rememberSaveable(title ?: "rail", saver = LazyListState.Saver) {
+                LazyListState()
+            }
             LazyRow(
                 state = state,
                 contentPadding = PaddingValues(horizontal = ScreenPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
-                    val reduced = CvTheme.reducedMotion
-                    val appear by animateFloatAsState(
-                        targetValue = if (revealed || reduced) 1f else 0f,
-                        animationSpec = androidx.compose.animation.core.tween(
-                            durationMillis = Motion.Slow,
-                            // Only the first screenful is staggered: a card ten
-                            // places along would otherwise wait half a second to
-                            // appear when you flick straight to it.
-                            delayMillis = (index.coerceAtMost(5) * Motion.RailStaggerMs).toInt(),
-                            easing = Motion.EaseOut,
-                        ),
-                        label = "appear",
-                    )
                     PosterCard(
                         item = item,
                         onOpen = onOpen,
@@ -187,10 +179,7 @@ fun PosterRail(
                         rating = ratingOf(item),
                         matchPercent = matchOf(item),
                         onLongPress = onLongPress,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = appear
-                            translationY = (1f - appear) * 26f
-                        },
+                        modifier = Modifier.dealIn(index, revealed),
                     )
                 }
             }

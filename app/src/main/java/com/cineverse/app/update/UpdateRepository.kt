@@ -96,6 +96,72 @@ class UpdateRepository(
      */
     val canUpdate: Boolean get() = context.packageName == "com.cineverse.app"
 
+    private val _history = MutableStateFlow<List<Release>>(emptyList())
+
+    /** Every release GitHub will tell us about, newest first. */
+    val history: StateFlow<List<Release>> = _history.asStateFlow()
+
+    private val _whatsNew = MutableStateFlow<Release?>(null)
+
+    /**
+     * The notes for the version now running, when it has just changed.
+     *
+     * Set once per upgrade. An app that silently replaces itself and says
+     * nothing is the worst part of sideloading: the user accepted an install
+     * prompt and has no idea what they accepted.
+     */
+    val whatsNew: StateFlow<Release?> = _whatsNew.asStateFlow()
+
+    /**
+     * Did this launch follow an update?
+     *
+     * Deliberately NOT on the critical path: it asks GitHub for the notes, which
+     * means the answer arrives a moment after the app is already usable. The
+     * version is recorded as seen either way, so a failed fetch costs the user a
+     * changelog and never a repeated prompt.
+     */
+    suspend fun checkWhatsNew() {
+        val seen = settings.seenVersion.value
+        if (seen >= currentCode) return
+        settings.markVersionSeen(currentCode)
+        if (seen == 0) return
+        val releases = loadHistory()
+        _whatsNew.value = releases.firstOrNull { it.versionCode == currentCode }
+            ?: releases.firstOrNull { it.versionName.trimStart('v') == currentVersion }
+    }
+
+    fun clearWhatsNew() { _whatsNew.value = null }
+
+    /**
+     * The release list, cached for the session.
+     *
+     * One request serves both the history sheet and the what-is-new lookup, so
+     * opening the changelog right after an update does not ask GitHub twice.
+     */
+    suspend fun loadHistory(force: Boolean = false): List<Release> {
+        if (!force && _history.value.isNotEmpty()) return _history.value
+        val releases = withContext(io) {
+            runCatching { fetchHistory() }.getOrNull().orEmpty()
+        }
+        if (releases.isNotEmpty()) _history.value = releases
+        return releases
+    }
+
+    private fun fetchHistory(): List<Release> {
+        val request = Request.Builder()
+            .url("https://api.github.com/repos/$REPO/releases?per_page=30")
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .build()
+        val body = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            response.body?.string()
+        } ?: return emptyList()
+        return json.parseToJsonElement(body).jsonArray
+            .mapNotNull { runCatching { parseRelease(it.jsonObject) }.getOrNull() }
+            .sortedByDescending { it.versionCode }
+    }
+
     suspend fun check(force: Boolean = false): UpdateState {
         if (!canUpdate) {
             _state.value = UpdateState.UpToDate

@@ -5,15 +5,23 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,27 +90,47 @@ fun DetailHead(
     saved: Boolean,
     watched: Boolean,
     myRating: Int,
+    movieMinutes: Int,
     onSave: () -> Unit,
     onWatched: () -> Unit,
     onRate: () -> Unit,
     onShare: () -> Unit,
     onPlayTrailer: () -> Unit,
+    onLists: () -> Unit,
+    onProgress: () -> Unit,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
 
     Column(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding)) {
-        Row(verticalAlignment = Alignment.Bottom) {
+        // Poster left, everything that describes the title right.
+        //
+        // The first cut stacked the scores and the genres BELOW this row, which
+        // on a title with a hero logo left a hand-sized hole beside the poster:
+        // the right column held a tagline and a date line and then 90dp of
+        // nothing, while the information that would have filled it sat
+        // underneath taking another two rows of height. Moving it into the
+        // column closes the hole and shortens the block at the same time.
+        Row(verticalAlignment = Alignment.Top) {
             Box(
                 Modifier
-                    .width(104.dp)
-                    .height(156.dp)
+                    .width(112.dp)
+                    .height(168.dp)
                     .clip(CvShape.Large)
                     .border(1.dp, colors.hairline, CvShape.Large)
             ) {
                 CvImage(Img.posterLarge(detail.posterPath), detail.title, Modifier.fillMaxSize())
             }
-            Column(Modifier.padding(start = 14.dp).weight(1f)) {
+            Column(
+                Modifier
+                    .padding(start = 14.dp)
+                    .height(168.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // The name, only where the hero did not already carry it as a
+                // logo. Printing both is the commonest way a title page ends up
+                // saying the same thing twice in two typefaces.
                 if (detail.logoPath == null) {
                     Text(
                         detail.title,
@@ -110,8 +139,15 @@ fun DetailHead(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(6.dp))
                 }
+
+                val meta = listOfNotNull(
+                    detail.year.takeIf { it.isNotBlank() },
+                    detail.certificate.takeIf { it.isNotBlank() },
+                    runtimeLabel(detail),
+                ).joinToString("  ·  ")
+                Text(meta, style = MaterialTheme.typography.labelMedium, color = colors.text2)
+
                 if (detail.tagline.isNotBlank()) {
                     Text(
                         "“${detail.tagline}”",
@@ -120,55 +156,68 @@ fun DetailHead(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(8.dp))
                 }
-                val meta = listOfNotNull(
-                    detail.year.takeIf { it.isNotBlank() },
-                    detail.certificate.takeIf { it.isNotBlank() },
-                    runtimeLabel(detail),
-                ).joinToString("  ·  ")
-                Text(meta, style = MaterialTheme.typography.labelMedium, color = colors.text2)
-            }
-        }
 
-        Spacer(Modifier.height(14.dp))
+                // Pushes the scores and the genres to the bottom of the column,
+                // so they sit on the poster baseline however tall the text above
+                // them turned out to be.
+                Spacer(Modifier.weight(1f))
 
-        // CineVerse's own score first, then the outside ones as they land.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (detail.voteAverage > 0) {
+                // CineVerse own score first, then the outside ones as they land.
+                // It scrolls because three outside scores plus ours is wider
+                // than a phone, and truncating a score is worse than scrolling.
                 Row(
-                    Modifier
-                        .height(30.dp)
-                        .clip(CvShape.Pill)
-                        .background(colors.gold.copy(alpha = 0.16f))
-                        .padding(horizontal = 10.dp),
+                    Modifier.horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Icon(Icons.Rounded.Star, null, tint = colors.gold, modifier = Modifier.size(14.dp))
-                    Text(
-                        String.format("%.1f", detail.voteAverage),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.gold,
-                    )
+                    if (detail.voteAverage > 0) {
+                        Row(
+                            Modifier
+                                .height(28.dp)
+                                .clip(CvShape.Pill)
+                                .background(colors.gold.copy(alpha = 0.16f))
+                                .padding(horizontal = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Star,
+                                null,
+                                tint = colors.gold,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Text(
+                                String.format("%.1f", detail.voteAverage),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.gold,
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    ScoreRow(scores)
                 }
-                Spacer(Modifier.width(6.dp))
-            }
-            ScoreRow(scores)
-        }
 
-        if (detail.genres.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (genre in detail.genres.take(3)) {
-                    Box(
-                        Modifier
-                            .clip(CvShape.Pill)
-                            .background(colors.glass)
-                            .border(1.dp, colors.hairline, CvShape.Pill)
-                            .padding(horizontal = 11.dp, vertical = 5.dp)
+                if (detail.genres.isNotEmpty()) {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(genre.name, style = MaterialTheme.typography.labelSmall, color = colors.text2)
+                        for (genre in detail.genres.take(3)) {
+                            Box(
+                                Modifier
+                                    .clip(CvShape.Pill)
+                                    .background(colors.glass)
+                                    .border(1.dp, colors.hairline, CvShape.Pill)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    genre.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.text2,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -195,10 +244,14 @@ fun DetailHead(
                     Text("Trailer", style = MaterialTheme.typography.labelLarge)
                 }
             }
+            // Tap saves, hold chooses where. The hold is the only way into the
+            // custom lists from here, so it gets the Peek signature that the
+            // rest of the app uses for "there is more behind this".
             ActionButton(
                 icon = if (saved) Icons.Rounded.Bookmark else Icons.Rounded.Add,
                 active = saved,
                 description = if (saved) "In your list" else "Add to your list",
+                onLongPress = { haptics?.play(Haptic.Peek); onLists() },
             ) { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() }
 
             ActionButton(
@@ -221,9 +274,80 @@ fun DetailHead(
             }
         }
 
+        // A film you are part way through. Only for films, only when there is a
+        // runtime to be part way through, and only once there is progress or
+        // the title is unwatched — a finished film does not need a scrubber.
+        if (!detail.isSeries && detail.runtime > 0 && (movieMinutes > 0 || !watched)) {
+            Spacer(Modifier.height(16.dp))
+            MovieProgressStrip(
+                minutes = movieMinutes,
+                runtime = detail.runtime,
+                onClick = { haptics?.play(Haptic.Tap); onProgress() },
+            )
+        }
+
         if (detail.overview.isNotBlank()) {
             Spacer(Modifier.height(18.dp))
             ExpandableText(detail.overview)
+        }
+    }
+}
+
+/**
+ * The one-line read on a film you paused.
+ *
+ * It states the time rather than only drawing a bar, because "48m left" is the
+ * thing being decided and a bar at 62% is not.
+ */
+@Composable
+private fun MovieProgressStrip(minutes: Int, runtime: Int, onClick: () -> Unit) {
+    val colors = CvTheme.colors
+    val started = minutes > 0
+    val fraction = (minutes.toFloat() / runtime).coerceIn(0f, 1f)
+    val animated by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = Motion.landing(),
+        label = "filmProgress",
+    )
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(CvShape.Medium)
+            .background(colors.glass)
+            .border(1.dp, colors.hairline, CvShape.Medium)
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (started) "${runtime - minutes}m left" else "Set your place",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.text,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (started) "${(fraction * 100).toInt()}%" else "Not started",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+            )
+        }
+        if (started) {
+            Spacer(Modifier.height(9.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(CvShape.Pill)
+                    .background(colors.text.copy(alpha = 0.14f))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(animated)
+                        .height(4.dp)
+                        .clip(CvShape.Pill)
+                        .background(Palette.Red2)
+                )
+            }
         }
     }
 }
@@ -242,6 +366,7 @@ private fun ActionButton(
     description: String,
     activeTint: Color = Color.Unspecified,
     label: String? = null,
+    onLongPress: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val colors = CvTheme.colors
@@ -261,7 +386,12 @@ private fun ActionButton(
             .clip(CircleShape)
             .background(if (active) tint.copy(alpha = 0.14f) else colors.glass)
             .border(1.dp, if (active) tint.copy(alpha = 0.5f) else colors.hairline, CircleShape)
-            .clickableNoRipple(onClick),
+            .then(
+                if (onLongPress == null) Modifier.clickableNoRipple(onClick)
+                else Modifier.pointerInput(onClick, onLongPress) {
+                    detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() })
+                }
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (label != null) {
@@ -309,8 +439,14 @@ fun ExpandableText(text: String, collapsedLines: Int = 3) {
  * Episodes / About / More like this.
  *
  * A segmented control rather than a tab row: three fixed options that fit on one
- * line, with the selection sliding between them. Tabs that scroll sideways hide
- * their own options, which on a three-way choice is a thing to avoid.
+ * line. Tabs that scroll sideways hide their own options, which on a three-way
+ * choice is a thing to avoid.
+ *
+ * The selection SLIDES. A highlight that teleports between segments tells you
+ * which one is active; one that travels tells you which one you came from, and
+ * on a control you hit dozens of times an evening that is the difference between
+ * a widget and a place. The pill is one layer that moves, not three that
+ * recolour — the same reason it can be animated on the compositor for free.
  */
 @Composable
 fun SegmentedTabs(
@@ -320,41 +456,94 @@ fun SegmentedTabs(
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
+    val index = tabs.indexOf(selected).coerceAtLeast(0)
+    val slide by animateFloatAsState(
+        targetValue = index.toFloat(),
+        animationSpec = Motion.landing(),
+        label = "segment",
+    )
+    // Swipe the control itself to move between segments. Put on the CONTROL and
+    // not on the content below it: a horizontal drag anywhere in a vertically
+    // scrolling page of rails would be a gesture fighting three other gestures,
+    // and the one place a sideways swipe is unambiguous is the thing that
+    // already looks like a row of options.
+    var travel by remember { mutableFloatStateOf(0f) }
     Box(
         Modifier
             .fillMaxWidth()
             .background(colors.ink)
             .padding(horizontal = ScreenPadding, vertical = 12.dp)
+            .pointerInput(tabs, selected) {
+                detectHorizontalDragGestures(
+                    onDragStart = { travel = 0f },
+                    onDragEnd = { travel = 0f },
+                    onDragCancel = { travel = 0f },
+                ) { _, delta ->
+                    travel += delta
+                    // 56px of committed travel, then one step. Accumulating and
+                    // resetting means a long drag steps once per threshold
+                    // rather than racing through every tab at once.
+                    val step = when {
+                        travel <= -56f -> 1
+                        travel >= 56f -> -1
+                        else -> 0
+                    }
+                    if (step != 0) {
+                        travel = 0f
+                        val next = tabs.getOrNull(index + step)
+                        if (next != null) {
+                            haptics?.play(Haptic.Select)
+                            onSelect(next)
+                        } else {
+                            haptics?.play(Haptic.Edge)
+                        }
+                    }
+                }
+            }
     ) {
-        Row(
+        BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
+                .height(44.dp)
                 .clip(CvShape.Pill)
                 .background(colors.glass)
                 .border(1.dp, colors.hairline, CvShape.Pill)
                 .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            for (tab in tabs) {
-                val active = tab == selected
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .clip(CvShape.Pill)
-                        .background(if (active) colors.text.copy(alpha = 0.14f) else Color.Transparent)
-                        .clickableNoRipple {
-                            if (!active) haptics?.play(Haptic.Select)
-                            onSelect(tab)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        tab.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (active) colors.text else colors.text3,
-                        maxLines = 1,
-                    )
+            val slot = maxWidth / tabs.size.coerceAtLeast(1)
+            Box(
+                Modifier
+                    .offset(x = slot * slide)
+                    .width(slot)
+                    .fillMaxHeight()
+                    .clip(CvShape.Pill)
+                    .background(colors.text.copy(alpha = 0.14f))
+            )
+            Row(Modifier.fillMaxSize()) {
+                for (tab in tabs) {
+                    val active = tab == selected
+                    // The label weight does not animate with the pill: text that
+                    // changes weight mid-slide reflows, and a reflowing label
+                    // under a moving highlight looks like a rendering fault.
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(CvShape.Pill)
+                            .clickableNoRipple {
+                                if (!active) haptics?.play(Haptic.Select)
+                                onSelect(tab)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            tab.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (active) colors.text else colors.text3,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -371,9 +560,28 @@ fun LazyListScope.episodesSection(
     onToggle: (Int, Int) -> Unit,
     onMarkUpTo: (Int, Int) -> Unit,
     onSeasonWatched: (Int, Boolean) -> Unit,
+    onHeatmapToggle: () -> Unit,
+    onHeatMode: (com.cineverse.app.data.model.HeatMode) -> Unit,
+    onNumbers: () -> Unit,
+    onOpenEpisode: (Int, Int) -> Unit,
 ) {
     val detail = state.detail ?: return
     val next = progress?.nextUp()
+
+    item(key = "heatmap") {
+        HeatmapPanel(
+            heatmap = state.heatmap,
+            loading = state.loadingHeatmap,
+            expanded = state.heatmapOpen,
+            mode = state.heatMode,
+            numbers = state.showNumbers,
+            onToggle = onHeatmapToggle,
+            onMode = onHeatMode,
+            onNumbers = onNumbers,
+            onOpenEpisode = onOpenEpisode,
+            modifier = Modifier.padding(bottom = 14.dp),
+        )
+    }
 
     item(key = "seasons") {
         SeasonChips(

@@ -91,6 +91,7 @@ class SettingsRepository(
         val updatedAt = longPreferencesKey("updatedAt")
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
         val skippedVersion = intPreferencesKey("skippedVersion")
+        val seenVersion = intPreferencesKey("seenVersion")
     }
 
     val settings: StateFlow<Settings> = context.dataStore.data
@@ -158,6 +159,19 @@ class SettingsRepository(
         .stateIn(scope, SharingStarted.Eagerly, 0L)
 
     suspend fun skipVersion(code: Int) = context.dataStore.edit { it[Keys.skippedVersion] = code }
+
+    /**
+     * The newest version whose notes the user has been shown.
+     *
+     * Zero means "has never been recorded", which is a FIRST install rather than
+     * an update: showing someone a changelog for software they have never run is
+     * the kind of thing that reads as a bug.
+     */
+    suspend fun markVersionSeen(code: Int) = context.dataStore.edit { it[Keys.seenVersion] = code }
+
+    val seenVersion: StateFlow<Int> = context.dataStore.data
+        .map { it[Keys.seenVersion] ?: 0 }
+        .stateIn(scope, SharingStarted.Eagerly, 0)
 
     val skippedVersion: StateFlow<Int> = context.dataStore.data
         .map { it[Keys.skippedVersion] ?: 0 }

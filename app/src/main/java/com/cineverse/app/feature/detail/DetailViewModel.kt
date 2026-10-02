@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.cineverse.app.AppContainer
 import com.cineverse.app.data.firebase.Library
 import com.cineverse.app.data.model.Episode
+import com.cineverse.app.data.model.HeatMode
+import com.cineverse.app.data.model.Heatmap
 import com.cineverse.app.data.model.MediaType
 import com.cineverse.app.data.model.ShowProgress
 import com.cineverse.app.data.model.TitleDetail
@@ -32,6 +34,9 @@ data class DetailState(
     val allSeasons: Map<Int, List<Episode>> = emptyMap(),
     val heatmapOpen: Boolean = false,
     val showNumbers: Boolean = false,
+    val heatMode: HeatMode = HeatMode.Rating,
+    val heatmap: Heatmap? = null,
+    val loadingHeatmap: Boolean = false,
     val undo: UndoMark? = null,
 )
 
@@ -147,12 +152,35 @@ class DetailViewModel(
         _state.value = _state.value.copy(showNumbers = !_state.value.showNumbers)
     }
 
+    fun setHeatMode(mode: HeatMode) {
+        _state.value = _state.value.copy(heatMode = mode)
+    }
+
+    /**
+     * Every season at once, four requests in flight, then the model.
+     *
+     * Only fetched when the panel is opened: on a twelve-season show this is
+     * twelve requests, and nobody who never opens the heatmap should pay for
+     * them.
+     */
     private fun loadAllSeasons() = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         val wanted = detail.seasons.map { it.number }
-        if (_state.value.allSeasons.keys.containsAll(wanted)) return@launch
-        val all = app.tmdb.allSeasons(id, wanted)
-        _state.value = _state.value.copy(allSeasons = _state.value.allSeasons + all)
+        if (_state.value.heatmap != null && _state.value.allSeasons.keys.containsAll(wanted)) return@launch
+        _state.value = _state.value.copy(loadingHeatmap = true)
+        val all = _state.value.allSeasons + app.tmdb.allSeasons(id, wanted)
+        _state.value = _state.value.copy(
+            allSeasons = all,
+            heatmap = Heatmap.build(all, app.episodes.of(id)),
+            loadingHeatmap = false,
+        )
+    }
+
+    /** Rebuild the grid's ticks after a mark, without refetching a thing. */
+    private fun refreshHeatmap() {
+        val held = _state.value
+        if (held.heatmap == null || held.allSeasons.isEmpty()) return
+        _state.value = held.copy(heatmap = Heatmap.build(held.allSeasons, app.episodes.of(id)))
     }
 
     // ---------- marks ----------
@@ -160,12 +188,14 @@ class DetailViewModel(
     fun toggleEpisode(season: Int, episode: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         app.episodes.toggleEpisode(detail, season, episode)
+        refreshHeatmap()
     }
 
     fun markUpTo(season: Int, episode: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         val before = app.episodes.of(id)
         app.episodes.markUpTo(detail, season, episode)
+        refreshHeatmap()
         val after = app.episodes.of(id)
         val added = (after?.seasons?.get(season).orEmpty() - before?.seasons?.get(season).orEmpty().toSet())
         if (added.isNotEmpty()) {
@@ -178,6 +208,7 @@ class DetailViewModel(
     fun setSeasonWatched(season: Int, watched: Boolean) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         app.episodes.setSeasonWatched(detail, season, watched)
+        refreshHeatmap()
     }
 
     fun undo() = viewModelScope.launch {
@@ -206,6 +237,65 @@ class DetailViewModel(
 
     fun setRating(value: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
-        app.library.setRating(detail.key, value)
+        app.library.setRating(detail.key, value, detail.title)
+    }
+
+    fun setDropped(dropped: Boolean) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        app.episodes.setDropped(detail, dropped)
+    }
+
+    // ---------- lists ----------
+
+    /**
+     * Put a title in a list, or take it out.
+     *
+     * Naming a list for a title that is not saved yet SAVES it first. Otherwise
+     * the membership would be written to a watchlist document that does not
+     * exist and the choice would silently evaporate.
+     */
+    fun setInList(listId: String, member: Boolean) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        if (!app.library.library.value.isSaved(detail.key)) {
+            app.library.toggleSaved(detail.asItem(), detail)
+        }
+        val held = app.library.library.value.saved[detail.key]?.lists ?: listOf("watchlist")
+        val next = if (member) held + listId else held - listId
+        app.library.setLists(detail.key, next)
+    }
+
+    fun createList(name: String) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        val id = app.library.createList(name) ?: return@launch
+        // A list made from a title sheet is made FOR that title: it would be a
+        // strange thing to name a list and then have to tick it as well.
+        setInList(id, true)
+    }
+
+    fun renameList(id: String, name: String) = viewModelScope.launch {
+        app.library.renameList(id, name)
+    }
+
+    fun deleteList(id: String) = viewModelScope.launch { app.library.deleteList(id) }
+
+    // ---------- a film, mid-play ----------
+
+    fun setMovieProgress(minutes: Int) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        app.library.setMovieProgress(detail.id, minutes, detail.runtime)
+    }
+
+    fun clearMovieProgress() = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        app.library.clearMovieProgress(detail.id)
+    }
+
+    /** Reached the end: mark it watched and stop calling it in-progress. */
+    fun finishMovie() = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        app.library.clearMovieProgress(detail.id)
+        if (!app.library.library.value.isWatched(detail.key)) {
+            app.library.toggleWatched(detail.asItem(), detail)
+        }
     }
 }

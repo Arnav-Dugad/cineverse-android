@@ -42,6 +42,8 @@ import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.posterCellWidth
+import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.firebase.Library
 import com.cineverse.app.data.model.MediaItem
@@ -100,7 +102,7 @@ fun BrowseScreen(
 
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Adaptive(118.dp),
+            columns = posterGridCells(),
             contentPadding = PaddingValues(
                 start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = BottomBarSpace,
             ),
@@ -111,14 +113,14 @@ fun BrowseScreen(
                 PosterCard(
                     item = item,
                     onOpen = onOpen,
-                    width = 118.dp,
+                    width = posterCellWidth(),
                     watched = library.isWatched(item.key),
                     saved = library.isSaved(item.key),
                     rating = library.ratingOf(item.key),
                 )
             }
             if (state.loading) {
-                items(6) { PosterSkeleton(width = 118.dp) }
+                items(6) { PosterSkeleton(width = posterCellWidth()) }
             }
         }
     }

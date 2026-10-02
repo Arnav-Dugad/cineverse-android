@@ -36,6 +36,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.BottomBarSpace
+import com.cineverse.app.core.ui.CountUpString
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.feature.list.EmptyState
@@ -167,7 +168,7 @@ private fun FigureCard(figure: Figure, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))
-        Text(figure.value, style = MaterialTheme.typography.headlineMedium, color = colors.text)
+        CountUpString(figure.value, style = MaterialTheme.typography.headlineMedium, color = colors.text)
         if (figure.detail.isNotBlank()) {
             Text(
                 figure.detail,

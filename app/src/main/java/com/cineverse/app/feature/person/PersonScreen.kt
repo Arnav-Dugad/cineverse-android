@@ -44,6 +44,8 @@ import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.posterCellWidth
+import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.shimmer
 import com.cineverse.app.data.firebase.Library
@@ -78,7 +80,7 @@ fun PersonScreen(
                 .filter { it.item.posterPath != null }
 
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(118.dp),
+                columns = posterGridCells(),
                 contentPadding = PaddingValues(
                     start = ScreenPadding, end = ScreenPadding, bottom = BottomBarSpace,
                 ),
@@ -132,7 +134,7 @@ fun PersonScreen(
                     PosterCard(
                         item = credit.item,
                         onOpen = onOpen,
-                        width = 118.dp,
+                        width = posterCellWidth(),
                         watched = library.isWatched(credit.item.key),
                         saved = library.isSaved(credit.item.key),
                     )

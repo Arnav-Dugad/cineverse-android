@@ -65,6 +65,8 @@ import com.cineverse.app.feature.search.SearchViewModel
 import com.cineverse.app.feature.stats.StatsScreen
 import com.cineverse.app.feature.stats.StatsViewModel
 import com.cineverse.app.update.UpdateSheet
+import com.cineverse.app.update.WhatsNewSheet
+import com.cineverse.app.update.VersionHistorySheet
 import com.cineverse.app.update.UpdateState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -99,7 +101,11 @@ fun CineVerseNav(
     val colors = CvTheme.colors
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var showUpdate by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var loadingHistory by remember { mutableStateOf(false) }
     val update by app.updates.state.collectAsStateWithLifecycle()
+    val history by app.updates.history.collectAsStateWithLifecycle()
+    val whatsNew by app.updates.whatsNew.collectAsStateWithLifecycle()
 
     // Anything the app needs to say out loud — an OMDb key that stopped working,
     // a sweep that finished — arrives here rather than in a dozen screens.
@@ -118,6 +124,17 @@ fun CineVerseNav(
     LaunchedEffect(Unit) {
         val result = app.updates.check()
         if (result is UpdateState.Available) showUpdate = true
+    }
+
+    // Did this launch follow an install? If so, say what landed.
+    LaunchedEffect(Unit) { app.updates.checkWhatsNew() }
+
+    // Opening the history fetches it if the session has not already.
+    LaunchedEffect(showHistory) {
+        if (!showHistory) return@LaunchedEffect
+        loadingHistory = true
+        app.updates.loadHistory()
+        loadingHistory = false
     }
 
     val currentTab = Tab.entries.firstOrNull { tab ->
@@ -227,6 +244,7 @@ fun CineVerseNav(
                         showUpdate = true
                         scope.launch { app.updates.check(force = true) }
                     },
+                    onOpenReleaseNotes = { showHistory = true },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 )
             }
@@ -249,10 +267,12 @@ fun CineVerseNav(
 
             composable<Route.Detail> { entry ->
                 val route: Route.Detail = entry.toRoute()
+                val settings by app.settings.settings.collectAsStateWithLifecycle()
                 DetailScreen(
                     viewModel = cvViewModel("detail_${route.type}_${route.id}") {
                         DetailViewModel(app, route.id, MediaType.of(route.type))
                     },
+                    spoilerShield = settings.spoilerShield,
                     onBack = { navController.popBackStack() },
                     onOpen = open,
                     onPerson = { navController.navigate(Route.Person(it.id)) },
@@ -262,7 +282,6 @@ fun CineVerseNav(
                     onShare = { detail ->
                         com.cineverse.app.feature.detail.shareTitle(navController.context, detail)
                     },
-                    onRate = { },
                 )
             }
 
@@ -295,7 +314,29 @@ fun CineVerseNav(
             onInstall = { file -> app.updates.install(file) },
             onSkip = { release -> scope.launch { app.updates.skip(release); showUpdate = false } },
             onRetry = { scope.launch { app.updates.check(force = true) } },
+            onHistory = { showUpdate = false; showHistory = true },
             onDismiss = { showUpdate = false; app.updates.dismiss() },
+        )
+    }
+
+    // The order matters: what-is-new takes the screen over the history sheet,
+    // because it is the one thing in the app that is allowed to interrupt.
+    whatsNew?.let { release ->
+        if (!showHistory) {
+            WhatsNewSheet(
+                release = release,
+                onHistory = { app.updates.clearWhatsNew(); showHistory = true },
+                onDismiss = { app.updates.clearWhatsNew() },
+            )
+        }
+    }
+
+    if (showHistory) {
+        VersionHistorySheet(
+            releases = history,
+            currentCode = app.updates.currentCode,
+            loading = loadingHistory,
+            onDismiss = { showHistory = false },
         )
     }
 }

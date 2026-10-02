@@ -55,6 +55,8 @@ import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.posterCellWidth
+import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.MediaItem
 
@@ -182,12 +184,12 @@ fun SearchScreen(
 
             state.loading && state.results.isEmpty() -> {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(118.dp),
+                    columns = posterGridCells(),
                     contentPadding = PaddingValues(ScreenPadding),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
-                    items(9) { PosterSkeleton(width = 118.dp) }
+                    items(9) { PosterSkeleton(width = posterCellWidth()) }
                 }
             }
 
@@ -211,7 +213,7 @@ fun SearchScreen(
 
             else -> {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(118.dp),
+                    columns = posterGridCells(),
                     contentPadding = PaddingValues(
                         start = ScreenPadding, end = ScreenPadding,
                         top = ScreenPadding, bottom = BottomBarSpace,
@@ -223,7 +225,7 @@ fun SearchScreen(
                         PosterCard(
                             item = item,
                             onOpen = onOpen,
-                            width = 118.dp,
+                            width = posterCellWidth(),
                             watched = library.isWatched(item.key),
                             saved = library.isSaved(item.key),
                             rating = library.ratingOf(item.key),
@@ -232,7 +234,7 @@ fun SearchScreen(
                     if (state.hasMore) {
                         item {
                             LaunchedEffect(state.results.size) { viewModel.loadMore() }
-                            PosterSkeleton(width = 118.dp)
+                            PosterSkeleton(width = posterCellWidth())
                         }
                     }
                 }

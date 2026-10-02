@@ -63,6 +63,7 @@ fun UpdateSheet(
     onInstall: (java.io.File) -> Unit,
     onSkip: (Release) -> Unit,
     onRetry: () -> Unit,
+    onHistory: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = CvTheme.colors
@@ -149,6 +150,21 @@ fun UpdateSheet(
                     icon = Icons.Rounded.CloudDownload,
                     title = "CineVerse $currentVersion",
                     body = "Updates come from GitHub Releases. The app checks every few hours.",
+                )
+            }
+            // Available already prints this release notes; the link is for the
+            // other states, where someone checking for an update may well want
+            // to know what the last few actually contained.
+            if (state !is UpdateState.Available) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "See all release notes",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.text2,
+                    modifier = Modifier
+                        .clip(CvShape.Pill)
+                        .clickableNoRipple { haptics?.play(Haptic.Tap); onHistory() }
+                        .padding(vertical = 8.dp),
                 )
             }
             Spacer(Modifier.height(10.dp))

@@ -39,6 +39,8 @@ import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
+import com.cineverse.app.core.ui.posterCellWidth
+import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.MediaItem
 
@@ -148,7 +150,7 @@ fun MyListScreen(
             )
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(118.dp),
+                columns = posterGridCells(),
                 contentPadding = PaddingValues(
                     start = ScreenPadding, end = ScreenPadding, bottom = BottomBarSpace,
                 ),
@@ -159,7 +161,7 @@ fun MyListScreen(
                     PosterCard(
                         item = item,
                         onOpen = onOpen,
-                        width = 118.dp,
+                        width = posterCellWidth(),
                         watched = library.isWatched(item.key),
                         saved = library.isSaved(item.key),
                         rating = library.ratingOf(item.key),

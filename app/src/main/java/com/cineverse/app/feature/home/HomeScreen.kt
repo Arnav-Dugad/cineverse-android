@@ -60,11 +60,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.ui.CvImage
+import com.cineverse.app.core.ui.CvLogo
 import com.cineverse.app.core.ui.ProgressBar
 import com.cineverse.app.core.ui.shimmer
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterRail
 import com.cineverse.app.core.ui.PosterSkeleton
+import com.cineverse.app.core.ui.PullToRefresh
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.SectionHeader
 import com.cineverse.app.core.ui.clickableNoRipple
@@ -86,60 +88,68 @@ fun HomeScreen(
     val library by viewModel.library.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    LazyColumn(
-        modifier.fillMaxSize(),
-        state = listState,
-        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-        verticalArrangement = Arrangement.spacedBy(26.dp),
+    PullToRefresh(
+        refreshing = state.refreshing,
+        onRefresh = viewModel::refresh,
+        modifier = modifier.fillMaxSize(),
     ) {
-        item(key = "hero") {
-            Hero(
-                items = state.hero,
-                loading = state.loading,
-                isSaved = { library.isSaved(it.key) },
-                onOpen = onOpen,
-                onSave = viewModel::toggleSaved,
-            )
-        }
-
-        if (state.continueWatching.isNotEmpty()) {
-            item(key = "continue") {
-                ContinueSection(state.continueWatching, onContinue, onOpen)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            verticalArrangement = Arrangement.spacedBy(26.dp),
+        ) {
+            item(key = "hero") {
+                Hero(
+                    items = state.hero,
+                    loading = state.loading,
+                    logos = state.heroLogos,
+                    isSaved = { library.isSaved(it.key) },
+                    onOpen = onOpen,
+                    onSave = viewModel::toggleSaved,
+                    onNeedLogo = viewModel::ensureHeroLogo,
+                )
             }
-        }
 
-        items(state.personal + state.rails, key = { it.id }) { rail ->
-            PosterRail(
-                items = rail.items,
-                title = rail.title,
-                kicker = rail.kicker,
-                onOpen = onOpen,
-                onSeeAll = rail.seeAll?.let { route -> { onBrowse(route) } },
-                isWatched = { library.isWatched(it.key) },
-                isSaved = { library.isSaved(it.key) },
-                ratingOf = { library.ratingOf(it.key) },
-                matchOf = { rail.match[it.key] ?: 0 },
-                onLongPress = onQuickActions,
-            )
-        }
+            if (state.continueWatching.isNotEmpty()) {
+                item(key = "continue") {
+                    ContinueSection(state.continueWatching, onContinue, onOpen)
+                }
+            }
 
-        if (state.loading) {
-            items(3) { index ->
-                Column {
-                    Box(
-                        Modifier
-                            .padding(horizontal = ScreenPadding)
-                            .width(160.dp)
-                            .height(20.dp)
-                            .clip(CvShape.Small)
-                            .shimmer()
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Row(
-                        Modifier.padding(horizontal = ScreenPadding),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        repeat(3) { PosterSkeleton() }
+            items(state.personal + state.rails, key = { it.id }) { rail ->
+                PosterRail(
+                    items = rail.items,
+                    title = rail.title,
+                    kicker = rail.kicker,
+                    onOpen = onOpen,
+                    onSeeAll = rail.seeAll?.let { route -> { onBrowse(route) } },
+                    isWatched = { library.isWatched(it.key) },
+                    isSaved = { library.isSaved(it.key) },
+                    ratingOf = { library.ratingOf(it.key) },
+                    matchOf = { rail.match[it.key] ?: 0 },
+                    onLongPress = onQuickActions,
+                )
+            }
+
+            if (state.loading) {
+                items(3) { index ->
+                    Column {
+                        Box(
+                            Modifier
+                                .padding(horizontal = ScreenPadding)
+                                .width(160.dp)
+                                .height(20.dp)
+                                .clip(CvShape.Small)
+                                .shimmer()
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Row(
+                            Modifier.padding(horizontal = ScreenPadding),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            repeat(3) { PosterSkeleton() }
+                        }
                     }
                 }
             }
@@ -164,9 +174,11 @@ fun HomeScreen(
 private fun Hero(
     items: List<MediaItem>,
     loading: Boolean,
+    logos: Map<String, String>,
     isSaved: (MediaItem) -> Boolean,
     onOpen: (MediaItem) -> Unit,
     onSave: (MediaItem) -> Unit,
+    onNeedLogo: (MediaItem) -> Unit,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -190,6 +202,12 @@ private fun Hero(
     }
 
     val item = items[index.coerceIn(items.indices)]
+
+    // This slide and the next, so the logo is already there when it turns.
+    LaunchedEffect(index, items.size) {
+        onNeedLogo(item)
+        items.getOrNull((index + 1) % items.size)?.let(onNeedLogo)
+    }
 
     // CLIPPED, and that is not cosmetic: the Ken Burns drift scales the artwork
     // to 1.14, which puts about 99px of it BELOW the hero on a 540dp box, where
@@ -262,13 +280,34 @@ private fun Hero(
                 color = Palette.Red2,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                item.title,
-                style = MaterialTheme.typography.displaySmall,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // The treatment where there is one, the typeset name where there is
+            // not. It crossfades rather than popping in, because a logo that
+            // arrives a beat after the artwork should look like it was always
+            // on its way rather than like a correction.
+            val logo = logos[item.key]?.takeIf { it.isNotBlank() }
+            Crossfade(
+                targetState = logo,
+                animationSpec = tween(Motion.Slow, easing = Motion.EaseOut),
+                label = "heroTitle",
+            ) { path ->
+                if (path != null) {
+                    CvLogo(
+                        path,
+                        item.title,
+                        Modifier
+                            .height(84.dp)
+                            .fillMaxWidth(0.78f),
+                    )
+                } else {
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             Spacer(Modifier.height(10.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,

@@ -73,8 +73,13 @@ class LibraryRepository(
                     saved = saved.mapNotNull { it.toSaved() }.associateBy { it.key },
                     watched = watched.mapNotNull { it.toWatched() }.associateBy { it.key },
                     ratings = ratings.mapNotNull { doc ->
-                        val value = (doc.get("value") as? Number)?.toInt() ?: return@mapNotNull null
-                        doc.id to value
+                        // The website's field is `score`. `value` is read as a
+                        // fallback only because an early build of this app wrote
+                        // that name; nothing writes it any more.
+                        val score = (doc.get("score") as? Number)?.toInt()
+                            ?: (doc.get("value") as? Number)?.toInt()
+                            ?: return@mapNotNull null
+                        doc.id to score
                     }.toMap(),
                     lists = lists.map { it.toList() }.sortedBy { it.createdAt },
                     movieProgress = progress.mapNotNull { it.toMovieProgress() }.associateBy { it.tmdbId },
@@ -160,12 +165,31 @@ class LibraryRepository(
         )
     }
 
-    /** 1–10, or 0 to clear. The website stores it as `{ value }`. */
-    suspend fun setRating(key: String, value: Int) {
+    /**
+     * 1–10, or 0 to clear.
+     *
+     * The document is `{ score, tmdbId, type, title, updated }` — the website's
+     * exact shape, down to the field NAME. An earlier build of this app wrote
+     * `value` instead, which meant a score given on the phone was invisible on
+     * the laptop and the other way round: two rating systems over one library.
+     */
+    suspend fun setRating(key: String, value: Int, title: String = "") {
         val uid = auth.uid.value ?: return
         val ref = user(uid).collection("ratings").document(key)
-        if (value <= 0) ref.delete().await()
-        else ref.set(mapOf("value" to value.coerceIn(1, 10))).await()
+        if (value <= 0) { ref.delete().await(); return }
+        val type = key.substringBefore('_')
+        val id = key.substringAfterLast('_').toIntOrNull() ?: 0
+        ref.set(
+            mapOf(
+                "score" to value.coerceIn(1, 10),
+                "tmdbId" to id,
+                "type" to type,
+                "title" to title.ifBlank {
+                    library.value.saved[key]?.title ?: library.value.watched[key]?.title.orEmpty()
+                },
+                "updated" to FieldValue.serverTimestamp(),
+            )
+        ).await()
     }
 
     // ---------- custom lists ----------

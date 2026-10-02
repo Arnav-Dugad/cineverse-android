@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 data class DiscoverState(
     val rails: List<Pair<String, Rail>> = emptyList(),
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
 )
 
 class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
@@ -29,6 +30,19 @@ class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
     val library: StateFlow<Library> = app.library.library
 
     init { load() }
+
+    /**
+     * Pull to refresh.
+     *
+     * Every rail here is a TMDB discover query, so the page genuinely can be
+     * stale — this is not the decorative kind of refresh. The flag clears
+     * because load() replaces the whole state object.
+     */
+    fun refresh() {
+        if (_state.value.refreshing) return
+        _state.value = _state.value.copy(refreshing = true)
+        load()
+    }
 
     private fun load() = viewModelScope.launch {
         val region = app.settings.settings.value.region

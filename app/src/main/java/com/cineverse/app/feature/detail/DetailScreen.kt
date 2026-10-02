@@ -48,6 +48,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import com.cineverse.app.feature.sheets.RatingSheet
+import com.cineverse.app.feature.sheets.ProgressSheet
+import com.cineverse.app.feature.sheets.ListSheet
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +73,7 @@ import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.CvImage
+import com.cineverse.app.core.ui.CvLogo
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterRail
 import com.cineverse.app.core.ui.ScoreRow
@@ -92,12 +98,12 @@ import com.cineverse.app.data.model.TitleDetail
 @Composable
 fun DetailScreen(
     viewModel: DetailViewModel,
+    spoilerShield: Boolean = false,
     onBack: () -> Unit,
     onOpen: (MediaItem) -> Unit,
     onPerson: (Person) -> Unit,
     onPlayTrailer: (String) -> Unit,
     onShare: (TitleDetail) -> Unit,
-    onRate: (TitleDetail) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -105,22 +111,26 @@ fun DetailScreen(
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val listState = rememberLazyListState()
+    // Which sheet, if any, is up. Held here rather than in the view model: it is
+    // screen state, it should not survive a process death, and a sheet that
+    // reopens itself after the app was killed is a small haunting.
+    var sheet by remember { mutableStateOf(TitleSheet.None) }
 
     val detail = state.detail
     if (detail == null) {
+        if (state.loading) {
+            DetailSkeleton(modifier)
+            return
+        }
         Box(modifier.fillMaxSize().background(colors.ink), contentAlignment = Alignment.Center) {
-            if (state.loading) {
-                Box(Modifier.fillMaxSize().shimmer())
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        state.error ?: "Could not load this title.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.text2,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Button(onClick = { viewModel.load() }, shape = CvShape.Pill) { Text("Try again") }
-                }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    state.error ?: "Could not load this title.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.text2,
+                )
+                Spacer(Modifier.height(14.dp))
+                Button(onClick = { viewModel.load() }, shape = CvShape.Pill) { Text("Try again") }
             }
         }
         return
@@ -131,8 +141,12 @@ fun DetailScreen(
     // How far the hero has scrolled away, 0..1 — drives the app bar's arrival.
     val collapsed by remember {
         derivedStateOf {
+            // Full opacity well before the hero has finished leaving, because the
+            // moment ANY content slides under the bar the bar has to be a
+            // surface rather than a tint — at 700f the overview and the action
+            // row were both legible straight through the title.
             if (listState.firstVisibleItemIndex > 0) 1f
-            else (listState.firstVisibleItemScrollOffset / 700f).coerceIn(0f, 1f)
+            else (listState.firstVisibleItemScrollOffset / 260f).coerceIn(0f, 1f)
         }
     }
 
@@ -152,11 +166,14 @@ fun DetailScreen(
                     saved = library.isSaved(detail.key),
                     watched = library.isWatched(detail.key),
                     myRating = library.ratingOf(detail.key),
+                    movieMinutes = library.movieProgress[detail.id]?.position ?: 0,
                     onSave = viewModel::toggleSaved,
                     onWatched = viewModel::toggleWatched,
-                    onRate = { onRate(detail) },
+                    onRate = { sheet = TitleSheet.Rate },
                     onShare = { onShare(detail) },
                     onPlayTrailer = { detail.trailer?.key?.let(onPlayTrailer) },
+                    onLists = { sheet = TitleSheet.Lists },
+                    onProgress = { sheet = TitleSheet.Progress },
                 )
             }
 
@@ -172,11 +189,18 @@ fun DetailScreen(
                 DetailTab.Episodes -> episodesSection(
                     state = state,
                     progress = progress,
-                    spoilerShield = false,
+                    spoilerShield = spoilerShield,
                     onSeason = viewModel::selectSeason,
                     onToggle = viewModel::toggleEpisode,
                     onMarkUpTo = viewModel::markUpTo,
                     onSeasonWatched = viewModel::setSeasonWatched,
+                    onHeatmapToggle = viewModel::toggleHeatmap,
+                    onHeatMode = viewModel::setHeatMode,
+                    onNumbers = viewModel::toggleNumbers,
+                    onOpenEpisode = { season, episode ->
+                        viewModel.selectSeason(season)
+                        viewModel.selectTab(DetailTab.Episodes)
+                    },
                 )
 
                 DetailTab.About -> aboutSection(
@@ -206,7 +230,43 @@ fun DetailScreen(
             onBack = onBack,
         )
     }
+
+    when (sheet) {
+        TitleSheet.None -> Unit
+
+        TitleSheet.Rate -> RatingSheet(
+            title = detail.title,
+            current = library.ratingOf(detail.key),
+            onSave = viewModel::setRating,
+            onClear = { viewModel.setRating(0) },
+            onDismiss = { sheet = TitleSheet.None },
+        )
+
+        TitleSheet.Lists -> ListSheet(
+            title = detail.title,
+            lists = library.lists,
+            membership = library.saved[detail.key]?.lists.orEmpty(),
+            onToggle = viewModel::setInList,
+            onCreate = viewModel::createList,
+            onRename = viewModel::renameList,
+            onDelete = viewModel::deleteList,
+            onDismiss = { sheet = TitleSheet.None },
+        )
+
+        TitleSheet.Progress -> ProgressSheet(
+            title = detail.title,
+            runtime = detail.runtime,
+            current = library.movieProgress[detail.id]?.position ?: 0,
+            onSave = viewModel::setMovieProgress,
+            onFinish = viewModel::finishMovie,
+            onClear = viewModel::clearMovieProgress,
+            onDismiss = { sheet = TitleSheet.None },
+        )
+    }
 }
+
+/** The sheets a title page can raise. */
+private enum class TitleSheet { None, Rate, Lists, Progress }
 
 private fun tabsFor(detail: TitleDetail): List<DetailTab> =
     if (detail.isSeries) listOf(DetailTab.Episodes, DetailTab.About, DetailTab.More)
@@ -264,8 +324,8 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
         )
 
         if (detail.logoPath != null) {
-            CvImage(
-                Img.logo(detail.logoPath),
+            CvLogo(
+                detail.logoPath,
                 detail.title,
                 Modifier
                     .align(Alignment.BottomStart)
@@ -273,7 +333,6 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float) {
                     .height(74.dp)
                     .fillMaxWidth(0.72f)
                     .graphicsLayer { alpha = 1f - collapsed },
-                contentScale = ContentScale.Fit,
             )
         }
     }
@@ -285,7 +344,7 @@ private fun DetailAppBar(title: String, alpha: Float, onBack: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(colors.ink.copy(alpha = alpha * 0.96f))
+            .background(colors.ink.copy(alpha = alpha))
             .windowInsetsPadding(WindowInsets.statusBars)
             .height(56.dp)
             .padding(horizontal = 8.dp),

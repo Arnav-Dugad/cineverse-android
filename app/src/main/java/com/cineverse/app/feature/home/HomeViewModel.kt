@@ -49,6 +49,8 @@ data class HomeState(
     val rails: List<Rail> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
+    /** item key -> the title treatment path, once one has been found. */
+    val heroLogos: Map<String, String> = emptyMap(),
     val offline: Boolean = false,
 )
 
@@ -96,6 +98,39 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
     /** The hero's and every rail's save button. */
     fun toggleSaved(item: MediaItem) = viewModelScope.launch {
         app.library.toggleSaved(item)
+    }
+
+    /**
+     * The hero title logo, fetched for one slide at a time.
+     *
+     * Every streaming app in the world shows a film own title treatment over its
+     * artwork rather than setting the name in the app typeface, and it is the
+     * single biggest reason their heroes look like posters and ours looked like a
+     * caption. TMDB does not return logos with a trending list, so this asks for
+     * the title page — but only for the slide now showing and the one after it,
+     * which is two requests rather than eight, and both are cached by the time
+     * the carousel comes back round.
+     *
+     * A title with no logo keeps the typeset name. That is the correct fallback:
+     * plenty of titles have no treatment, and a blank space where the name was
+     * is not a trade anyone would take.
+     */
+    fun ensureHeroLogo(item: MediaItem) {
+        val held = _state.value
+        if (held.heroLogos.containsKey(item.key)) return
+        // Claimed with an empty string first, so eight recompositions in the same
+        // frame cannot start eight identical requests.
+        _state.value = held.copy(heroLogos = held.heroLogos + (item.key to ""))
+        viewModelScope.launch {
+            val path = runCatching {
+                app.tmdb.detail(item.id, item.type, app.settings.settings.value.region).logoPath
+            }.getOrNull().orEmpty()
+            if (path.isNotBlank()) {
+                _state.value = _state.value.copy(
+                    heroLogos = _state.value.heroLogos + (item.key to path)
+                )
+            }
+        }
     }
 
     fun refresh() {

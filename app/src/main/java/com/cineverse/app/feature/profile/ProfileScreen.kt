@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +62,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel,
     onSignIn: () -> Unit,
     onOpenUpdate: () -> Unit,
+    onOpenReleaseNotes: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
@@ -260,6 +262,42 @@ fun ProfileScreen(
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = if (update is UpdateState.Available) Palette.Red2 else colors.text3,
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                    null,
+                    tint = colors.text3,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+        }
+
+        item(key = "notes") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickableNoRipple { haptics?.play(Haptic.Tap); onOpenReleaseNotes() }
+                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Description,
+                    null,
+                    tint = colors.text2,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Release notes",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.text,
+                    )
+                    Text(
+                        "What changed, in every version",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
                     )
                 }
                 Icon(

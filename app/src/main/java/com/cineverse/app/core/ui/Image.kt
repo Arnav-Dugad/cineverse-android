@@ -83,6 +83,37 @@ fun CvImage(
 }
 
 /**
+ * A title treatment.
+ *
+ * Separate from [CvImage] for two reasons, both of which showed up on screen:
+ * a logo is a TRANSPARENT PNG, so the placeholder plate that makes a poster look
+ * considered sits behind it as a grey slab instead; and a logo is a different
+ * shape on every title, so it has to be aligned to a corner rather than filling
+ * its box, or a wide one and a tall one will not line up with each other.
+ */
+@Composable
+fun CvLogo(
+    path: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    align: androidx.compose.ui.Alignment = androidx.compose.ui.Alignment.BottomStart,
+) {
+    val url = Img.logo(path) ?: return
+    Box(modifier, contentAlignment = align) {
+        AsyncImage(
+            model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                .data(url)
+                .crossfade(260)
+                .build(),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            alignment = align,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+/**
  * The sweep that stands in for content while it loads.
  *
  * It travels the same way on every surface in the app and never loops faster
