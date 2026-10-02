@@ -56,8 +56,13 @@ class CineVerseApp : Application(), SingletonImageLoader.Factory {
         container.crashes.install()
         // The channels must exist before anything can post to them, and they are
         // cheap to recreate: the system keeps whatever the user changed.
+        //
+        // The daily sweep is NOT scheduled here. WorkManager initialises itself
+        // through an app-startup provider, and touching it from
+        // Application.onCreate reaches it before that provider has run -- which
+        // throws, taking the whole process with it. It is scheduled from the
+        // activity instead, by which time everything is up.
         com.cineverse.app.notify.Notifications.ensureChannels(this)
-        com.cineverse.app.notify.WatchWorker.schedule(this)
     }
 
     /**

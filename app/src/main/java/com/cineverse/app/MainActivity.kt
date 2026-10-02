@@ -36,6 +36,12 @@ class MainActivity : ComponentActivity() {
         // Anything the website changed since this device last ran.
         app.settings.syncFromCloud()
 
+        // The daily sweep, from here rather than from the Application, where
+        // WorkManager has not finished initialising. Guarded as well: a device
+        // with the provider stripped out by an aggressive installer should lose
+        // notifications, not the app.
+        runCatching { com.cineverse.app.notify.WatchWorker.schedule(this) }
+
         setContent {
             val settings by app.settings.settings.collectAsStateWithLifecycle()
             // A shortcut, a widget row, a shared link or a cineverse:// URL.
