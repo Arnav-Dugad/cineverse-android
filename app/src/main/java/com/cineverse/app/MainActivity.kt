@@ -66,6 +66,18 @@ class MainActivity : ComponentActivity() {
             ) {
                 androidx.compose.runtime.CompositionLocalProvider(
                     com.cineverse.app.core.ui.LocalGridDensity provides settings.gridDensity,
+                    com.cineverse.app.core.ui.LocalPosterStyle provides
+                        com.cineverse.app.core.ui.PosterStyle(
+                            captions = settings.posterCaptions,
+                            meta = settings.posterMeta,
+                            rating = settings.showRatings,
+                            watchedMark = settings.showWatched,
+                            savedMark = settings.showWatched,
+                            match = settings.posterMatch,
+                            corner = runCatching {
+                                com.cineverse.app.core.ui.PosterCorner.valueOf(settings.posterCorner)
+                            }.getOrDefault(com.cineverse.app.core.ui.PosterCorner.Rounded),
+                        ),
                 ) {
                     CineVerseNav(app, pending) { pending = null }
                 }

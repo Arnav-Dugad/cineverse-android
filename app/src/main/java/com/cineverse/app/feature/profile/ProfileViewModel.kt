@@ -52,6 +52,9 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     fun setStartTab(value: String) = viewModelScope.launch { app.settings.setStartTab(value) }
     fun setConfetti(value: Boolean) = viewModelScope.launch { app.settings.setConfetti(value) }
     fun setEpisodeSwipe(value: Boolean) = viewModelScope.launch { app.settings.setEpisodeSwipe(value) }
+    fun setPosterMeta(value: Boolean) = viewModelScope.launch { app.settings.setPosterMeta(value) }
+    fun setPosterCorner(value: String) = viewModelScope.launch { app.settings.setPosterCorner(value) }
+    fun setPosterMatch(value: Boolean) = viewModelScope.launch { app.settings.setPosterMatch(value) }
     fun setCountdowns(value: Boolean) = viewModelScope.launch { app.settings.setCountdowns(value) }
 
     fun setNotifyEpisodes(value: Boolean) = viewModelScope.launch { app.settings.setNotifyEpisodes(value) }

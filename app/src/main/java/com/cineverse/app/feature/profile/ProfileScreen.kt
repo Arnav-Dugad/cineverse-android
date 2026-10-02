@@ -216,6 +216,40 @@ fun ProfileScreen(
             )
         }
 
+        item(key = "posterMeta") {
+            SwitchRow(
+                title = "Year and type under posters",
+                detail = "Adds \"2020 · Series\" beneath the name.",
+                checked = settings.posterMeta,
+                onChange = viewModel::setPosterMeta,
+                enabled = settings.posterCaptions,
+            )
+        }
+
+        item(key = "corner") {
+            ChoiceRow(
+                title = "Poster corners",
+                options = com.cineverse.app.core.ui.PosterCorner.entries.map { it.label },
+                selected = runCatching {
+                    com.cineverse.app.core.ui.PosterCorner.valueOf(settings.posterCorner).label
+                }.getOrDefault(com.cineverse.app.core.ui.PosterCorner.Rounded.label),
+                onSelect = { label ->
+                    com.cineverse.app.core.ui.PosterCorner.entries
+                        .firstOrNull { it.label == label }
+                        ?.let { viewModel.setPosterCorner(it.name) }
+                },
+            )
+        }
+
+        item(key = "match") {
+            SwitchRow(
+                title = "Match percentage",
+                detail = "The \"94% match\" badge on recommendations.",
+                checked = settings.posterMatch,
+                onChange = viewModel::setPosterMatch,
+            )
+        }
+
         item(key = "showRatings") {
             SwitchRow(
                 title = "Ratings on posters",

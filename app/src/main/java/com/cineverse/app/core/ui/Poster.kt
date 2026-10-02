@@ -66,6 +66,7 @@ fun PosterCard(
     onLongPress: ((MediaItem) -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
+    val style = LocalPosterStyle.current
     val haptics = com.cineverse.app.core.design.LocalHaptics.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -101,9 +102,9 @@ fun PosterCard(
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .sharedPoster(item.key)
-                .clip(CvShape.Large)
+                .clip(style.corner.shape)
                 .background(colors.surface2)
-                .border(1.dp, colors.hairline, CvShape.Large)
+                .border(1.dp, colors.hairline, style.corner.shape)
         ) {
             CvImage(Img.poster(item.posterPath), item.title, Modifier.fillMaxSize())
 
@@ -119,14 +120,14 @@ fun PosterCard(
                 )
             }
 
-            if (showRating && item.voteAverage > 0) {
+            if (showRating && style.rating && item.voteAverage > 0) {
                 RatingPill(
                     item.voteAverage,
                     Modifier.align(Alignment.TopEnd).padding(7.dp),
                 )
             }
 
-            if (matchPercent > 0) {
+            if (matchPercent > 0 && style.match) {
                 MatchPill(matchPercent, Modifier.align(Alignment.TopStart).padding(7.dp))
             }
 
@@ -152,7 +153,7 @@ fun PosterCard(
             // The tick springs in rather than appearing, so marking something
             // watched from a rail is visibly the same gesture as marking it on
             // the title page.
-            if (watched) {
+            if (watched && style.watchedMark) {
                 val tickScale by animateFloatAsState(
                     targetValue = 1f,
                     animationSpec = Motion.landing(),
@@ -177,7 +178,7 @@ fun PosterCard(
                 }
             }
 
-            if (saved && !watched) {
+            if (saved && style.savedMark && !(watched && style.watchedMark)) {
                 Icon(
                     Icons.Rounded.Bookmark,
                     contentDescription = "In your list",
@@ -190,7 +191,10 @@ fun PosterCard(
             }
         }
 
-        if (showCaption) {
+        // Captions are a PREFERENCE now, and off by default on a page of
+        // artwork: a poster already says what it is, and a name under every one
+        // of them turns a wall of pictures into a list with pictures attached.
+        if (showCaption && style.captions) {
             Text(
                 item.title,
                 style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
@@ -199,20 +203,63 @@ fun PosterCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            val meta = listOfNotNull(
-                item.year.takeIf { it.isNotBlank() },
-                if (item.type == com.cineverse.app.data.model.MediaType.Tv) "Series" else "Film",
-            ).joinToString(" · ")
-            Text(
-                meta,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                color = colors.text3,
-                maxLines = 1,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            if (style.meta) {
+                val meta = listOfNotNull(
+                    item.year.takeIf { it.isNotBlank() },
+                    if (item.type == com.cineverse.app.data.model.MediaType.Tv) "Series" else "Film",
+                ).joinToString(" · ")
+                Text(
+                    meta,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    color = colors.text3,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }
+
+/**
+ * How a poster is dressed.
+ *
+ * Every flag here was already a scattered boolean parameter that each screen
+ * passed differently, so the same card looked one way on Home and another in
+ * Search with no rule behind the difference. One object, provided once from
+ * Settings, means a change in Settings reaches every grid and rail at once and
+ * the default is written down in exactly one place.
+ */
+@androidx.compose.runtime.Immutable
+data class PosterStyle(
+    /** The name under the artwork. */
+    val captions: Boolean = false,
+    /** The year and whether it is a film, under the name. */
+    val meta: Boolean = false,
+    /** TMDB's score in the corner. */
+    val rating: Boolean = true,
+    /** A tick on something already watched. */
+    val watchedMark: Boolean = true,
+    /** The bookmark on something saved. */
+    val savedMark: Boolean = true,
+    /** The match percentage on a recommendation. */
+    val match: Boolean = true,
+    /** How round the corners are. */
+    val corner: PosterCorner = PosterCorner.Rounded,
+)
+
+enum class PosterCorner(val label: String) {
+    Square("Square"), Soft("Soft"), Rounded("Rounded"), Pill("Very round");
+
+    val shape: androidx.compose.foundation.shape.RoundedCornerShape
+        get() = when (this) {
+            Square -> androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
+            Soft -> CvShape.Small
+            Rounded -> CvShape.Large
+            Pill -> CvShape.XXLarge
+        }
+}
+
+val LocalPosterStyle = androidx.compose.runtime.staticCompositionLocalOf { PosterStyle() }
 
 /** TMDB's own score, in gold, as it is everywhere in CineVerse. */
 @Composable

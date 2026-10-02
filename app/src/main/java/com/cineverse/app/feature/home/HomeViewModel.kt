@@ -31,6 +31,10 @@ data class Rail(
     val seeAll: com.cineverse.app.nav.Route? = null,
     /** Per-title match percentage, for a personalised row. */
     val match: Map<String, Int> = emptyMap(),
+    /** A Top 10: drawn with its position behind each card. */
+    val numbered: Boolean = false,
+    /** The logo of the title this rail was derived from, for the kicker. */
+    val kickerLogo: String? = null,
 )
 
 @Immutable
@@ -149,38 +153,100 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         load()
     }
 
+    /**
+     * Home, built from the website's own list of rails.
+     *
+     * The same eighteen sections in the same order, with the same TMDB paths and
+     * the same discover parameters, so the two front pages agree about what is
+     * worth showing and in what order. Where the app differs it differs on
+     * purpose: Trending This Week is the HERO here rather than a rail at the
+     * bottom, and Trending People is left out because a row of faces with no
+     * artwork reads as a gap on a phone.
+     *
+     * Everything is fetched at once and a rail that fails is an empty rail,
+     * never a failed screen, so one 404 cannot take Home down.
+     */
     private fun load() = viewModelScope.launch {
         val region = app.settings.settings.value.region
+        fun browse(title: String, type: String, list: String = "", genre: Int = 0, sort: String = "popularity.desc") =
+            com.cineverse.app.nav.Route.Browse(title, type, list, genre, sort)
 
-        // Everything at once. A rail that fails is an empty rail, never a
-        // failed screen, so one 404 cannot take Home down.
         val trending = async { app.tmdb.trending("all", "week") }
-        val trendingToday = async { app.tmdb.trending("all", "day") }
-        val popularMovies = async { app.tmdb.movies("popular", region = region) }
-        val topMovies = async { app.tmdb.movies("top_rated") }
+        val popMovies = async { app.tmdb.movies("popular", region = region) }
+        val top10Movies = async { app.tmdb.trending("movie", "week") }
+        val popTv = async { app.tmdb.series("popular") }
+        val top10Tv = async { app.tmdb.trending("tv", "week") }
+        val acclaimed = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "sort_by" to "vote_average.desc", "vote_count.gte" to "3000",
+            ))
+        }
         val nowPlaying = async { app.tmdb.movies("now_playing", region = region) }
+        val gems = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "sort_by" to "vote_average.desc",
+                "vote_average.gte" to "7.2",
+                "vote_count.gte" to "200",
+                "vote_count.lte" to "1500",
+            ))
+        }
         val upcoming = async { app.tmdb.movies("upcoming", region = region) }
-        val popularTv = async { app.tmdb.series("popular") }
+        val horror = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "with_genres" to "27", "sort_by" to "popularity.desc", "vote_count.gte" to "150",
+            ))
+        }
+        val comedy = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "with_genres" to "35", "sort_by" to "popularity.desc", "vote_count.gte" to "150",
+            ))
+        }
+        val topRated = async { app.tmdb.movies("top_rated") }
+        val animation = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "with_genres" to "16", "sort_by" to "popularity.desc", "vote_count.gte" to "200",
+            ))
+        }
+        val airing = async { app.tmdb.series("airing_today") }
+        val world = async {
+            app.tmdb.discover(MediaType.Movie, mapOf(
+                "with_original_language" to "ko",
+                "sort_by" to "popularity.desc",
+                "vote_count.gte" to "100",
+            ))
+        }
         val topTv = async { app.tmdb.series("top_rated") }
-        val airingTv = async { app.tmdb.series("on_the_air") }
 
         val heroes = trending.await().filter { it.backdropPath != null }.take(8)
         val rails = buildList {
-            add(Rail("trending_today", "Trending today", items = trendingToday.await()))
-            add(Rail("popular_movies", "Popular films", items = popularMovies.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("Popular films", "movie", "popular")))
-            add(Rail("airing", "On air now", kicker = "Television", items = airingTv.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("On air now", "tv", "on_the_air")))
-            add(Rail("top_movies", "Highest rated films", items = topMovies.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("Highest rated films", "movie", "top_rated")))
-            add(Rail("popular_tv", "Popular series", items = popularTv.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("Popular series", "tv", "popular")))
-            add(Rail("in_cinemas", "In cinemas", kicker = "Near you", items = nowPlaying.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("In cinemas", "movie", "now_playing")))
-            add(Rail("top_tv", "Highest rated series", items = topTv.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("Highest rated series", "tv", "top_rated")))
-            add(Rail("upcoming", "Coming soon", items = upcoming.await(),
-                seeAll = com.cineverse.app.nav.Route.Browse("Coming soon", "movie", "upcoming")))
+            add(Rail("pop_movies", "Popular Movies", items = popMovies.await(),
+                seeAll = browse("Popular Movies", "movie", "popular")))
+            add(Rail("top10", "Top 10 Movies This Week", items = top10Movies.await().take(10),
+                numbered = true))
+            add(Rail("pop_tv", "Popular TV Shows", items = popTv.await(),
+                seeAll = browse("Popular TV Shows", "tv", "popular")))
+            add(Rail("top10_tv", "Top 10 Shows This Week", items = top10Tv.await().take(10),
+                numbered = true))
+            add(Rail("acclaimed", "Critically Acclaimed", items = acclaimed.await(),
+                seeAll = browse("Critically Acclaimed", "movie", sort = "vote_average.desc")))
+            add(Rail("now_playing", "Now Playing", items = nowPlaying.await(),
+                seeAll = browse("Now Playing", "movie", "now_playing")))
+            add(Rail("gems", "Hidden Gems", items = gems.await()))
+            add(Rail("upcoming", "Upcoming Movies", items = upcoming.await(),
+                seeAll = browse("Upcoming Movies", "movie", "upcoming")))
+            add(Rail("horror", "Spine-Chilling Horror", items = horror.await(),
+                seeAll = browse("Spine-Chilling Horror", "movie", genre = 27)))
+            add(Rail("comedy", "Laugh Out Loud", items = comedy.await(),
+                seeAll = browse("Laugh Out Loud", "movie", genre = 35)))
+            add(Rail("top_rated", "Top Rated Movies", items = topRated.await(),
+                seeAll = browse("Top Rated Movies", "movie", "top_rated")))
+            add(Rail("animation", "Animated Favorites", items = animation.await(),
+                seeAll = browse("Animated Favorites", "movie", genre = 16)))
+            add(Rail("airing", "Airing Today", items = airing.await(),
+                seeAll = browse("Airing Today", "tv", "airing_today")))
+            add(Rail("world", "World Cinema", items = world.await()))
+            add(Rail("top_tv", "Top Rated TV", items = topTv.await(),
+                seeAll = browse("Top Rated TV", "tv", "top_rated")))
         }.filter { it.items.isNotEmpty() }
 
         _state.value = _state.value.copy(
@@ -189,9 +255,6 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             loading = false,
             refreshing = false,
         )
-
-        // Recommendations are driven by the library arriving, not by this
-        // function finishing — see the combine above.
     }
 
     /**
@@ -231,9 +294,17 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             )
         }
 
+        val region = app.settings.settings.value.region
         for (seed in profile.seeds.take(2)) {
             val related = app.recommender.becauseOf(seed, library)
             if (related.size >= 6) {
+                // The seed's own title treatment, so the row reads
+                // "Because you're watching [MODERN FAMILY]" rather than naming
+                // it in the app's typeface. The logo is the thing people
+                // recognise; the words above it are the explanation.
+                val logo = runCatching {
+                    app.tmdb.detail(seed.id, seed.type, region).logoPath
+                }.getOrNull()
                 extra += Rail(
                     id = "because_${seed.type.wire}_${seed.id}",
                     title = seed.title,
@@ -243,6 +314,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                         else -> "Because you watched"
                     },
                     items = related,
+                    kickerLogo = logo,
                 )
             }
         }

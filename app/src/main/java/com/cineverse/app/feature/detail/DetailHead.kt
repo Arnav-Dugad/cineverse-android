@@ -139,13 +139,13 @@ fun DetailHead(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(2.dp))
 
         if (detail.logoPath != null) {
             CvLogo(
                 detail.logoPath,
                 detail.title,
-                Modifier.fillMaxWidth(0.86f).height(74.dp),
+                Modifier.fillMaxWidth(0.86f).height(66.dp),
                 align = Alignment.Center,
             )
         } else {
@@ -209,17 +209,23 @@ fun DetailHead(
 
         Spacer(Modifier.height(20.dp))
 
-        // The actions wrap too, so a long "Play Trailer" and five circles never
-        // squeeze each other into unreachable targets on a narrow phone.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        // ONE line, always.
+        //
+        // The wrapping version pushed Share onto a second row by itself, which
+        // looked like a mistake rather than a layout. The trailer button takes
+        // the remaining width instead, so the five targets fit whatever the
+        // phone is: the button shrinks, the circles never do, because a 44dp
+        // target is the floor below which a thumb starts missing.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (detail.trailer != null) {
                 Row(
                     Modifier
-                        .height(50.dp)
+                        .weight(1f)
+                        .height(48.dp)
                         .clip(CvShape.Pill)
                         .background(
                             Brush.horizontalGradient(
@@ -227,20 +233,23 @@ fun DetailHead(
                             )
                         )
                         .clickableNoRipple { haptics?.play(Haptic.Tap); onPlayTrailer() }
-                        .padding(horizontal = 22.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
                 ) {
                     Icon(
                         Icons.Rounded.PlayArrow,
                         null,
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
-                    Spacer(Modifier.width(7.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text(
-                        "Play Trailer",
+                        "Trailer",
                         style = MaterialTheme.typography.labelLarge,
                         color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -403,7 +412,7 @@ private fun ActionCircle(
     )
     Box(
         Modifier
-            .size(50.dp)
+            .size(48.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (active) tint.copy(alpha = 0.14f) else colors.glass)

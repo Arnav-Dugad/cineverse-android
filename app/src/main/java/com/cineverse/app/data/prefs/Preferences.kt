@@ -52,7 +52,7 @@ data class Settings(
     /** The hero's trailer plays by itself. Off by default on mobile data. */
     val autoplay: Boolean = true,
     val autoplayOnWifiOnly: Boolean = true,
-    val posterCaptions: Boolean = true,
+    val posterCaptions: Boolean = false,
     val mature: Boolean = false,
     val matureBlur: Boolean = true,
     val omdbKey: String = "",
@@ -74,6 +74,10 @@ data class Settings(
     val episodeSwipe: Boolean = true,
     /** The live countdown to the next episode on a title page. */
     val countdowns: Boolean = true,
+    /** Names under posters. Off by default: a poster already says what it is. */
+    val posterMeta: Boolean = false,
+    val posterCorner: String = "Rounded",
+    val posterMatch: Boolean = true,
     val updatedAt: Long = 0L,
 ) {
     val adult: Boolean get() = mature
@@ -122,6 +126,9 @@ class SettingsRepository(
         val confetti = booleanPreferencesKey("confetti")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
         val countdowns = booleanPreferencesKey("countdowns")
+        val posterMeta = booleanPreferencesKey("posterMeta")
+        val posterCorner = stringPreferencesKey("posterCorner")
+        val posterMatch = booleanPreferencesKey("posterMatch")
         val notifyReleases = booleanPreferencesKey("notifyReleases")
         val updatedAt = longPreferencesKey("updatedAt")
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
@@ -145,7 +152,7 @@ class SettingsRepository(
         spoilerShield = this[Keys.spoilerShield] ?: false,
         autoplay = this[Keys.autoplay] ?: true,
         autoplayOnWifiOnly = this[Keys.autoplayWifi] ?: true,
-        posterCaptions = this[Keys.posterCaptions] ?: true,
+        posterCaptions = this[Keys.posterCaptions] ?: false,
         mature = this[Keys.mature] ?: false,
         matureBlur = this[Keys.matureBlur] ?: true,
         omdbKey = this[Keys.omdbKey] ?: "",
@@ -160,6 +167,9 @@ class SettingsRepository(
         confetti = this[Keys.confetti] ?: true,
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
         countdowns = this[Keys.countdowns] ?: true,
+        posterMeta = this[Keys.posterMeta] ?: false,
+        posterCorner = this[Keys.posterCorner] ?: "Rounded",
+        posterMatch = this[Keys.posterMatch] ?: true,
         notifyReleases = this[Keys.notifyReleases] ?: true,
         updatedAt = this[Keys.updatedAt] ?: 0L,
     )
@@ -197,6 +207,9 @@ class SettingsRepository(
     suspend fun setConfetti(value: Boolean) = edit { it[Keys.confetti] = value }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
     suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }
+    suspend fun setPosterMeta(value: Boolean) = edit { it[Keys.posterMeta] = value }
+    suspend fun setPosterCorner(value: String) = edit { it[Keys.posterCorner] = value }
+    suspend fun setPosterMatch(value: Boolean) = edit { it[Keys.posterMatch] = value }
 
     suspend fun setNotifyEpisodes(value: Boolean) = edit { it[Keys.notifyEpisodes] = value }
     suspend fun setNotifyReleases(value: Boolean) = edit { it[Keys.notifyReleases] = value }

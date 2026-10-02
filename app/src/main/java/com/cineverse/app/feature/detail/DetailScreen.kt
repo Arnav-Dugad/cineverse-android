@@ -274,6 +274,14 @@ fun DetailScreen(
             alpha = collapsed,
             onBack = onBack,
         )
+
+        // There is more below this. A title page opens on a poster and a row of
+        // buttons, which on a tall phone is the whole first screen and says
+        // nothing about the episode list underneath it.
+        com.cineverse.app.core.ui.ScrollHint(
+            listState = listState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 
     when (sheet) {

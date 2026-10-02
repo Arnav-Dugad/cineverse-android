@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.clickable
@@ -65,6 +67,14 @@ fun SectionHeader(
     modifier: Modifier = Modifier,
     kicker: String? = null,
     count: Int? = null,
+    /**
+     * The title treatment of whatever this row was derived from.
+     *
+     * When there is one it REPLACES the typeset title: "Because you're
+     * watching" over the Modern Family logo says the same thing in the show's
+     * own voice, and printing both would be saying it twice.
+     */
+    titleLogo: String? = null,
     onSeeAll: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
@@ -84,7 +94,16 @@ fun SectionHeader(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleLarge, color = colors.text)
+                if (titleLogo != null) {
+                    CvLogo(
+                        titleLogo,
+                        title,
+                        Modifier.height(34.dp).widthIn(max = 190.dp),
+                        align = Alignment.CenterStart,
+                    )
+                } else {
+                    Text(title, style = MaterialTheme.typography.titleLarge, color = colors.text)
+                }
                 if (count != null && count > 0) {
                     Text(
                         "  $count",
@@ -131,6 +150,9 @@ fun PosterRail(
     modifier: Modifier = Modifier,
     title: String? = null,
     kicker: String? = null,
+    titleLogo: String? = null,
+    /** A Top 10: the position is drawn behind each card. */
+    numbered: Boolean = false,
     onSeeAll: (() -> Unit)? = null,
     cardWidth: Dp = 132.dp,
     showCaption: Boolean = true,
@@ -144,7 +166,7 @@ fun PosterRail(
     if (!loading && items.isEmpty()) return
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            SectionHeader(title, kicker = kicker, onSeeAll = onSeeAll)
+            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, onSeeAll = onSeeAll)
             Spacer(Modifier.height(12.dp))
         }
         if (loading) {
@@ -169,6 +191,36 @@ fun PosterRail(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
+                    if (numbered) {
+                        // The number sits BESIDE the card and is clipped by the
+                        // row, which is what makes a Top 10 read as a chart
+                        // rather than as ten posters with labels. Drawn in the
+                        // page colour with a hairline edge so it reads as cut
+                        // out of the background rather than printed on it.
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                "${index + 1}",
+                                style = MaterialTheme.typography.displayLarge,
+                                color = CvTheme.colors.text.copy(alpha = 0.16f),
+                                modifier = Modifier
+                                    .padding(end = 2.dp)
+                                    .offset(y = 10.dp),
+                            )
+                            PosterCard(
+                                item = item,
+                                onOpen = onOpen,
+                                width = cardWidth,
+                                showCaption = showCaption,
+                                watched = isWatched(item),
+                                saved = isSaved(item),
+                                rating = ratingOf(item),
+                                matchPercent = matchOf(item),
+                                onLongPress = onLongPress,
+                                modifier = Modifier.dealIn(index, revealed),
+                            )
+                        }
+                        return@itemsIndexed
+                    }
                     PosterCard(
                         item = item,
                         onOpen = onOpen,

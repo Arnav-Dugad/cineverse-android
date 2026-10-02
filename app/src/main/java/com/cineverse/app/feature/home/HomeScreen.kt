@@ -134,6 +134,8 @@ fun HomeScreen(
                     items = rail.items,
                     title = rail.title,
                     kicker = rail.kicker,
+                    titleLogo = rail.kickerLogo,
+                    numbered = rail.numbered,
                     onOpen = onOpen,
                     onSeeAll = rail.seeAll?.let { route -> { onBrowse(route) } },
                     isWatched = { library.isWatched(it.key) },
@@ -212,6 +214,9 @@ private fun Hero(
 
     // Is the trailer for the slide now showing actually on screen?
     //
+    // Read by the title block as well as the rotation: the type leans out of
+    // the way once there is something moving behind it.
+    //
     // This drives how long the slide is held, and it had to, because the two
     // numbers were in a race the trailer could not win: the hero advanced every
     // seven seconds while the trailer needed about seven and a half to load,
@@ -234,6 +239,7 @@ private fun Hero(
     }
 
     val item = items[index.coerceIn(items.indices)]
+    val trailerPlaying = trailerVisible
 
     // This slide and the next, so the logo is already there when it turns.
     LaunchedEffect(index, items.size) {
@@ -413,17 +419,22 @@ private fun Hero(
                 .padding(bottom = 26.dp)
                 .fillMaxWidth(),
         ) {
-            Text(
-                "TRENDING NOW",
-                style = KickerStyle,
-                color = Palette.Red2,
-            )
-            Spacer(Modifier.height(8.dp))
             // The treatment where there is one, the typeset name where there is
             // not. It crossfades rather than popping in, because a logo that
             // arrives a beat after the artwork should look like it was always
             // on its way rather than like a correction.
+            //
+            // Once the trailer is actually PLAYING the title shrinks and the
+            // meta line goes, which is the move every streaming hero makes and
+            // for the same reason: the moment there is motion behind the type,
+            // the type is in the way of the thing it was advertising. It is a
+            // transform and a fade, not a relayout, so nothing below it moves.
             val logo = logos[item.key]?.takeIf { it.isNotBlank() }
+            val lean by animateFloatAsState(
+                targetValue = if (trailerPlaying) 1f else 0f,
+                animationSpec = tween(Motion.Slow, easing = Motion.EaseOut),
+                label = "heroLean",
+            )
             Crossfade(
                 targetState = logo,
                 animationSpec = tween(Motion.Slow, easing = Motion.EaseOut),
@@ -435,7 +446,13 @@ private fun Hero(
                         item.title,
                         Modifier
                             .height(84.dp)
-                            .fillMaxWidth(0.78f),
+                            .fillMaxWidth(0.78f)
+                            .graphicsLayer {
+                                val shrink = 1f - 0.34f * lean
+                                scaleX = shrink
+                                scaleY = shrink
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                            },
                     )
                 } else {
                     Text(
@@ -444,6 +461,12 @@ private fun Hero(
                         color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.graphicsLayer {
+                            val shrink = 1f - 0.34f * lean
+                            scaleX = shrink
+                            scaleY = shrink
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                        },
                     )
                 }
             }
@@ -451,6 +474,7 @@ private fun Hero(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.graphicsLayer { alpha = 1f - lean },
             ) {
                 if (item.voteAverage > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
