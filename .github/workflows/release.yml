@@ -87,8 +87,10 @@ jobs:
       - name: Confirm it is actually signed
         run: |
           # A release that installs for nobody is worse than no release.
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --verbose \
-            "${{ steps.apk.outputs.file }}"
+          # The runner carries several build-tools; take the newest, and take
+          # exactly one - a glob here passes the rest in as arguments.
+          SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$SIGNER" verify --verbose "${{ steps.apk.outputs.file }}"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
