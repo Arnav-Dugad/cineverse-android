@@ -93,6 +93,29 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric needs the real resources and the real manifest.
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty(
+                    "robolectric.graphicsMode",
+                    "NATIVE",
+                )
+                // `-Proborazzi.test.record=true` rewrites the references;
+                // without it the task compares against what is checked in.
+                it.systemProperty(
+                    "roborazzi.test.record",
+                    project.findProperty("roborazzi.test.record")?.toString() ?: "false",
+                )
+                it.systemProperty(
+                    "roborazzi.test.verify",
+                    project.findProperty("roborazzi.test.verify")?.toString() ?: "false",
+                )
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -132,6 +155,17 @@ dependencies {
     // a silent no-op rather than an error -- the kind of thing that looks done
     // and is not.
     implementation(libs.androidx.profileinstaller)
+
+    // Screenshot tests. Robolectric renders Compose on the JVM, Roborazzi saves
+    // the pixels -- so these run in CI with no device attached, which is the
+    // only way a screenshot test gets run often enough to be worth having.
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     // The producer. Without this the generate task has no inputs and reports
     // UP-TO-DATE forever, which looks exactly like success.

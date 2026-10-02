@@ -21,11 +21,22 @@ import androidx.compose.ui.unit.sp
  */
 private val Face = FontFamily.Default
 
-/** Figures line up in columns. Applied where numbers are tabulated, not in prose. */
 private val tightLineHeight = LineHeightStyle(
     alignment = LineHeightStyle.Alignment.Center,
     trim = LineHeightStyle.Trim.None,
 )
+
+/**
+ * Tabular figures: every digit the same width.
+ *
+ * Proportional digits are correct in prose and wrong everywhere a number
+ * CHANGES. With the default figures a count-up from 0 to 1,284 reflows on almost
+ * every frame, because a 1 is narrower than an 8 -- the number shivers, and a
+ * row of them shivers out of step. `tnum` fixes the width and the shivering
+ * stops. The same applies to the heatmap grid, a running clock, and any column
+ * of counts that has to line up with the one above it.
+ */
+private const val TabularFigures = "tnum"
 
 private fun style(
     size: Int,
@@ -82,4 +93,8 @@ val NumberStyle = TextStyle(
     fontFamily = Face,
     fontWeight = FontWeight.W700,
     letterSpacing = (-0.2).sp,
+    fontFeatureSettings = TabularFigures,
 )
+
+/** The same, as a modifier on any style a figure happens to be wearing. */
+fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = TabularFigures)

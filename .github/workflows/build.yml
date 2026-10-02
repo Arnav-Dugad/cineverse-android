@@ -20,6 +20,24 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
       - name: Compile and lint
         run: ./gradlew assembleDebug lintDebug --no-daemon
+
+      # The screenshot tests render Compose on the JVM through Robolectric, so
+      # they need no emulator and no device -- which is the only reason they can
+      # run on every push rather than once a month by hand.
+      - name: Check the design system has not drifted
+        run: ./gradlew :app:testDebugUnitTest --no-daemon -Proborazzi.test.verify=true
+
+      # Only useful when the step above failed, which is exactly when you want
+      # to see what changed rather than read a hash mismatch.
+      - name: Upload the differences
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-diffs
+          path: app/build/outputs/roborazzi/**
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Keep the debug APK for a week
         uses: actions/upload-artifact@v4
         with:

@@ -16,6 +16,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Motion
+import com.cineverse.app.core.design.tabular
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -45,7 +46,9 @@ fun CountUpText(
     )
     Text(
         format(if (reduced) value else (value * progress).roundToLong()),
-        style = style,
+        // Tabular, always: a figure that is counting up is a figure whose digits
+        // are changing, which is exactly when proportional ones shiver.
+        style = style.tabular(),
         color = color,
         modifier = modifier.onGloballyPositioned { coordinates ->
             // Any part of it on screen is enough: waiting for the whole figure
@@ -74,7 +77,7 @@ fun CountUpDecimal(
     )
     Text(
         "%.${decimals}f".format(if (reduced) value else value * progress),
-        style = style,
+        style = style.tabular(),
         color = color,
         modifier = modifier.onGloballyPositioned { if (!seen && it.size.height > 0) seen = true },
     )
@@ -126,7 +129,7 @@ fun CountUpString(
     }
     Text(
         value.replaceRange(match.range, rendered),
-        style = style,
+        style = style.tabular(),
         color = color,
         modifier = modifier.onGloballyPositioned { if (!seen && it.size.height > 0) seen = true },
     )
