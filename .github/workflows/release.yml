@@ -25,6 +25,7 @@ jobs:
           # Annotated tag messages are the release notes, and a shallow clone
           # does not carry them.
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Read the notes off the tag
         id: notes
@@ -41,6 +42,20 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BODY=""
           else
+            # The tag OBJECT, not just the ref.
+            #
+            # A tag push gives the runner the commit the tag points at, and a
+            # checkout that has only the ref reads a lightweight tag - whose
+            # contents are the COMMIT message. That is how the first attempt
+            # shipped a release whose notes were the commit that made them,
+            # which is the exact thing this step exists to stop. Fetching the
+            # tag by name brings the annotation with it.
+            git fetch --force --no-tags origin \
+              "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME" || true
+            if [ "$(git cat-file -t "$GITHUB_REF_NAME" 2>/dev/null)" != "tag" ]; then
+              echo "::error::$GITHUB_REF_NAME is not an annotated tag; there are no notes to publish."
+              exit 1
+            fi
             BODY=$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")
           fi
           {
