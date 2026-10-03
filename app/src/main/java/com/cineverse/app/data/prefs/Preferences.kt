@@ -70,6 +70,8 @@ data class Settings(
     val startTab: String = "home",
     /** The burst on a perfect ten. */
     val confetti: Boolean = true,
+    /** Shake the phone on Discover for Surprise me, or on your list to pick from it. */
+    val shakeToPick: Boolean = true,
     /** Swipe an episode row to mark everything up to it. */
     val episodeSwipe: Boolean = true,
     /** The live countdown to the next episode on a title page. */
@@ -126,6 +128,7 @@ class SettingsRepository(
         val gridDensity = stringPreferencesKey("gridDensity")
         val startTab = stringPreferencesKey("startTab")
         val confetti = booleanPreferencesKey("confetti")
+        val shakeToPick = booleanPreferencesKey("shakeToPick")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
         val countdowns = booleanPreferencesKey("countdowns")
         val posterMeta = booleanPreferencesKey("posterMeta")
@@ -168,6 +171,7 @@ class SettingsRepository(
         }.getOrDefault(GridDensity.Comfortable),
         startTab = this[Keys.startTab] ?: "home",
         confetti = this[Keys.confetti] ?: true,
+        shakeToPick = this[Keys.shakeToPick] ?: true,
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
         countdowns = this[Keys.countdowns] ?: true,
         posterMeta = this[Keys.posterMeta] ?: false,
@@ -209,6 +213,7 @@ class SettingsRepository(
     suspend fun setGridDensity(value: GridDensity) = edit { it[Keys.gridDensity] = value.name }
     suspend fun setStartTab(value: String) = edit { it[Keys.startTab] = value }
     suspend fun setConfetti(value: Boolean) = edit { it[Keys.confetti] = value }
+    suspend fun setShakeToPick(value: Boolean) = edit { it[Keys.shakeToPick] = value }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
     suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }
     suspend fun setPosterMeta(value: Boolean) = edit { it[Keys.posterMeta] = value }

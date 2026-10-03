@@ -121,6 +121,21 @@ fun PersonScreen(
                             Spacer(Modifier.height(16.dp))
                             ExpandableText(detail.biography, collapsedLines = 4)
                         }
+                        // How much of their work you have seen, and what is left.
+                        val completion = androidx.compose.runtime.remember(detail, library.watched) {
+                            Completion.of(
+                                detail,
+                                com.cineverse.app.data.franchise.Franchises.watchedFilmIds(library),
+                            )
+                        }
+                        if (completion.total >= 2) {
+                            Spacer(Modifier.height(22.dp))
+                            CompletionPanel(
+                                completion = completion,
+                                onOpen = onOpen,
+                                isSaved = { library.isSaved(it.key) },
+                            )
+                        }
                         Spacer(Modifier.height(22.dp))
                         Text(
                             "${credits.size} TITLES",

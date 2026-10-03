@@ -173,6 +173,8 @@ class AppContainer(private val context: Context) {
 
     val recommender: Recommender by lazy { Recommender(tmdb) }
 
+    val boxOffice by lazy { com.cineverse.app.data.boxoffice.BoxOfficeRepository(tmdb, http) }
+
     /**
      * Bumped once per launch, never on navigation.
      *

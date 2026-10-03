@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Casino
+import androidx.compose.material.icons.rounded.CollectionsBookmark
+import androidx.compose.material.icons.rounded.Paid
 import androidx.compose.material.icons.rounded.LocalMovies
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Theaters
@@ -30,6 +32,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,11 +79,20 @@ fun DiscoverScreen(
     onBrowse: (Route) -> Unit,
     onSurprise: () -> Unit,
     modifier: Modifier = Modifier,
+    shakeToPick: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
+    var shaken by remember { mutableIntStateOf(0) }
+
+    // The website's shake: on this tab, shaking the phone is Surprise me.
+    com.cineverse.app.core.ui.OnShake(shakeToPick) {
+        haptics?.play(Haptic.Celebrate)
+        shaken++
+        onSurprise()
+    }
 
     PullToRefresh(
         refreshing = state.refreshing,
@@ -112,7 +128,7 @@ fun DiscoverScreen(
             }
 
             item(key = "surprise") {
-            SurpriseCard {
+            SurpriseCard(shaken = shaken, shakeHint = shakeToPick) {
                 haptics?.play(Haptic.Celebrate)
                 onSurprise()
             }
@@ -181,6 +197,8 @@ private val destinations = listOf(
     Destination("In cinemas", Icons.Rounded.Theaters, Palette.Gold, Route.Browse("In cinemas", "movie", "now_playing")),
     Destination("Coming soon", Icons.Rounded.Upcoming, Palette.Purple2, Route.Browse("Coming soon", "movie", "upcoming")),
     Destination("Top rated", Icons.Rounded.LocalMovies, Palette.Green2, Route.Browse("Top rated", "movie", "top_rated")),
+    Destination("Franchises", Icons.Rounded.CollectionsBookmark, Palette.Pink, Route.Franchises),
+    Destination("Box office", Icons.Rounded.Paid, Palette.Gold2, Route.BoxOffice),
 )
 
 @Composable
@@ -216,11 +234,21 @@ private fun DestinationCard(destination: Destination, onClick: () -> Unit) {
 
 /** The website's "Surprise me", which on a phone deserves to be a whole card. */
 @Composable
-private fun SurpriseCard(onClick: () -> Unit) {
+private fun SurpriseCard(shaken: Int, shakeHint: Boolean, onClick: () -> Unit) {
+    // A shake makes the card itself shake: a quick damped wobble, so the
+    // gesture visibly landed on the thing it triggered.
+    val wobble = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(shaken) {
+        if (shaken == 0) return@LaunchedEffect
+        for (angle in listOf(-5f, 4.5f, -3.5f, 2.5f, -1.5f, 0f)) {
+            wobble.animateTo(angle, androidx.compose.animation.core.tween(60))
+        }
+    }
     Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
+            .graphicsLayer { rotationZ = wobble.value }
             .height(88.dp)
             .clip(CvShape.XLarge)
             .background(
@@ -236,7 +264,8 @@ private fun SurpriseCard(onClick: () -> Unit) {
             Column {
                 Text("Surprise me", style = MaterialTheme.typography.titleLarge, color = Color.White)
                 Text(
-                    "One title, picked at random from everything you have not seen",
+                    if (shakeHint) "One title you have not seen, at random — or shake your phone"
+                    else "One title, picked at random from everything you have not seen",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xCCFFFFFF),
                     maxLines = 2,

@@ -255,6 +255,12 @@ fun SettingsScreen(
                 checked = settings.confetti,
                 onChange = viewModel::setConfetti,
             )
+                Divider()
+            SwitchRow(
+                title = "Shake to pick",
+                checked = settings.shakeToPick,
+                onChange = viewModel::setShakeToPick,
+            )
             }
         }
 

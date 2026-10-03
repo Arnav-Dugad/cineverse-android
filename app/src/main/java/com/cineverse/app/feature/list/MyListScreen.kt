@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.rounded.Casino
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,8 +67,10 @@ fun MyListScreen(
     onOpen: (MediaItem) -> Unit,
     onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
+    shakeToPick: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf(false) }
     val library by viewModel.library.collectAsStateWithLifecycle()
     var filters by remember { mutableStateOf(false) }
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
@@ -82,6 +85,24 @@ fun MyListScreen(
             modifier = modifier,
         )
         return
+    }
+
+    // What Pick for me chooses from: the list as you are looking at it, filters
+    // and all, minus anything already watched.
+    val pickable = if (state.segment == ListSegment.Watchlist) {
+        state.items.filterNot { library.isWatched(it.key) }
+    } else emptyList()
+    com.cineverse.app.core.ui.OnShake(shakeToPick && pickable.size >= 3 && !picking) {
+        haptics?.play(Haptic.Celebrate)
+        picking = true
+    }
+    if (picking && pickable.isNotEmpty()) {
+        com.cineverse.app.feature.pick.PickSheet(
+            picks = pickable,
+            label = library.lists.firstOrNull { it.id == state.listId }?.name ?: "Your list",
+            onOpen = onOpen,
+            onDismiss = { picking = false },
+        )
     }
 
     Column(modifier.fillMaxSize()) {
@@ -118,6 +139,31 @@ fun MyListScreen(
                             color = if (active) colors.text else colors.text3,
                         )
                     }
+                }
+            }
+            // Pick for me: only where there is a list to pick from.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = pickable.size >= 3,
+                enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut(),
+            ) {
+                Box(
+                    Modifier
+                        .padding(start = 10.dp)
+                        .size(42.dp)
+                        .glass(CvShape.Circle)
+                        .clickableNoRipple {
+                            haptics?.play(Haptic.Select)
+                            picking = true
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Rounded.Casino,
+                        "Pick for me",
+                        tint = colors.text,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         }

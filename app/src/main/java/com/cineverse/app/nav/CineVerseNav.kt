@@ -134,6 +134,10 @@ fun CineVerseNav(
     val peek = com.cineverse.app.feature.sheets.rememberPeekHost(app)
     var rateTarget by remember { mutableStateOf<MediaItem?>(null) }
     val history by app.updates.history.collectAsStateWithLifecycle()
+    val shelf by app.library.library.collectAsStateWithLifecycle()
+    // -1 until the library has loaded, so its arrival is not mistaken for a save.
+    var acknowledgedSaved by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
+    val savedWaiting = if (shelf.loaded) shelf.saved.keys.count { it !in shelf.watched } else -1
     val whatsNew by app.updates.whatsNew.collectAsStateWithLifecycle()
 
     // Anything the app needs to say out loud — an OMDb key that stopped working,
@@ -189,7 +193,10 @@ fun CineVerseNav(
                 CvNavigationBar(
                     current = currentTab,
                     bars = bars,
-                    savedCount = 0,
+                    // Titles saved and not yet watched: the one number worth a tab.
+                    savedCount = savedWaiting,
+                    acknowledgedSaved = acknowledgedSaved,
+                    onAcknowledgeSaved = { acknowledgedSaved = it },
                     onSelect = { tab ->
                         bars.show()
                         navController.navigate(tab.route) {
@@ -258,6 +265,7 @@ fun CineVerseNav(
                         }
                     },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                    shakeToPick = settings.shakeToPick,
                 )
             }
 
@@ -267,6 +275,7 @@ fun CineVerseNav(
                     onOpen = open,
                     onSignIn = { navController.navigate(Route.Auth) },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                    shakeToPick = settings.shakeToPick,
                 )
             }
 
@@ -274,6 +283,9 @@ fun CineVerseNav(
                 StatsScreen(
                     viewModel = cvViewModel("stats") { StatsViewModel(app) },
                     onSignIn = { navController.navigate(Route.Auth) },
+                    onYear = { navController.navigate(Route.YourYear()) },
+                    onCollection = { navController.navigate(Route.Collection(it)) },
+                    onFranchises = { navController.navigate(Route.Franchises) },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 )
             }
@@ -336,6 +348,7 @@ fun CineVerseNav(
                     onShare = { detail ->
                         com.cineverse.app.feature.detail.shareTitle(navController.context, detail)
                     },
+                    onCollection = { navController.navigate(Route.Collection(it)) },
                 )
             }
 
@@ -354,6 +367,52 @@ fun CineVerseNav(
                     viewModel = cvViewModel("person_${route.id}") { PersonViewModel(app, route.id) },
                     onOpen = open,
                     onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.Franchises> {
+                com.cineverse.app.feature.franchise.FranchisesScreen(
+                    viewModel = cvViewModel("franchises") {
+                        com.cineverse.app.feature.franchise.FranchisesViewModel(app)
+                    },
+                    onOpen = open,
+                    onCollection = { navController.navigate(Route.Collection(it)) },
+                    onBack = { navController.popBackStack() },
+                    onSignIn = { navController.navigate(Route.Auth) },
+                )
+            }
+
+            cvComposable<Route.Collection> { entry ->
+                val route: Route.Collection = entry.toRoute()
+                com.cineverse.app.feature.franchise.CollectionScreen(
+                    viewModel = cvViewModel("collection_${route.id}") {
+                        com.cineverse.app.feature.franchise.CollectionViewModel(app, route.id)
+                    },
+                    onOpen = open,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.BoxOffice> {
+                com.cineverse.app.feature.boxoffice.BoxOfficeScreen(
+                    viewModel = cvViewModel("boxoffice") {
+                        com.cineverse.app.feature.boxoffice.BoxOfficeViewModel(app)
+                    },
+                    onOpen = open,
+                    onCollection = { navController.navigate(Route.Collection(it)) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.YourYear> { entry ->
+                val route: Route.YourYear = entry.toRoute()
+                com.cineverse.app.feature.year.YourYearScreen(
+                    viewModel = cvViewModel("year_${route.year}") {
+                        com.cineverse.app.feature.year.YourYearViewModel(app, route.year)
+                    },
+                    onOpen = open,
+                    onBack = { navController.popBackStack() },
+                    onSignIn = { navController.navigate(Route.Auth) },
                 )
             }
 

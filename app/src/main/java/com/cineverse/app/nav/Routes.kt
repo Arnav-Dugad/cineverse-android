@@ -37,6 +37,9 @@ sealed interface Route {
     @Serializable data class Trailer(val key: String, val title: String) : Route
     @Serializable data class Collection(val id: Int) : Route
 
+    /** Your year in films and finished series. Zero means "the sensible one". */
+    @Serializable data class YourYear(val year: Int = 0) : Route
+
     /** A full-screen grid: "Top rated films", a genre, a studio's catalogue. */
     @Serializable data class Browse(
         val title: String,

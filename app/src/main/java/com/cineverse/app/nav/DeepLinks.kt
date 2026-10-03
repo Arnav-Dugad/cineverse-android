@@ -38,6 +38,10 @@ object DeepLinks {
                 "list" -> Route.MyList
                 "continue" -> Route.Home
                 "stats" -> Route.Stats
+                "franchises" -> Route.Franchises
+                "box-office" -> Route.BoxOffice
+                "year" -> Route.YourYear(segments.firstOrNull()?.toIntOrNull() ?: 0)
+                "collection" -> segments.firstOrNull()?.toIntOrNull()?.let { Route.Collection(it) }
                 "movie", "tv" -> segments.firstOrNull()?.toIntOrNull()
                     ?.let { Route.Detail(it, host) }
                 else -> null
@@ -54,6 +58,11 @@ object DeepLinks {
             kind == "search" -> Route.Search
             kind == "watchlist" || kind == "list" -> Route.MyList
             kind == "stats" -> Route.Stats
+            // The website's own paths for the pages the app now has too.
+            kind == "franchises" -> Route.Franchises
+            kind == "box-office" -> Route.BoxOffice
+            kind == "year" -> Route.YourYear(id ?: 0)
+            kind == "collection" && id != null -> Route.Collection(id)
             else -> null
         }
     }

@@ -107,8 +107,10 @@ fun DetailScreen(
     onPlayTrailer: (String, String) -> Unit,
     onShare: (TitleDetail) -> Unit,
     modifier: Modifier = Modifier,
+    onCollection: (Int) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val collection by viewModel.collection.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -218,6 +220,18 @@ fun DetailScreen(
 
             item(key = "providers") {
                 WhereToWatch(detail)
+            }
+
+            collection?.takeIf { it.id == detail.collectionId }?.let { info ->
+                item(key = "collection") {
+                    com.cineverse.app.feature.franchise.CollectionBanner(
+                        info = info,
+                        library = library,
+                        currentId = detail.id,
+                        onClick = { onCollection(info.id) },
+                        modifier = Modifier.padding(horizontal = 18.dp).padding(top = 18.dp),
+                    )
+                }
             }
 
             stickyHeader(key = "tabs") {

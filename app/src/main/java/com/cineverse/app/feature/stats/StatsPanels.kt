@@ -600,7 +600,7 @@ fun FranchisePanelBody(franchises: List<Franchise>, onOpen: (Franchise) -> Unit)
     Column {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(franchises, key = { it.id }) { franchise ->
-                Column(Modifier.width(86.dp)) {
+                Column(Modifier.width(86.dp).clickableNoRipple { onOpen(franchise) }) {
                     Box(
                         Modifier
                             .fillMaxWidth()

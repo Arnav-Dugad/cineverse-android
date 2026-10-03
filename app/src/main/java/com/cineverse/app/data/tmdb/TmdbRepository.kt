@@ -32,6 +32,8 @@ class TmdbRepository(
     private val detailCache = LruCache<String, TitleDetail>(24)
     private val seasonCache = LruCache<String, List<Episode>>(80)
     private val imdbIds = LruCache<String, String>(300)
+    private val collectionCache = LruCache<Int, com.cineverse.app.data.franchise.CollectionInfo>(160)
+    private val moneyCache = LruCache<Int, com.cineverse.app.data.boxoffice.FilmMoney>(600)
     private var movieGenres: List<Genre> = emptyList()
     private var tvGenres: List<Genre> = emptyList()
     private val genreLock = Mutex()
@@ -141,6 +143,72 @@ class TmdbRepository(
                 .sortedBy { it.releaseDate.ifBlank { "9999" } }
         }
     }.getOrDefault("" to emptyList())
+
+    /**
+     * A collection with its own artwork and every part, for the franchise
+     * screens. Kept for the session: a collection's shape changes when a sequel
+     * is announced, not between two screens.
+     */
+    suspend fun collectionInfo(id: Int): com.cineverse.app.data.franchise.CollectionInfo? {
+        if (id <= 0) return null
+        collectionCache[id]?.let { return it }
+        return runCatching {
+            withContext(io) {
+                val dto = api.collection(id)
+                com.cineverse.app.data.franchise.CollectionInfo(
+                    id = dto.id.takeIf { it > 0 } ?: id,
+                    name = dto.name,
+                    overview = dto.overview.orEmpty(),
+                    poster = dto.posterPath,
+                    backdrop = dto.backdropPath,
+                    parts = dto.parts.filter { it.id > 0 }.distinctBy { it.id }.map { part ->
+                        com.cineverse.app.data.franchise.CollectionPart(
+                            id = part.id,
+                            title = (part.title ?: part.name).orEmpty(),
+                            poster = part.posterPath,
+                            backdrop = part.backdropPath,
+                            releaseDate = part.releaseDate.orEmpty(),
+                            vote = part.voteAverage,
+                            voteCount = part.voteCount,
+                            overview = part.overview.orEmpty(),
+                        )
+                    },
+                )
+            }
+        }.getOrNull()?.also { collectionCache.put(id, it) }
+    }
+
+    /**
+     * One film's money and the few facts a box-office row shows. A bare detail
+     * request with nothing appended: the chart reads two hundred of these, and
+     * the full title payload is a hundred times the size.
+     */
+    suspend fun filmMoney(id: Int): com.cineverse.app.data.boxoffice.FilmMoney? {
+        moneyCache[id]?.let { return it }
+        return runCatching {
+            withContext(io) {
+                val dto = api.movie(id, append = "")
+                com.cineverse.app.data.boxoffice.FilmMoney(
+                    id = dto.id,
+                    title = dto.title,
+                    poster = dto.posterPath,
+                    backdrop = dto.backdropPath,
+                    releaseDate = dto.releaseDate.orEmpty(),
+                    revenue = dto.revenue.coerceAtLeast(0),
+                    budget = dto.budget.coerceAtLeast(0),
+                    runtime = dto.runtime ?: 0,
+                    vote = dto.voteAverage,
+                    voteCount = dto.voteCount,
+                    language = dto.originalLanguage.orEmpty(),
+                    countries = dto.countries.map { it.code.uppercase() }.filter { it.isNotBlank() },
+                    collectionId = dto.collection?.id ?: 0,
+                    collectionName = dto.collection?.name.orEmpty(),
+                    collectionPoster = dto.collection?.posterPath,
+                    collectionBackdrop = dto.collection?.backdropPath,
+                )
+            }
+        }.getOrNull()?.also { moneyCache.put(id, it) }
+    }
 
     /**
      * A title's IMDb id, which the outside-scores service needs and a saved

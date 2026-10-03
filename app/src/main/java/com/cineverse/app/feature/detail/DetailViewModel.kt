@@ -94,6 +94,7 @@ class DetailViewModel(
                 )
                 if (detail.isSeries) loadSeason(opening)
                 loadScores(detail)
+                if (detail.collectionId > 0) loadCollection(detail.collectionId)
             }
             .onFailure { error ->
                 if (_state.value.detail == null) {
@@ -104,6 +105,16 @@ class DetailViewModel(
                     )
                 }
             }
+    }
+
+    private val _collection = MutableStateFlow<com.cineverse.app.data.franchise.CollectionInfo?>(null)
+
+    /** The collection a film belongs to, for the "part of" card and its meter. */
+    val collection: StateFlow<com.cineverse.app.data.franchise.CollectionInfo?> = _collection.asStateFlow()
+
+    private fun loadCollection(id: Int) = viewModelScope.launch {
+        if (_collection.value?.id == id) return@launch
+        _collection.value = app.tmdb.collectionInfo(id)
     }
 
     /**

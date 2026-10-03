@@ -17,11 +17,14 @@ reference library attached, and everything in the app follows from that:
 | | |
 |---|---|
 | **Home** | A hero that rotates through what is trending, Continue Watching, and a dozen rails including "because you're watching" |
-| **Discover** | Films, series, in cinemas, coming soon, top rated, six moods, and Surprise me |
+| **Discover** | Films, series, in cinemas, coming soon, top rated, six moods, Surprise me (or shake), Franchises and Box Office |
 | **My List** | Watchlist, what you are in the middle of, and what you have finished — sortable by IMDb |
-| **Stats** | Hours, streaks, twelve weeks of viewing, what you actually watch |
+| **Stats** | Hours, streaks, twelve weeks of viewing, what you actually watch, and **Your year** month by month |
 | **You** | Account, settings, and the updater |
-| **A title** | Collapsing artwork, every score, and **Episodes first** on a series |
+| **A title** | Collapsing artwork, every score, **Episodes first** on a series, and how far through its franchise you are |
+| **Franchises** | Every film series you have started: what is left, what you skipped, roughly how long a finish takes |
+| **Box Office** | The all-time chart and the franchise league, from reported figures only — Indian films in crore too |
+| **A person** | How many of their films you have seen, and the best-rated ones you have not |
 
 The reasoning behind all of that — why nine nav items became five tabs, why the
 episode tick is where it is, what each animation is for — is written down in

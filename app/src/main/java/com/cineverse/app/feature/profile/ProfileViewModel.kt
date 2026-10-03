@@ -51,6 +51,7 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
         viewModelScope.launch { app.settings.setGridDensity(value) }
     fun setStartTab(value: String) = viewModelScope.launch { app.settings.setStartTab(value) }
     fun setConfetti(value: Boolean) = viewModelScope.launch { app.settings.setConfetti(value) }
+    fun setShakeToPick(value: Boolean) = viewModelScope.launch { app.settings.setShakeToPick(value) }
     fun setEpisodeSwipe(value: Boolean) = viewModelScope.launch { app.settings.setEpisodeSwipe(value) }
     fun setPosterMeta(value: Boolean) = viewModelScope.launch { app.settings.setPosterMeta(value) }
     fun setPosterCorner(value: String) = viewModelScope.launch { app.settings.setPosterCorner(value) }

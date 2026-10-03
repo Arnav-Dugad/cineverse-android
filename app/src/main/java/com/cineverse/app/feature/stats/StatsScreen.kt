@@ -26,6 +26,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.animation.core.animateFloat
+import com.cineverse.app.core.ui.clickableNoRipple
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,9 @@ fun StatsScreen(
     viewModel: StatsViewModel,
     onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
+    onYear: () -> Unit = {},
+    onCollection: (Int) -> Unit = {},
+    onFranchises: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val folded by viewModel.sections.collectAsStateWithLifecycle()
@@ -91,6 +97,10 @@ fun StatsScreen(
                     color = colors.text3,
                 )
             }
+        }
+
+        item(key = "year") {
+            YearCard(onYear, Modifier.padding(horizontal = ScreenPadding))
         }
 
         item(key = "figures") {
@@ -240,7 +250,17 @@ fun StatsScreen(
                 onToggle = fold,
                 help = "Collections with two or more films watched. TMDB decides " +
                     "what counts as a collection.",
-            ) { FranchisePanelBody(deep.franchises) {} }
+            ) {
+                Column {
+                    FranchisePanelBody(deep.franchises) { onCollection(it.id) }
+                    Spacer(Modifier.height(14.dp))
+                    com.cineverse.app.core.ui.CvButton(
+                        "Every franchise, and what is left",
+                        onFranchises,
+                        primary = false,
+                    )
+                }
+            }
         }
 
         if (deep.health.isNotEmpty()) item(key = "health") {
@@ -442,6 +462,68 @@ private fun GenreBar(slice: GenreSlice) {
                     .height(6.dp)
                     .clip(CvShape.Pill)
                     .background(Palette.Red2)
+            )
+        }
+    }
+}
+
+/**
+ * The door to Your Year. A light sweeps across it every few seconds — the one
+ * card on the page that leads somewhere rather than reporting something, and
+ * the sweep is how it says so without a button.
+ */
+@Composable
+private fun YearCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val year = java.time.LocalDate.now().year
+    val reduced = CvTheme.reducedMotion
+    val sweep by androidx.compose.animation.core.rememberInfiniteTransition(label = "yearSweep").animateFloat(
+        initialValue = -0.4f,
+        targetValue = 1.4f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(3_600, delayMillis = 1_400, easing = Motion.Standard),
+        ),
+        label = "sweep",
+    )
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(92.dp)
+            .clip(CvShape.XLarge)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Palette.Red, Color(0xFF7C1D6F), Color(0xFF312E81)),
+                )
+            )
+            .drawWithContent {
+                drawContent()
+                if (!reduced) {
+                    val x = size.width * sweep
+                    drawRect(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color.Transparent, Color.White.copy(alpha = 0.18f), Color.Transparent),
+                            start = androidx.compose.ui.geometry.Offset(x - 120f, 0f),
+                            end = androidx.compose.ui.geometry.Offset(x + 120f, size.height),
+                        )
+                    )
+                }
+            }
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 20.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("YOUR YEAR", style = KickerStyle, color = Color.White.copy(alpha = 0.75f))
+                Text(
+                    "$year in films and series",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                )
+            }
+            Text(
+                "$year",
+                style = MaterialTheme.typography.displaySmall,
+                color = Color.White.copy(alpha = 0.22f),
             )
         }
     }

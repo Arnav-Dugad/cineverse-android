@@ -117,9 +117,33 @@ fun CvNavigationBar(
     onSelect: (Tab) -> Unit,
     savedCount: Int = 0,
     modifier: Modifier = Modifier,
+    /**
+     * The count the bar last acknowledged, held by the caller: the bar is not
+     * composed over a title page, so a save made there is bumped on return.
+     */
+    acknowledgedSaved: Int = -1,
+    onAcknowledgeSaved: (Int) -> Unit = {},
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
+    // Saving something bumps the My List tab: a spring that overshoots and
+    // settles, so a save made anywhere is acknowledged by the place it went.
+    val bump = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    val still = CvTheme.reducedMotion
+    androidx.compose.runtime.LaunchedEffect(savedCount) {
+        // Only a rise from a known count is a save; -1 means "not loaded yet".
+        val grew = acknowledgedSaved >= 0 && savedCount > acknowledgedSaved
+        onAcknowledgeSaved(savedCount)
+        if (grew && !still) {
+            // Let a returning page finish arriving before the tab reacts.
+            kotlinx.coroutines.delay(220)
+            bump.snapTo(1f)
+            bump.animateTo(
+                0f,
+                androidx.compose.animation.core.spring(dampingRatio = 0.32f, stiffness = 260f),
+            )
+        }
+    }
     // Driven by the scroll position rather than by a visibility flag, so the
     // bar tracks the finger. The spring only does the settling at the end of a
     // gesture, which is the one moment a spring belongs here.
@@ -192,7 +216,8 @@ fun CvNavigationBar(
                                     selected = selected,
                                     color = if (selected) colors.text else colors.text3,
                                     modifier = Modifier.graphicsLayer {
-                                        if (!reduced) { scaleX = scale; scaleY = scale }
+                                        val pop = if (tab == Tab.MyList) bump.value * 0.28f else 0f
+                                        if (!reduced) { scaleX = scale + pop; scaleY = scale + pop }
                                     },
                                 )
                                 // The count of titles waiting for you, which is
