@@ -1,17 +1,6 @@
 package com.cineverse.app.nav
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bookmarks
-import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.InsertChart
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.InsertChart
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.ui.graphics.vector.ImageVector
+import com.cineverse.app.core.ui.TabGlyph
 import com.cineverse.app.data.model.MediaType
 import kotlinx.serialization.Serializable
 
@@ -70,12 +59,11 @@ sealed interface Route {
 enum class Tab(
     val route: Route,
     val label: String,
-    val selectedIcon: ImageVector,
-    val icon: ImageVector,
+    val glyph: TabGlyph,
 ) {
-    Home(Route.Home, "Home", Icons.Rounded.Home, Icons.Outlined.Home),
-    Discover(Route.Discover, "Discover", Icons.Rounded.Explore, Icons.Outlined.Explore),
-    MyList(Route.MyList, "My List", Icons.Rounded.Bookmarks, Icons.Outlined.Bookmarks),
-    Stats(Route.Stats, "Stats", Icons.Rounded.InsertChart, Icons.Outlined.InsertChart),
-    Profile(Route.Profile, "You", Icons.Rounded.Person, Icons.Outlined.Person),
+    Home(Route.Home, "Home", TabGlyph.Home),
+    Discover(Route.Discover, "Discover", TabGlyph.Discover),
+    MyList(Route.MyList, "My List", TabGlyph.List),
+    Stats(Route.Stats, "Stats", TabGlyph.Stats),
+    Profile(Route.Profile, "You", TabGlyph.Person),
 }

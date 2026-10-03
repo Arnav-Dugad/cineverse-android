@@ -1,6 +1,7 @@
 package com.cineverse.app.core.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -185,55 +186,62 @@ fun PosterRail(
             val state = rememberSaveable(title ?: "rail", saver = LazyListState.Saver) {
                 LazyListState()
             }
-            LazyRow(
-                state = state,
-                contentPadding = PaddingValues(horizontal = ScreenPadding),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
-                    if (numbered) {
-                        // The number sits BESIDE the card and is clipped by the
-                        // row, which is what makes a Top 10 read as a chart
-                        // rather than as ten posters with labels. Drawn in the
-                        // page colour with a hairline edge so it reads as cut
-                        // out of the background rather than printed on it.
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                "${index + 1}",
-                                style = MaterialTheme.typography.displayLarge,
-                                color = CvTheme.colors.text.copy(alpha = 0.16f),
-                                modifier = Modifier
-                                    .padding(end = 2.dp)
-                                    .offset(y = 10.dp),
-                            )
-                            PosterCard(
-                                item = item,
-                                onOpen = onOpen,
-                                width = cardWidth,
-                                showCaption = showCaption,
-                                watched = isWatched(item),
-                                saved = isSaved(item),
-                                rating = ratingOf(item),
-                                matchPercent = matchOf(item),
-                                onLongPress = onLongPress,
-                                modifier = Modifier.dealIn(index, revealed).railDepth(),
-                            )
+            // The row is wrapped so the fade at its right-hand edge can sit
+            // over it. The fade is a background only - it has no pointer input,
+            // so it is not a hit target and the card beneath it still takes the
+            // tap, which is the whole reason it can be allowed to cover one.
+            Box {
+                LazyRow(
+                    state = state,
+                    contentPadding = PaddingValues(horizontal = ScreenPadding),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
+                        if (numbered) {
+                            // The number sits BESIDE the card and is clipped by the
+                            // row, which is what makes a Top 10 read as a chart
+                            // rather than as ten posters with labels. Drawn in the
+                            // page colour with a hairline edge so it reads as cut
+                            // out of the background rather than printed on it.
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    "${index + 1}",
+                                    style = MaterialTheme.typography.displayLarge,
+                                    color = CvTheme.colors.text.copy(alpha = 0.16f),
+                                    modifier = Modifier
+                                        .padding(end = 2.dp)
+                                        .offset(y = 10.dp),
+                                )
+                                PosterCard(
+                                    item = item,
+                                    onOpen = onOpen,
+                                    width = cardWidth,
+                                    showCaption = showCaption,
+                                    watched = isWatched(item),
+                                    saved = isSaved(item),
+                                    rating = ratingOf(item),
+                                    matchPercent = matchOf(item),
+                                    onLongPress = onLongPress,
+                                    modifier = Modifier.dealIn(index, revealed).railDepth(),
+                                )
+                            }
+                            return@itemsIndexed
                         }
-                        return@itemsIndexed
+                        PosterCard(
+                            item = item,
+                            onOpen = onOpen,
+                            width = cardWidth,
+                            showCaption = showCaption,
+                            watched = isWatched(item),
+                            saved = isSaved(item),
+                            rating = ratingOf(item),
+                            matchPercent = matchOf(item),
+                            onLongPress = onLongPress,
+                            modifier = Modifier.dealIn(index, revealed).railDepth(),
+                        )
                     }
-                    PosterCard(
-                        item = item,
-                        onOpen = onOpen,
-                        width = cardWidth,
-                        showCaption = showCaption,
-                        watched = isWatched(item),
-                        saved = isSaved(item),
-                        rating = ratingOf(item),
-                        matchPercent = matchOf(item),
-                        onLongPress = onLongPress,
-                        modifier = Modifier.dealIn(index, revealed).railDepth(),
-                    )
                 }
+                EdgeHint(state)
             }
         }
     }

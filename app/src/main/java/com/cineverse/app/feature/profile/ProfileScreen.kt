@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,8 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +52,7 @@ import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.design.ThemeChoice
 import com.cineverse.app.core.ui.glass
+import com.cineverse.app.core.ui.stage
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
@@ -90,6 +94,9 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .padding(horizontal = ScreenPadding, vertical = 10.dp)
                     .glass(CvShape.XLarge)
+                    // Drawn INSIDE the card's clip, so the wash can never show
+                    // an edge of its own.
+                    .stage(Palette.Red, alpha = 0.12f, origin = Offset(0.1f, 0.5f), spread = 0.62f)
                     .clickableNoRipple { if (user == null) onSignIn() }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -157,38 +164,41 @@ fun ProfileScreen(
             }
         }
 
+        // Settings sits alone, because it is the one row here that leads
+        // somewhere large. Pairing it with the two app rows beneath would say
+        // they are the same kind of thing, and they are not.
         item(key = "settings") {
-            NavRow(
-                icon = Icons.Rounded.Tune,
-                title = "Settings",
-                detail = "",
-                onClick = { haptics?.play(Haptic.Tap); onOpenSettings() },
-            )
+            SettingsCard {
+                NavRow(
+                    icon = Icons.Rounded.Tune,
+                    title = "Settings",
+                    detail = "",
+                    onClick = { haptics?.play(Haptic.Tap); onOpenSettings() },
+                )
+            }
         }
 
-        item(key = "app") { GroupHeading("App") }
-
-        item(key = "update") {
-            NavRow(
-                icon = Icons.Rounded.Download,
-                title = "Check for updates",
-                detail = when (val value = update) {
-                    is UpdateState.Available -> "Version ${value.release.versionName} is ready"
-                    is UpdateState.Downloading -> "Downloading ${(value.fraction * 100).toInt()}%"
-                    UpdateState.UpToDate -> "Up to date"
-                    else -> viewModel.currentVersion
-                },
-                tint = if (update is UpdateState.Available) Palette.Red2 else null,
-                onClick = { haptics?.play(Haptic.Tap); onOpenUpdate() },
-            )
-        }
-
-        item(key = "notes") {
-            NavRow(
-                icon = Icons.Rounded.Description,
-                title = "Release notes",
-                onClick = { haptics?.play(Haptic.Tap); onOpenReleaseNotes() },
-            )
+        item(key = "app") {
+            SettingsGroup("App") {
+                NavRow(
+                    icon = Icons.Rounded.Download,
+                    title = "Check for updates",
+                    detail = when (val value = update) {
+                        is UpdateState.Available -> "Version ${value.release.versionName} is ready"
+                        is UpdateState.Downloading -> "Downloading ${(value.fraction * 100).toInt()}%"
+                        UpdateState.UpToDate -> "Up to date"
+                        else -> viewModel.currentVersion
+                    },
+                    tint = if (update is UpdateState.Available) Palette.Red2 else null,
+                    onClick = { haptics?.play(Haptic.Tap); onOpenUpdate() },
+                )
+                Divider()
+                NavRow(
+                    icon = Icons.Rounded.Description,
+                    title = "Release notes",
+                    onClick = { haptics?.play(Haptic.Tap); onOpenReleaseNotes() },
+                )
+            }
         }
 
         // Only when there is something to show. A permanent "Crash reports (0)"
@@ -196,24 +206,11 @@ fun ProfileScreen(
         val crashes: List<com.cineverse.app.core.crash.CrashReport> = viewModel.crashes
         if (crashes.isNotEmpty()) {
             item(key = "crashes") {
-                Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
-                    Text(
-                        "Crash reports",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.text,
-                    )
-                    Text(
-                        "${crashes.size} on this phone, none sent",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.text3,
-                    )
-                    Spacer(Modifier.height(12.dp))
+                SettingsGroup("Crashes") {
                     for (report in crashes.take(3).toList()) {
                         Column(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp)
-                                .glass(CvShape.Medium, raised = false)
                                 .clickableNoRipple {
                                     haptics?.play(Haptic.Tap)
                                     runCatching {
@@ -225,7 +222,7 @@ fun ProfileScreen(
                                         )
                                     }
                                 }
-                                .padding(13.dp)
+                                .padding(horizontal = 16.dp, vertical = 13.dp)
                         ) {
                             Text(
                                 report.summary,
@@ -240,17 +237,19 @@ fun ProfileScreen(
                                 color = Palette.Red2,
                             )
                         }
+                        Divider()
                     }
                     Text(
-                        "Delete",
-                        style = MaterialTheme.typography.labelMedium,
+                        "Clear",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = colors.text3,
                         modifier = Modifier
-                            .padding(top = 4.dp)
+                            .fillMaxWidth()
                             .clickableNoRipple {
                                 haptics?.play(Haptic.Untick)
                                 viewModel.clearCrashes()
-                            },
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                     )
                 }
             }
@@ -258,20 +257,30 @@ fun ProfileScreen(
 
         if (user != null) {
             item(key = "signout") {
-                Text(
-                    "Sign out",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Palette.Red2,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickableNoRipple { haptics?.play(Haptic.Warning); viewModel.signOut() }
-                        .padding(horizontal = ScreenPadding, vertical = 18.dp),
-                )
+                SettingsCard {
+                    Text(
+                        "Sign out",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Palette.Red2,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickableNoRipple {
+                                haptics?.play(Haptic.Warning); viewModel.signOut()
+                            }
+                            .padding(vertical = 15.dp),
+                    )
+                }
             }
         }
 
         item(key = "about") {
-            Column(Modifier.padding(horizontal = ScreenPadding, vertical = 24.dp)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ScreenPadding, vertical = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
                     "CineVerse ${viewModel.currentVersion}",
                     style = MaterialTheme.typography.labelMedium,
@@ -280,16 +289,27 @@ fun ProfileScreen(
                 Text(
                     "TMDB \u00b7 IMDb \u00b7 Rotten Tomatoes \u00b7 Metacritic",
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.text3,
+                    color = colors.text3.copy(alpha = 0.7f),
                 )
                 Text(
                     "Arnav Dugad",
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.text3,
-                    modifier = Modifier.padding(top = 4.dp),
+                    color = colors.text3.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 5.dp),
                 )
             }
         }
     }
 }
 
+/** A group with nothing above it, for a card that needs no name. */
+@Composable
+private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .padding(horizontal = ScreenPadding)
+            .padding(bottom = 22.dp)
+            .glass(CvShape.XLarge),
+        content = content,
+    )
+}

@@ -42,6 +42,9 @@ import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.PaneEdge
+import com.cineverse.app.core.ui.TabIcon
+import com.cineverse.app.core.ui.glassPane
 
 /**
  * The bottom bar hides on the way down and comes back on the way up.
@@ -140,7 +143,9 @@ fun CvNavigationBar(
         // poster captions legible straight through the labels, because the top
         // of that gradient is where the icons are. A row of text behind a row of
         // labels is the single ugliest thing a bottom bar can do, so the ramp
-        // happens in its own strip and the bar itself sits on solid page colour.
+        // happens in its own strip and the bar itself is a glass pane holding
+        // most of the page colour - lit along its top edge, where the content
+        // meets it.
         Column {
             Box(
                 Modifier
@@ -148,14 +153,18 @@ fun CvNavigationBar(
                     .height(44.dp)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, colors.ink.copy(alpha = 0.92f), colors.ink)
+                            0f to Color.Transparent,
+                            0.7f to colors.ink.copy(alpha = 0.62f),
+                            1f to colors.ink.copy(alpha = 0.92f),
                         )
                     )
             )
             NavigationBar(
-                containerColor = colors.ink,
+                containerColor = Color.Transparent,
                 tonalElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassPane(PaneEdge.Top, colors.ink, opacity = 0.975f),
             ) {
                 for (tab in Tab.entries) {
                     val selected = tab == current
@@ -167,7 +176,7 @@ fun CvNavigationBar(
                         },
                         icon = {
                             val scale by animateFloatAsState(
-                                targetValue = if (selected) 1f else 0.92f,
+                                targetValue = if (selected) 1f else 0.94f,
                                 animationSpec = Motion.lively(),
                                 label = "tab",
                             )
@@ -175,14 +184,16 @@ fun CvNavigationBar(
                             // on the draw pass, where composition locals are not.
                             val reduced = CvTheme.reducedMotion
                             Box {
-                                Icon(
-                                    if (selected) tab.selectedIcon else tab.icon,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .graphicsLayer {
-                                            if (!reduced) { scaleX = scale; scaleY = scale }
-                                        },
+                                // Drawn, not glyphed: it fills from the foot up
+                                // as it becomes the tab you are on, which is the
+                                // same transition the whole icon set uses.
+                                TabIcon(
+                                    glyph = tab.glyph,
+                                    selected = selected,
+                                    color = if (selected) colors.text else colors.text3,
+                                    modifier = Modifier.graphicsLayer {
+                                        if (!reduced) { scaleX = scale; scaleY = scale }
+                                    },
                                 )
                                 // The count of titles waiting for you, which is
                                 // the one number worth putting on a tab.
@@ -205,7 +216,9 @@ fun CvNavigationBar(
                             selectedTextColor = colors.text,
                             unselectedIconColor = colors.text3,
                             unselectedTextColor = colors.text3,
-                            indicatorColor = colors.glassStrong,
+                            // Softer than the panels: an indicator as bright
+                            // as a card competes with the icon inside it.
+                            indicatorColor = colors.text.copy(alpha = 0.07f),
                         ),
                     )
                 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -164,8 +165,8 @@ fun androidx.compose.foundation.layout.BoxScope.EdgeHint(listState: androidx.com
     ) {
         Box(
             Modifier
-                .width(42.dp)
-                .height(200.dp)
+                .width(46.dp)
+                .fillMaxHeight()
                 .background(
                     Brush.horizontalGradient(
                         listOf(Color.Transparent, colors.ink.copy(alpha = 0.85f))

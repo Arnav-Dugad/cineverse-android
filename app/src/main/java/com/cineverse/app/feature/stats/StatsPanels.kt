@@ -35,6 +35,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cineverse.app.core.design.CvShape
+import androidx.compose.ui.geometry.Offset
+import com.cineverse.app.core.ui.AnimatedStar
+import com.cineverse.app.core.ui.stage
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
@@ -637,7 +640,22 @@ fun TrophyPanelBody(trophies: List<Trophy>) {
     Column {
         for (trophy in trophies) {
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .clip(CvShape.Large)
+                    // An earned trophy sits in a pool of its own gold, thrown
+                    // from the medal at the left. Nothing is added to a row
+                    // that is still in progress, because then the light is
+                    // decoration rather than the reward.
+                    .then(
+                        if (trophy.earned) Modifier.stage(
+                            colors.gold,
+                            alpha = 0.085f,
+                            origin = Offset(0.04f, 0.5f),
+                            spread = 0.5f,
+                        ) else Modifier
+                    )
+                    .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -650,12 +668,18 @@ fun TrophyPanelBody(trophies: List<Trophy>) {
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        if (trophy.earned) "★" else "${(trophy.progress * 100).toInt()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (trophy.earned) colors.gold else colors.text3,
-                        textAlign = TextAlign.Center,
-                    )
+                    if (trophy.earned) {
+                        // Drawn, so it fills the moment the trophy is earned
+                        // while you are looking at the page.
+                        AnimatedStar(filled = true, color = colors.gold, size = 17.dp)
+                    } else {
+                        Text(
+                            "${(trophy.progress * 100).toInt()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.text3,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {

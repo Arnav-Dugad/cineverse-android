@@ -404,7 +404,7 @@ fun SettingsScreen(
  * anyone finds pleasant has always worked.
  */
 @Composable
-private fun SettingsGroup(
+internal fun SettingsGroup(
     title: String,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
@@ -422,7 +422,7 @@ private fun SettingsGroup(
 
 /** The hairline between two rows, inset so it does not touch the card edge. */
 @Composable
-private fun Divider() {
+internal fun Divider() {
     androidx.compose.foundation.layout.Box(
         Modifier
             .fillMaxWidth()
