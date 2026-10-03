@@ -95,7 +95,19 @@ fun AnimatedCheck(
             lineTo(10f * unit, 17.5f * unit)
             lineTo(19f * unit, 6.5f * unit)
         }
-        drawTrace(path, progress, color, strokeWidthFor(size))
+        val stroke = strokeWidthFor(size)
+        // A GHOST of the finished shape underneath, so the control is visible
+        // when it is off. Without it an un-ticked button is an empty circle,
+        // which on the peek sheet read as a rendering fault rather than as a
+        // thing to press. It fades out as the real stroke draws over it.
+        if (progress < 0.999f) {
+            drawPath(
+                path,
+                color = color.copy(alpha = 0.26f * (1f - progress)),
+                style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
+        }
+        drawTrace(path, progress, color, stroke)
     }
 }
 

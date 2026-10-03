@@ -216,7 +216,7 @@ fun PosterRail(
                                 rating = ratingOf(item),
                                 matchPercent = matchOf(item),
                                 onLongPress = onLongPress,
-                                modifier = Modifier.dealIn(index, revealed),
+                                modifier = Modifier.dealIn(index, revealed).railDepth(),
                             )
                         }
                         return@itemsIndexed
@@ -231,7 +231,7 @@ fun PosterRail(
                         rating = ratingOf(item),
                         matchPercent = matchOf(item),
                         onLongPress = onLongPress,
-                        modifier = Modifier.dealIn(index, revealed),
+                        modifier = Modifier.dealIn(index, revealed).railDepth(),
                     )
                 }
             }

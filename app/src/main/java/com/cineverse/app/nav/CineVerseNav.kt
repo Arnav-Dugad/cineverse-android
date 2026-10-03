@@ -128,6 +128,11 @@ fun CineVerseNav(
     var loadingHistory by remember { mutableStateOf(false) }
     val update by app.updates.state.collectAsStateWithLifecycle()
     val settings by app.settings.settings.collectAsStateWithLifecycle()
+    // One peek for the whole app. Hosted here rather than inside a screen,
+    // because a sheet raised from inside a LazyRow item dies the moment that
+    // item scrolls out of the composition.
+    val peek = com.cineverse.app.feature.sheets.rememberPeekHost(app)
+    var rateTarget by remember { mutableStateOf<MediaItem?>(null) }
     val history by app.updates.history.collectAsStateWithLifecycle()
     val whatsNew by app.updates.whatsNew.collectAsStateWithLifecycle()
 
@@ -236,7 +241,7 @@ fun CineVerseNav(
                     onContinue = { row ->
                         navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
                     },
-                    onQuickActions = open,
+                    onPeek = peek::open,
                     contentPadding = padding,
                 )
             }
@@ -364,6 +369,27 @@ fun CineVerseNav(
         }
         }
         }
+    }
+
+    com.cineverse.app.feature.sheets.PeekHostSheet(
+        app = app,
+        host = peek,
+        onOpen = { item -> navController.navigate(Route.Detail(item.id, item.type.wire)) },
+        onRate = { item -> rateTarget = item },
+    )
+
+    rateTarget?.let { target ->
+        val library by app.library.library.collectAsStateWithLifecycle()
+        com.cineverse.app.feature.sheets.RatingSheet(
+            title = target.title,
+            current = library.ratingOf(target.key),
+            celebrate = settings.confetti,
+            onSave = { value ->
+                scope.launch { app.library.setRating(target.key, value, target.title) }
+            },
+            onClear = { scope.launch { app.library.setRating(target.key, 0) } },
+            onDismiss = { rateTarget = null },
+        )
     }
 
     if (showUpdate) {

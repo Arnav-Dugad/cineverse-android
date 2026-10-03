@@ -95,7 +95,7 @@ fun HomeScreen(
     onOpen: (MediaItem) -> Unit,
     onBrowse: (Route) -> Unit,
     onContinue: (ContinueRow) -> Unit,
-    onQuickActions: (MediaItem) -> Unit,
+    onPeek: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
@@ -158,7 +158,7 @@ fun HomeScreen(
                     isSaved = { library.isSaved(it.key) },
                     ratingOf = { library.ratingOf(it.key) },
                     matchOf = { rail.match[it.key] ?: 0 },
-                    onLongPress = onQuickActions,
+                    onLongPress = onPeek,
                 )
             }
 

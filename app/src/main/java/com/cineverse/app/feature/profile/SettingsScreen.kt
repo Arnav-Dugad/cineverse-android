@@ -81,45 +81,38 @@ fun SettingsScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 48.dp),
         ) {
-        item(key = "look") { GroupHeading("Look") }
-
-        item(key = "theme") {
+        item(key = "group_appearance") {
+            SettingsGroup("Appearance") {
             ChoiceRow(
                 title = "Theme",
                 options = ThemeChoice.entries.map { it.name },
                 selected = settings.theme.name,
                 onSelect = { viewModel.setTheme(ThemeChoice.valueOf(it)) },
             )
-        }
-
-        item(key = "dynamic") {
+                Divider()
             SwitchRow(
                 title = "Match my wallpaper",
-                detail = "Take the accent colour from Android's theme instead of CineVerse red.",
                 checked = settings.dynamicColor,
                 onChange = viewModel::setDynamicColor,
             )
-        }
-
-        item(key = "motion") {
+                Divider()
             ChoiceRow(
                 title = "Motion",
                 options = MotionChoice.entries.map { it.name },
                 selected = settings.motion.name,
                 onSelect = { viewModel.setMotion(MotionChoice.valueOf(it)) },
             )
-        }
-
-        item(key = "haptics") {
+                Divider()
             SwitchRow(
                 title = "Haptics",
-                detail = "Every tick, swipe and milestone has its own feel.",
                 checked = settings.haptics,
                 onChange = viewModel::setHaptics,
             )
+            }
         }
 
-        item(key = "density") {
+        item(key = "group_posters") {
+            SettingsGroup("Posters") {
             ChoiceRow(
                 title = "Poster size",
                 options = com.cineverse.app.data.prefs.GridDensity.entries.map { it.label },
@@ -130,27 +123,20 @@ fun SettingsScreen(
                         ?.let(viewModel::setGridDensity)
                 },
             )
-        }
-
-        item(key = "captions") {
+                Divider()
             SwitchRow(
                 title = "Titles under posters",
                 checked = settings.posterCaptions,
                 onChange = viewModel::setPosterCaptions,
             )
-        }
-
-        item(key = "posterMeta") {
+                Divider()
             SwitchRow(
                 title = "Year and type under posters",
-                detail = "Adds \"2020 · Series\" beneath the name.",
                 checked = settings.posterMeta,
                 onChange = viewModel::setPosterMeta,
                 enabled = settings.posterCaptions,
             )
-        }
-
-        item(key = "corner") {
+                Divider()
             ChoiceRow(
                 title = "Poster corners",
                 options = com.cineverse.app.core.ui.PosterCorner.entries.map { it.label },
@@ -163,41 +149,35 @@ fun SettingsScreen(
                         ?.let { viewModel.setPosterCorner(it.name) }
                 },
             )
-        }
-
-        item(key = "titleLogos") {
+                Divider()
             SwitchRow(
                 title = "Title artwork",
                 checked = settings.titleLogos,
                 onChange = viewModel::setTitleLogos,
             )
-        }
-
-        item(key = "match") {
+                Divider()
             SwitchRow(
                 title = "Match percentage",
                 checked = settings.posterMatch,
                 onChange = viewModel::setPosterMatch,
             )
-        }
-
-        item(key = "showRatings") {
+                Divider()
             SwitchRow(
                 title = "Ratings on posters",
                 checked = settings.showRatings,
                 onChange = viewModel::setShowRatings,
             )
-        }
-
-        item(key = "showWatched") {
+                Divider()
             SwitchRow(
                 title = "Mark what you have seen",
                 checked = settings.showWatched,
                 onChange = viewModel::setShowWatched,
             )
+            }
         }
 
-        item(key = "startTab") {
+        item(key = "group_start") {
+            SettingsGroup("Start") {
             ChoiceRow(
                 title = "Open on",
                 options = listOf("Home", "Discover", "My List", "Stats"),
@@ -218,44 +198,37 @@ fun SettingsScreen(
                     )
                 },
             )
+            }
         }
 
-        item(key = "watching") { GroupHeading("Watching") }
 
-        item(key = "spoilers") {
+        item(key = "group_watching") {
+            SettingsGroup("Watching") {
             SwitchRow(
                 title = "Hide episode spoilers",
                 checked = settings.spoilerShield,
                 onChange = viewModel::setSpoilerShield,
             )
-        }
-
-        item(key = "autoplay") {
+                Divider()
             SwitchRow(
                 title = "Autoplay trailers",
                 checked = settings.autoplay,
                 onChange = viewModel::setAutoplay,
             )
-        }
-
-        item(key = "wifi") {
+                Divider()
             SwitchRow(
                 title = "Only on Wi-Fi",
                 checked = settings.autoplayOnWifiOnly,
                 onChange = viewModel::setAutoplayWifi,
                 enabled = settings.autoplay,
             )
-        }
-
-        item(key = "heroAuto") {
+                Divider()
             SwitchRow(
                 title = "Hero moves by itself",
                 checked = settings.heroAutoAdvance,
                 onChange = viewModel::setHeroAutoAdvance,
             )
-        }
-
-        item(key = "heroSeconds") {
+                Divider()
             StepperRow(
                 title = "Seconds per slide",
                 value = settings.heroSeconds,
@@ -264,35 +237,29 @@ fun SettingsScreen(
                 enabled = settings.heroAutoAdvance,
                 onChange = viewModel::setHeroSeconds,
             )
-        }
-
-        item(key = "countdowns") {
+                Divider()
             SwitchRow(
                 title = "Countdown to the next episode",
                 checked = settings.countdowns,
                 onChange = viewModel::setCountdowns,
             )
-        }
-
-        item(key = "episodeSwipe") {
+                Divider()
             SwitchRow(
                 title = "Swipe an episode to catch up",
                 checked = settings.episodeSwipe,
                 onChange = viewModel::setEpisodeSwipe,
             )
-        }
-
-        item(key = "confetti") {
+                Divider()
             SwitchRow(
                 title = "Celebrate a perfect ten",
                 checked = settings.confetti,
                 onChange = viewModel::setConfetti,
             )
+            }
         }
 
-        item(key = "content") { GroupHeading("Content") }
-
-        item(key = "region") {
+        item(key = "group_content") {
+            SettingsGroup("Content") {
             ChoiceRow(
                 title = "Region",
                 options = REGIONS.map { it.second },
@@ -302,17 +269,13 @@ fun SettingsScreen(
                     REGIONS.firstOrNull { it.second == label }?.let { viewModel.setRegion(it.first) }
                 },
             )
-        }
-
-        item(key = "mature") {
+                Divider()
             SwitchRow(
                 title = "Include adult titles",
                 checked = settings.mature,
                 onChange = viewModel::setMature,
             )
-        }
-
-        item(key = "matureBlur") {
+                Divider()
             SwitchRow(
                 title = "Blur adult artwork",
                 detail = "Covers artwork until tapped",
@@ -320,34 +283,23 @@ fun SettingsScreen(
                 onChange = viewModel::setMatureBlur,
                 enabled = settings.mature,
             )
+            }
         }
 
-        item(key = "notify") { GroupHeading("Notify") }
-
-        item(key = "episodes") {
+        item(key = "group_notify") {
+            SettingsGroup("Notify") {
             SwitchRow(
                 title = "New episodes",
                 checked = settings.notifyNewEpisodes,
                 onChange = viewModel::setNotifyEpisodes,
             )
-        }
-
-        item(key = "releases") {
+                Divider()
             SwitchRow(
                 title = "Releases",
                 checked = settings.notifyReleases,
                 onChange = viewModel::setNotifyReleases,
             )
-        }
-
-        // Asked FOR, not asked at launch.
-        //
-        // A permission prompt in the first five seconds of an app, before it has
-        // shown anything worth being notified about, is the prompt people deny
-        // by reflex and never revisit. This one sits under the two toggles it
-        // belongs to, so it is requested by someone who has just said they want
-        // the thing it enables.
-        item(key = "notifyPermission") {
+                Divider()
             val granted = com.cineverse.app.notify.Notifications.canPost(context)
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
@@ -358,7 +310,7 @@ fun SettingsScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = ScreenPadding, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .clip(CvShape.Medium)
                         .background(Palette.Red2.copy(alpha = 0.12f))
                         .clickableNoRipple {
@@ -388,9 +340,7 @@ fun SettingsScreen(
                     )
                 }
             }
-        }
-
-        item(key = "checkNow") {
+                Divider()
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -399,7 +349,7 @@ fun SettingsScreen(
                         com.cineverse.app.notify.WatchWorker.runNow(context)
                         viewModel.say("Checking for new episodes and releases…")
                     }
-                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -422,7 +372,16 @@ fun SettingsScreen(
                     )
                 }
             }
+            }
         }
+
+// Asked FOR, not asked at launch.
+        //
+        // A permission prompt in the first five seconds of an app, before it has
+        // shown anything worth being notified about, is the prompt people deny
+        // by reflex and never revisit. This one sits under the two toggles it
+        // belongs to, so it is requested by someone who has just said they want
+        // the thing it enables.
 
         }
     }
@@ -434,6 +393,45 @@ fun SettingsScreen(
  * Three near-identical copies of this existed with slightly different padding,
  * which is how a settings list ends up looking hand-assembled.
  */
+/**
+ * One group of settings, as an inset card.
+ *
+ * Free-floating rows on flat ink gave the page no rhythm at all: thirty
+ * switches with nothing to group them, every gap the same size, so the eye had
+ * nothing to hold on to. A card per group makes each one a thing you can take
+ * in at a glance, and the hairlines between rows do the separating that
+ * whitespace was failing to do — which is also how the only settings app
+ * anyone finds pleasant has always worked.
+ */
+@Composable
+private fun SettingsGroup(
+    title: String,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val colors = CvTheme.colors
+    Column(Modifier.padding(horizontal = ScreenPadding).padding(bottom = 22.dp)) {
+        Text(
+            title.uppercase(),
+            style = KickerStyle,
+            color = colors.text3,
+            modifier = Modifier.padding(start = 4.dp, bottom = 9.dp),
+        )
+        Column(Modifier.glass(CvShape.XLarge), content = content)
+    }
+}
+
+/** The hairline between two rows, inset so it does not touch the card edge. */
+@Composable
+private fun Divider() {
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp)
+            .height(1.dp)
+            .background(CvTheme.colors.text.copy(alpha = 0.055f))
+    )
+}
+
 @Composable
 internal fun NavRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -447,7 +445,7 @@ internal fun NavRow(
         Modifier
             .fillMaxWidth()
             .clickableNoRipple(onClick)
-            .padding(horizontal = ScreenPadding, vertical = 15.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = tint ?: colors.text2, modifier = Modifier.size(20.dp))
@@ -509,7 +507,7 @@ internal fun StepperRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = ScreenPadding, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 13.dp)
             .graphicsLayer { this.alpha = alpha },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -654,7 +652,7 @@ internal fun ChoiceRow(
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
-    Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
         if (detail != null) {
             Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
