@@ -21,6 +21,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Annotated tag messages are the release notes, and a shallow clone
+          # does not carry them.
+          fetch-depth: 0
+
+      - name: Read the notes off the tag
+        id: notes
+        run: |
+          # The release notes are the tag's own annotation.
+          #
+          # They used to be written twice - once in the tag message, where
+          # nothing ever read them, and once as whatever GitHub generated from
+          # commit subjects, which is a changelog for the person who wrote the
+          # commits rather than for the person installing the app. The tag
+          # message is the one place the notes are written by hand, so it is
+          # the one place worth publishing. %(contents:body) drops the tag's
+          # subject line, which the release already carries as its title.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BODY=""
+          else
+            BODY=$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")
+          fi
+          {
+            echo "body<<CVNOTES"
+            echo "$BODY"
+            echo "CVNOTES"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Work out the version
         id: version
@@ -98,18 +125,18 @@ jobs:
           tag_name: v${{ steps.version.outputs.name }}
           name: CineVerse ${{ steps.version.outputs.name }}
           files: ${{ steps.apk.outputs.file }}
-          generate_release_notes: true
+          # No generated changelog. A list of commit subjects is written
+          # for the person who wrote them; the tag message is written for
+          # the person installing the app, and that is what the updater
+          # shows.
           body: |
-            ## CineVerse ${{ steps.version.outputs.name }}
+            ${{ steps.notes.outputs.body }}
 
-            **[Download the APK](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.name }}/${{ steps.apk.outputs.file }})** — ${{ steps.apk.outputs.mb }} MB
+            ---
 
-            Already have CineVerse installed? Open it; it will offer this update
-            by itself within six hours, or straight away from **You → Check for
-            updates**.
-
+            **[Download the APK](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.name }}/${{ steps.apk.outputs.file }})** — ${{ steps.apk.outputs.mb }} MB.
             First time? See the [install guide](https://${{ github.repository_owner }}.github.io/cineverse-android/).
 
-            <!-- The two lines below are read by the app's updater, not by you. -->
+            <!-- The two lines below are read by the app updater, not by you. -->
             versionCode: ${{ steps.version.outputs.code }}
             sha256: ${{ steps.apk.outputs.sha }}

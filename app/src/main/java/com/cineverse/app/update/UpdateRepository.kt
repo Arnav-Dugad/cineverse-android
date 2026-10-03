@@ -365,6 +365,25 @@ class UpdateRepository(
             .lineSequence()
             .filterNot { it.trimStart().startsWith("versionCode:") }
             .filterNot { it.trimStart().startsWith("sha256:") }
+            // The GitHub body opens with the version as a heading and carries
+            // two paragraphs telling a reader how to get the app. In the sheet
+            // the heading repeats the title three lines above it, and the
+            // instructions are addressed to somebody who has not got CineVerse
+            // open - which is nobody reading this. Both are written for the
+            // release page and both are noise here, so the notes start at
+            // what actually changed.
+            .filterNot { line ->
+                val text = line.trimStart()
+                text.startsWith("## CineVerse") ||
+                    text.startsWith("**[Download the APK]") ||
+                    text.startsWith("Download the APK") ||
+                    text.startsWith("Already have CineVerse") ||
+                    text.startsWith("by itself within") ||
+                    text.startsWith("updates**.") ||
+                    text.startsWith("First time?") ||
+                    text.startsWith("**Full Changelog**") ||
+                    text == "---"
+            }
             .toList()
             .joinToString(separator = System.lineSeparator())
             // [text](url) keeps the text and drops the address.
@@ -378,6 +397,35 @@ class UpdateRepository(
             // A list is a list; a hyphen at the start of a line is not a word.
             .replace(Regex("""(?m)^\s{0,3}[-*+]\s+"""), "• ")
             .replace(Regex("""(\s*\R){3,}"""), System.lineSeparator() + System.lineSeparator())
+            .let(::unwrapParagraphs)
+
+        /**
+         * Paragraphs, instead of wherever the author's editor ran out of room.
+         *
+         * Release notes are written in a tag message and hard-wrapped at about
+         * seventy columns. This sheet wraps text itself, at whatever width the
+         * phone is. Left alone the two wraps fight, and every paragraph comes
+         * out ragged - a full line, then three words, then a full line - which
+         * reads as broken rather than as typeset.
+         *
+         * So a paragraph is put back together into the one long line it was
+         * before someone wrapped it, and the sheet is left to break it where
+         * the screen actually ends. Blank lines still separate paragraphs, and
+         * a block holding bullets keeps its own line breaks, because there the
+         * breaks are the content.
+         */
+        private fun unwrapParagraphs(text: String): String = text
+            .split(Regex("""(?:\R\s*){2,}"""))
+            .map { block ->
+                val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                if (lines.any { it.startsWith("\u2022") }) {
+                    lines.joinToString(System.lineSeparator())
+                } else {
+                    lines.joinToString(" ")
+                }
+            }
+            .filter { it.isNotBlank() }
+            .joinToString(System.lineSeparator() + System.lineSeparator())
             .trim()
 
         private val kotlinx.serialization.json.JsonPrimitive.contentOrNull: String?
