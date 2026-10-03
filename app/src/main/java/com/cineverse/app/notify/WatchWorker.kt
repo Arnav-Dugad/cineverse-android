@@ -87,6 +87,12 @@ class WatchWorker(
                         append(if (air == today) " is out today" else " is out")
                     },
                     deepLink = "cineverse://tv/${show.tmdbId}",
+                    markWatched = MarkTarget(
+                        showId = show.tmdbId,
+                        season = next.season,
+                        episode = next.number,
+                        label = if (show.isAbsolute) "Episode ${next.number}" else "S${next.season} E${next.number}",
+                    ),
                     imageUrl = com.cineverse.app.core.ui.Img.still(next.stillPath)
                         ?: com.cineverse.app.core.ui.Img.poster(show.poster.ifBlank { null }),
                 )

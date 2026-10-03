@@ -18,6 +18,8 @@ data class Previously(
     val lines: List<String>,
     /** True when Gemini Nano summarised it on the phone; false for the episode-guide fallback. */
     val onDevice: Boolean,
+    /** True when Gemini in the cloud wrote it, where the phone has no Nano. */
+    val cloud: Boolean = false,
 )
 
 /**
@@ -33,14 +35,14 @@ data class Previously(
  * downloaded, the download is started quietly for next time and this time gets
  * the fallback; nobody waits on a model download for a recap.
  */
-class PreviouslyOn(private val context: Context) {
+class PreviouslyOn(private val context: Context, private val gemini: com.cineverse.app.data.ai.Gemini) {
 
     /** Episodes are given oldest first. */
     suspend fun summarize(episodes: List<Episode>): Previously? {
         val usable = episodes.filter { it.overview.isNotBlank() }
         if (usable.isEmpty()) return null
         val nano = runCatching { nano(usable) }.getOrNull()
-        return nano ?: Previously(usable.map { "${it.label} · ${firstSentence(it.overview)}" }, onDevice = false)
+        return nano ?: cloud(usable) ?: Previously(usable.map { "${it.label} · ${firstSentence(it.overview)}" }, onDevice = false)
     }
 
     private suspend fun nano(episodes: List<Episode>): Previously? = withContext(Dispatchers.IO) {
@@ -75,6 +77,28 @@ class PreviouslyOn(private val context: Context) {
         } finally {
             runCatching { summarizer.close() }
         }
+    }
+
+    /**
+     * Gemini in the cloud, where the phone has no Nano. Given the same three
+     * synopses and nothing else, and told not to guess beyond them, so it is
+     * as spoiler-safe as the on-device summary.
+     */
+    private suspend fun cloud(episodes: List<Episode>): Previously? {
+        val prompt = buildString {
+            appendLine("Write a \"Previously on\" recap of these TV episodes for someone about to watch the next one.")
+            appendLine("Exactly three short bullet lines, one per line, each under 22 words, starting with \"- \".")
+            appendLine("Present tense, names of characters where given, the key turns only.")
+            appendLine("Use ONLY what is written below. Never guess at, hint at or mention anything that happens later.")
+            appendLine()
+            episodes.forEach { appendLine("${it.label}, \"${it.name}\": ${it.overview}") }
+        }
+        val text = gemini.text(prompt) ?: return null
+        val lines = text.lines()
+            .map { it.trim().trimStart('*', '-', '•', ' ').trim() }
+            .filter { it.length > 3 }
+            .take(3)
+        return lines.takeIf { it.size >= 2 }?.let { Previously(it, onDevice = false, cloud = true) }
     }
 
     companion object {

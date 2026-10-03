@@ -11,6 +11,8 @@
     <string name="shortcut_next_long">Carry on where you left off</string>
     <string name="channel_episodes">New episodes</string>
     <string name="channel_releases">Releases</string>
+    <string name="widget_upnext">Up next</string>
+    <string name="widget_upnext_description">Live countdowns to the next episode of every show you are caught up on.</string>
     <string name="widget_today">CineVerse Today</string>
     <string name="widget_today_description">Your streak and what you have watched today.</string>
 </resources>

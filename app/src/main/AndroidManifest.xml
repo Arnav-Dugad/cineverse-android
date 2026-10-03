@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Voice search. Asked for the first time the microphone is tapped, never before. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- The in-app updater. Android still shows its own confirmation for every
          install; this only allows CineVerse to be the one that asks. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -19,6 +21,13 @@
             <data android:scheme="https" />
         </intent>
         <package android:name="com.google.android.youtube" />
+        <!-- The phone's speech recogniser, which voice search talks to. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
 
         <!--
             The streaming apps "Where to watch" can open directly.
@@ -108,6 +117,11 @@
             android:name=".update.InstallReceiver"
             android:exported="false" />
 
+        <!-- "Mark watched" on a new-episode notification. -->
+        <receiver
+            android:name=".notify.MarkWatchedReceiver"
+            android:exported="false" />
+
         <!-- Continue Watching on the home screen. -->
         <receiver
             android:name=".widget.ContinueWidgetReceiver"
@@ -122,6 +136,19 @@
         </receiver>
 
         <!-- The streak and today, at a glance. -->
+        <!-- Up Next: live countdowns. -->
+        <receiver
+            android:name=".widget.UpNextWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_upnext">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/upnext_widget_info" />
+        </receiver>
+
         <receiver
             android:name=".widget.TodayWidgetReceiver"
             android:exported="false"
@@ -134,5 +161,26 @@
                 android:resource="@xml/today_widget_info" />
         </receiver>
 
+        <!--
+            AppFunctions: Gemini and other assistants on Android 16+ can act in
+            CineVerse ("mark the next Severance episode watched"). The class is
+            generated from agent/CineVerseFunctions.kt; only the system, holding
+            BIND_APP_FUNCTION_SERVICE, can bind it.
+        -->
+        <service
+            android:name=".agent.CineVerseFunctionService"
+            android:permission="android.permission.BIND_APP_FUNCTION_SERVICE"
+            android:exported="true"
+            tools:targetApi="36">
+            <property
+                android:name="android.app.appfunctions.schema"
+                android:value="app_functions_schema.xsd" />
+            <property
+                android:name="android.app.appfunctions.v2"
+                android:value="cineverse_functions.xml" />
+            <intent-filter>
+                <action android:name="android.app.appfunctions.AppFunctionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

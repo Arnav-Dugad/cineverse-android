@@ -8,6 +8,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    // For AppFunctions' code generator only.
+    alias(libs.plugins.ksp)
 }
 
 // Release signing comes from keystore.properties when it exists (a local build),
@@ -216,6 +218,9 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.ai)
+    implementation(libs.androidx.appfunctions)
+    ksp(libs.androidx.appfunctions.compiler)
 
     implementation(libs.credentials)
     implementation(libs.credentials.play.services)

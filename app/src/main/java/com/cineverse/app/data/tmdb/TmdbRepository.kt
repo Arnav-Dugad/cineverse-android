@@ -135,6 +135,24 @@ class TmdbRepository(
         if (query.isBlank()) emptyList()
         else quiet { api.search("tv", query).results.toItems(MediaType.Tv) }
 
+    /** Films or series whose title matches, best first; for resolving a title somebody said. */
+    suspend fun searchKind(type: MediaType, query: String): List<MediaItem> =
+        if (query.isBlank()) emptyList()
+        else quiet { api.search(type.wire, query).results.toItems(type) }
+
+    /** The best-known person by this name, or null. */
+    suspend fun findPerson(name: String): Int? = runCatching {
+        withContext(io) { api.search("person", name).results.filter { it.id > 0 }.maxByOrNull { it.popularity }?.id }
+    }.getOrNull()
+
+    /** A TMDB keyword id for a theme like "time travel", or null. */
+    suspend fun findKeyword(word: String): Int? = runCatching {
+        withContext(io) {
+            val all = api.searchKeyword(word).results
+            (all.firstOrNull { it.name.equals(word, true) } ?: all.firstOrNull())?.id
+        }
+    }.getOrNull()
+
     /** The typeahead: fewer results, no paging, and failure is simply silence. */
     suspend fun suggest(query: String, adult: Boolean = false): List<MediaItem> =
         if (query.isBlank()) emptyList()

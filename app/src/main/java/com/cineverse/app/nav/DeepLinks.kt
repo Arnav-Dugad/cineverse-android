@@ -35,6 +35,7 @@ object DeepLinks {
         if (scheme == "cineverse") {
             return when (host) {
                 "search" -> Route.Search
+                "voice" -> Route.VoiceSearch
                 "list" -> Route.MyList
                 "continue" -> Route.Home
                 "stats" -> Route.Stats

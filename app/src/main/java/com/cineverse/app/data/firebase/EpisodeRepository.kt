@@ -53,6 +53,16 @@ class EpisodeRepository(
 
     fun of(showId: Int): ShowProgress? = progress.value[showId]
 
+    /**
+     * The server's copy of one show, for a caller that cannot wait for the
+     * listener - Gemini acting on a cold start, before the first snapshot.
+     */
+    suspend fun fetch(showId: Int): ShowProgress? {
+        val uid = auth.uid.value ?: return null
+        return runCatching { progressRef(uid, showId).get().await().takeIf { it.exists() }?.toProgress() }
+            .getOrNull() ?: of(showId)
+    }
+
     // ---------- the tick ----------
 
     /**
@@ -68,6 +78,19 @@ class EpisodeRepository(
             else entry.with(season, listOf(episode), now, bulk = false)
         }
         return !watched
+    }
+
+    /**
+     * Mark one episode watched, never un-mark it - for a tick from OUTSIDE the
+     * app (a notification), where the episode may already have been watched on
+     * another device and a toggle would quietly undo that. The decision is made
+     * on the server's copy, inside the transaction.
+     */
+    suspend fun markEpisode(show: TitleDetail, season: Int, episode: Int) {
+        write(show) { entry ->
+            if (entry.isWatched(season, episode)) entry
+            else entry.with(season, listOf(episode), System.currentTimeMillis(), bulk = false)
+        }
     }
 
     /** Everything from the first episode up to and including this one. */

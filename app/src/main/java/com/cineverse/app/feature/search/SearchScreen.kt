@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +85,10 @@ fun SearchScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onPerson: (Int) -> Unit = {},
+    onTrailer: (key: String, title: String) -> Unit = { _, _ -> },
+    onNavigate: (page: String) -> Unit = {},
+    /** Opened from a "Search by voice" shortcut: start listening at once. */
+    startListening: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -92,7 +97,57 @@ fun SearchScreen(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val voice = rememberVoiceInput()
+    var listening by remember { mutableStateOf(false) }
+    fun listen() {
+        keyboard?.hide()
+        listening = true
+        voice.start { heard ->
+            listening = false
+            viewModel.ask(heard, spoken = true)
+        }
+    }
+    // Without the microphone permission, the system's own voice dialog still
+    // works: it records in the recogniser's app, not this one.
+    val systemVoice = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?.let { viewModel.ask(it, spoken = true) }
+    }
+    fun systemListen() {
+        runCatching { systemVoice.launch(VoiceInput.intent()) }
+    }
+    val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) listen() else systemListen() }
+    fun mic() {
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.RECORD_AUDIO,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        when {
+            !voice.available -> systemListen()
+            granted -> listen()
+            else -> askMic.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        // Back from a result, the box still holds the question and its answer
+        // is on screen; the keyboard would only cover it.
+        if (startListening) mic() else if (state.query.isBlank()) focus.requestFocus()
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is SearchEvent.Open -> onOpen(event.item)
+                is SearchEvent.Trailer -> onTrailer(event.key, event.title)
+                is SearchEvent.Navigate -> onNavigate(event.page)
+            }
+        }
+    }
 
     Column(
         modifier
@@ -159,10 +214,33 @@ fun SearchScreen(
                             .clickableNoRipple { viewModel.onQueryChange("") },
                     )
                 }
+                Spacer(Modifier.size(4.dp))
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CvShape.Circle)
+                        .clickableNoRipple(::mic),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Rounded.Mic,
+                        "Search by voice",
+                        tint = colors.text2,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
             }
         }
 
-        when {
+        val ask = state.ask
+        if (ask != null) {
+            AskPane(
+                ask = ask,
+                library = library,
+                onOpen = onOpen,
+                onDismiss = viewModel::dismissAsk,
+            )
+        } else when {
             // An empty box is not an empty page: what you searched for before,
             // then what everyone is watching today.
             state.query.isBlank() -> {
@@ -311,6 +389,11 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    if (listening) {
+        androidx.activity.compose.BackHandler { voice.cancel(); listening = false }
+        VoiceOverlay(voice = voice, onRetry = ::listen, onClose = { listening = false })
     }
 
     if (filters) {

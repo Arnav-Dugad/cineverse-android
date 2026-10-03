@@ -13,6 +13,7 @@ import com.cineverse.app.data.recommend.Recommender
 import com.cineverse.app.data.recommend.SeedReason
 import com.cineverse.app.data.recommend.TasteProfile
 import kotlinx.coroutines.async
+import com.cineverse.app.widget.updateAllSafe
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,7 +106,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         // episode documents and the library, so it must rebuild the instant
         // either changes — which is what makes a tick on the detail page move
         // the row on Home before you have finished going back.
-        combine(app.episodes.progress, app.library.library) { shows, lib -> shows to lib }
+        combine(app.episodes.progress, app.library.library, app.continueOrder.order) { shows, lib, _ -> shows to lib }
             .onEach { (shows, lib) ->
                 rebuildContinue(shows, lib)
                 if (lib.loaded) refreshAiring(shows, lib)
@@ -158,6 +159,8 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 runCatching { app.airing.returning(shows, watchedShows) }.getOrDefault(emptyList())
             }
             _state.value = _state.value.copy(upNext = upNext.await(), returning = returning.await())
+            // The home-screen widget shows the same countdowns; keep it in step.
+            com.cineverse.app.widget.UpNextWidget().updateAllSafe(app.context)
         }
     }
 
@@ -349,11 +352,11 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             add(Rail("pop_movies", "Popular Movies", items = popMovies.await(),
                 seeAll = browse("Popular Movies", "movie", "popular")))
             add(Rail("top10", "Top 10 Movies This Week", items = top10Movies.await(),
-                numbered = true))
+                numbered = true, seeAll = com.cineverse.app.nav.Route.TopTen("movie")))
             add(Rail("pop_tv", "Popular TV Shows", items = popTv.await(),
                 seeAll = browse("Popular TV Shows", "tv", "popular")))
             add(Rail("top10_tv", "Top 10 Shows This Week", items = top10Tv.await(),
-                numbered = true))
+                numbered = true, seeAll = com.cineverse.app.nav.Route.TopTen("tv")))
             add(Rail("acclaimed", "Critically Acclaimed", items = acclaimed.await(),
                 seeAll = browse("Critically Acclaimed", "movie", sort = "vote_average.desc")))
             add(Rail("now_playing", "Now Playing", items = nowPlaying.await(),
@@ -442,7 +445,6 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             extra += Rail(
                 id = "picks",
                 title = "Top picks for you",
-                kicker = "Chosen from ${profile.titlesSeen} titles you have tracked",
                 items = picks.map { it.item },
                 match = picks.associate { it.item.key to Recommender.matchBadge(it.score, range) },
             )
@@ -461,12 +463,10 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 }.getOrNull()
                 extra += Rail(
                     id = "because_${seed.type.wire}_${seed.id}",
-                    title = seed.title,
-                    kicker = when (seed.reason) {
-                        SeedReason.Watching -> "Because you're watching"
-                        SeedReason.Rated -> "Because you rated this highly"
-                        else -> "Because you watched"
-                    },
+                    // With a logo: "More like [logo]" on one line. Without:
+                    // the words alone.
+                    title = if (logo != null) seed.title else "More like ${seed.title}",
+                    kicker = if (logo != null) "More like" else null,
                     items = related,
                     kickerLogo = logo,
                 )
@@ -544,11 +544,19 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             )
         }
 
+        // The automatic order (most recently touched first), then the order
+        // you arranged by hand on top of it - on this phone or on the website.
+        val automatic = rows
+            .filterNot { it.item.key in snoozed }
+            .sortedByDescending { it.lastAt }
         _state.value = _state.value.copy(
-            continueWatching = rows
-                .filterNot { it.item.key in snoozed }
-                .sortedByDescending { it.lastAt }
-                .take(20)
+            continueWatching = app.continueOrder.order.value.apply(automatic) { it.item.key }.take(20)
         )
     }
+
+    /** Save the row in the order it was arranged. */
+    fun arrange(keys: List<String>) = app.continueOrder.setOrder(keys)
+
+    /** Forget the hand-made order. */
+    fun resetArrangement() = app.continueOrder.reset()
 }

@@ -177,7 +177,17 @@ class AppContainer(val context: Context) {
 
     val unlockedLists by lazy { com.cineverse.app.data.lock.UnlockedLists() }
 
-    val previouslyOn by lazy { com.cineverse.app.data.recap.PreviouslyOn(context) }
+    val continueOrder by lazy {
+        com.cineverse.app.data.firebase.ContinuePrefsRepository(Firebase.firestore(context), auth, scope)
+    }
+
+    val gemini by lazy { com.cineverse.app.data.ai.Gemini(context) }
+
+    val assistant by lazy { com.cineverse.app.data.ai.Assistant(this) }
+
+    val forYou by lazy { com.cineverse.app.data.ai.ForYou(gemini) }
+
+    val previouslyOn by lazy { com.cineverse.app.data.recap.PreviouslyOn(context, gemini) }
 
     val inbox by lazy {
         com.cineverse.app.data.inbox.InboxRepository(context, library.library, episodes.progress, airing, scope)

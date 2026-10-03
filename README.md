@@ -44,7 +44,9 @@ The most-used interaction in the app, so it is the most designed:
 - **Swipe left** — un-tick.
 - **Long-press a season chip** — mark or clear the whole season.
 - **Or never open the app at all** — the home-screen widget's tick writes
-  straight to Firestore.
+  straight to Firestore, a new-episode notification has a **Mark watched**
+  button, and on Android 16 you can just ask Gemini: *"mark the next
+  Severance episode watched"*.
 
 Every one of those goes through one repository, so the merge rules, the log
 encoding and the offline queue cannot disagree with each other.
@@ -53,7 +55,16 @@ encoding and the offline queue cannot disagree with each other.
 
 - **A Glance widget** whose tick marks an episode watched without opening the app
 - **Launcher shortcuts** — Up next, Search, My List, plus the shows you usually watch at this time of day
+- **Voice search** — tap the mic and ask in plain words: *"funny 90s films with
+  Tom Hanks"*, *"Korean thrillers on Netflix"*, *"add Dune to my list"*,
+  *"rate The Bear nine"*. Typed sentences are understood the same way
+- **Gemini** — understands those sentences, writes "Previously on" when the
+  phone has no Gemini Nano, and says why a title might suit you, from your own
+  ratings. Through Firebase AI Logic; every use has a fallback that needs no model
+- **AppFunctions** — Gemini on Android 16 can mark episodes, edit your list,
+  rate, list what you are watching and find something to watch, inside CineVerse
 - **Gemini Nano** — "Previously on" summarised on the phone, from episodes you have already seen
+- **An Up Next widget** whose countdowns tick live, second by second, with the app asleep
 - **Exact air times** — the broadcaster's own minute, in your time zone
 - **Rich haptics** composed from the hardware's own primitives, not `vibrate(ms)`
 - **Material You** — the whole app can take its accent from your wallpaper
@@ -125,7 +136,8 @@ There is no Play Store listing, so the app updates itself:
 
 ## Architecture
 
-One module, manual dependency injection, no annotation processors.
+One module, manual dependency injection, and one annotation processor: KSP,
+for AppFunctions' generated service and nothing else.
 
 ```
 core/design     colour, type, shape, motion, haptics, theme
@@ -135,10 +147,12 @@ data/tmdb       DTOs, the API, one mapper, one repository
 data/firebase   auth, library, episodes — the website's documents, field for field
 data/scores     IMDb, Rotten Tomatoes, Metacritic, OMDb
 data/prefs      DataStore, mirrored to users/{uid}.experiencePrefs
+data/ai         Gemini, sentence understanding, the assistant that acts on it
+agent           AppFunctions: what Gemini on the phone may ask CineVerse to do
 feature/*       one package per screen: a view model and its composables
 nav             type-safe routes, the shell, deep links
 update          the GitHub Releases updater
-widget          the Glance widget
+widget          the Glance widgets: Continue, Today, Up Next
 ```
 
 **There is no local database.** Firestore's own persistence already keeps the

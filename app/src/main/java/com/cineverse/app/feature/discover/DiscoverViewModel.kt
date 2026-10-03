@@ -93,7 +93,7 @@ class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
 
         val rails = listOf(
             "acclaimed" to Rail("acclaimed", "The best of $thisYear", items = acclaimed.await()),
-            "gems" to Rail("gems", "Hidden gems", kicker = "Loved, and under-seen", items = hiddenGems.await()),
+            "gems" to Rail("gems", "Hidden gems", items = hiddenGems.await()),
             "korean" to Rail("korean", "Korean series", items = korean.await()),
             "animation" to Rail("animation", "Animation", items = animation.await()),
             "indian" to Rail("indian", "Indian cinema", items = indian.await()),

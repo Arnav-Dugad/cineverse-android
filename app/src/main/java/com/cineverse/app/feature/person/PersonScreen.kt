@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.person
 
+import com.cineverse.app.core.ui.glass
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +69,7 @@ fun PersonScreen(
 ) {
     val person by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
+    val shows by viewModel.shows.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
 
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -131,6 +134,14 @@ fun PersonScreen(
                         if (detail.biography.isNotBlank()) {
                             Spacer(Modifier.height(16.dp))
                             ExpandableText(detail.biography, collapsedLines = 4)
+                        }
+                        // How long you have spent watching them.
+                        val hours = androidx.compose.runtime.remember(detail, library, shows) {
+                            com.cineverse.app.data.cast.ActorHours.of(detail, library, shows)
+                        }
+                        if (hours.minutes > 0) {
+                            Spacer(Modifier.height(22.dp))
+                            TimeWithYou(detail.name, hours)
                         }
                         // How much of their work you have seen, and what is left.
                         val completion = androidx.compose.runtime.remember(detail, library.watched) {
@@ -208,10 +219,62 @@ class PersonViewModel(private val app: AppContainer, private val id: Int) : View
     val state: StateFlow<PersonDetail?> = _state.asStateFlow()
 
     val library: StateFlow<Library> = app.library.library
+    val shows = app.episodes.progress
 
     init {
         viewModelScope.launch {
             _state.value = runCatching { app.tmdb.person(id) }.getOrNull()
+        }
+    }
+}
+
+/** "≈ 34h with Adam Scott", and where that time came from. */
+@Composable
+private fun TimeWithYou(name: String, hours: com.cineverse.app.data.cast.ActorHours) {
+    val colors = CvTheme.colors
+    androidx.compose.foundation.layout.Row(
+        Modifier
+            .fillMaxWidth()
+            .glass(com.cineverse.app.core.design.CvShape.XLarge, strength = 0.7f)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(colors.gold.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(androidx.compose.material.icons.Icons.Rounded.Schedule, null, tint = colors.gold)
+        }
+        Spacer(Modifier.size(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("TIME WITH YOU", style = KickerStyle, color = colors.text3)
+            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.Bottom) {
+                Text("≈ ", style = MaterialTheme.typography.titleLarge, color = colors.gold)
+                com.cineverse.app.core.ui.CountUpText(
+                    (hours.minutes / 60).toLong().coerceAtLeast(if (hours.minutes > 0) 1 else 0),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.gold,
+                    format = { "${it}h" },
+                )
+                Text(
+                    "  with ${name.substringBefore(' ')}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.text,
+                    maxLines = 1,
+                )
+            }
+            Text(
+                buildList {
+                    if (hours.shows > 0) add("${hours.shows} show${if (hours.shows == 1) "" else "s"}")
+                    if (hours.films > 0) add("${hours.films} film${if (hours.films == 1) "" else "s"}")
+                }.joinToString(" and ") + (hours.top.firstOrNull()?.let { " · most from ${it.first}" } ?: ""),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.text3,
+                maxLines = 2,
+            )
         }
     }
 }

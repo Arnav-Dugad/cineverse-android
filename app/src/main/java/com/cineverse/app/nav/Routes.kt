@@ -21,6 +21,8 @@ sealed interface Route {
     @Serializable data object Profile : Route
 
     @Serializable data object Search : Route
+    /** Search, listening from the moment it opens. */
+    @Serializable data object VoiceSearch : Route
     @Serializable data object Settings : Route
     @Serializable data object Auth : Route
     @Serializable data object Releases : Route
@@ -38,6 +40,9 @@ sealed interface Route {
     @Serializable data class Collection(val id: Int) : Route
 
     @Serializable data object Inbox : Route
+
+    /** The chart: films or series. */
+    @Serializable data class TopTen(val type: String = "movie") : Route
 
     /** A studio's or a network's whole catalogue. */
     @Serializable data class Studio(val id: Int, val network: Boolean, val name: String) : Route

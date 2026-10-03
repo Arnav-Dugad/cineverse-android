@@ -57,6 +57,9 @@ interface TmdbApi {
         @Query("include_adult") includeAdult: Boolean = false,
     ): PageDto<MediaDto>
 
+    @GET("search/keyword")
+    suspend fun searchKeyword(@Query("query") query: String): PageDto<KeywordDto>
+
     @GET("movie/{id}")
     suspend fun movie(
         @Path("id") id: Int,

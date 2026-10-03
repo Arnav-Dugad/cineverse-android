@@ -4,7 +4,14 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cineverse.app.AppContainer
+import com.cineverse.app.data.ai.Ask
+import com.cineverse.app.data.ai.Outcome
+import com.cineverse.app.data.ai.Understanding
 import com.cineverse.app.data.firebase.Library
+import com.cineverse.app.data.model.GenreNames
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import com.cineverse.app.data.model.Genre
 import com.cineverse.app.data.model.MediaFilter
 import com.cineverse.app.data.model.MediaItem
@@ -39,11 +46,40 @@ data class SearchState(
     val totalPages: Int = 1,
     val filter: MediaFilter = MediaFilter(),
     val genres: List<Genre> = emptyList(),
+    /** A sentence being understood, or what came of it; null for a plain search. */
+    val ask: AskUi? = null,
 ) {
     val hasMore: Boolean get() = page < totalPages && results.isNotEmpty()
 
     /** Filtered everything away, with more pages still to come. */
     val filteredOut: Boolean get() = results.isNotEmpty() && shown.isEmpty()
+}
+
+/** What became of a sentence typed or spoken into search. */
+@Immutable
+sealed interface AskUi {
+    val heard: String
+
+    data class Thinking(override val heard: String) : AskUi
+
+    /** A discovery: what was understood, in words, and what it found. */
+    data class Results(
+        override val heard: String,
+        val understood: String,
+        val reply: String?,
+        val items: List<MediaItem>,
+        val byGemini: Boolean,
+    ) : AskUi
+
+    /** Something done: added, ticked, rated. */
+    data class Did(override val heard: String, val outcome: Outcome) : AskUi
+}
+
+/** Things search asks the app to do: go somewhere, play something. */
+sealed interface SearchEvent {
+    data class Open(val item: MediaItem) : SearchEvent
+    data class Trailer(val key: String, val title: String) : SearchEvent
+    data class Navigate(val page: String) : SearchEvent
 }
 
 /** The orders a SEARCH offers. Relevance leads, because TMDB already ranked it. */
@@ -85,7 +121,7 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
             .map { it.query.trim() }
             .distinctUntilChanged()
             .debounce(280)
-            .filter { it.length >= 2 }
+            .filter { it.length >= 2 && _state.value.ask == null }
             .onEach { query -> search(query, page = 1) }
             .launchIn(viewModelScope)
 
@@ -129,8 +165,76 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
         return app.scores.cached(imdbId, item.type)?.imdb ?: -1.0
     }
 
+    private val _events = Channel<SearchEvent>(Channel.BUFFERED)
+    val events: Flow<SearchEvent> = _events.receiveAsFlow()
+
+    /**
+     * A sentence, typed or spoken. A command is carried out ("add Dune to my
+     * list"), a request becomes a discovery ("funny 90s films with Tom
+     * Hanks"), and anything else is an ordinary search.
+     */
+    fun ask(text: String, spoken: Boolean) {
+        val heard = text.trim()
+        if (heard.length < 2) return
+        remember(heard)
+        val mine = ++generation
+        _state.value = _state.value.copy(query = heard, ask = AskUi.Thinking(heard), loading = false)
+        viewModelScope.launch {
+            val natural = spoken || Understanding.looksNatural(heard)
+            val (ask, reply) = runCatching { app.assistant.understand(heard, natural) }
+                .getOrDefault(Ask.Search(heard, heard) to null)
+            if (mine != generation) return@launch
+            val assistant = app.assistant
+            val ui: AskUi? = when (ask) {
+                is Ask.Search -> null
+                is Ask.Discover -> {
+                    val items = runCatching { assistant.discover(ask.query) }.getOrDefault(emptyList())
+                    AskUi.Results(
+                        heard = heard,
+                        understood = ask.query.describe { GenreNames[it] },
+                        reply = reply,
+                        items = items,
+                        byGemini = reply != null,
+                    )
+                }
+                is Ask.Navigate -> {
+                    _events.send(SearchEvent.Navigate(ask.page))
+                    AskUi.Did(heard, Outcome(true, "Going to ${pageName(ask.page)}"))
+                }
+                is Ask.Open -> assistant.open(ask.title).also { o -> o.item?.let { _events.send(SearchEvent.Open(it)) } }.let { AskUi.Did(heard, it) }
+                is Ask.Trailer -> assistant.trailer(ask.title).also { o ->
+                    val video = o.trailer
+                    val item = o.item
+                    if (video != null && item != null) _events.send(SearchEvent.Trailer(video.key, item.title))
+                }.let { AskUi.Did(heard, it) }
+                is Ask.Add -> AskUi.Did(heard, assistant.add(ask.title))
+                is Ask.Remove -> AskUi.Did(heard, assistant.remove(ask.title))
+                is Ask.Watched -> AskUi.Did(heard, assistant.watched(ask.title))
+                is Ask.Rate -> AskUi.Did(heard, assistant.rate(ask.title, ask.score))
+                is Ask.NextEpisode -> AskUi.Did(heard, assistant.nextEpisode(ask.show))
+            }
+            if (mine != generation) return@launch
+            _state.value = _state.value.copy(ask = ui)
+            if (ui == null) search((ask as Ask.Search).query, page = 1)
+        }
+    }
+
+    private fun pageName(page: String) = when (page) {
+        "list" -> "your list"; "stats" -> "your stats"; "box-office" -> "the box office"
+        "year" -> "your year"; "top10" -> "the Top 10"; "tv" -> "TV shows"
+        else -> page
+    }
+
+    /** Back to plain search, keeping the words. */
+    fun dismissAsk() {
+        generation++
+        _state.value = _state.value.copy(ask = null)
+        val query = _state.value.query.trim()
+        if (query.length >= 2) search(query, page = 1)
+    }
+
     fun onQueryChange(value: String) {
-        _state.value = _state.value.copy(query = value)
+        _state.value = _state.value.copy(query = value, ask = null)
         if (value.isBlank()) {
             generation++
             _state.value = _state.value.copy(
@@ -143,6 +247,11 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
     fun submit() {
         val query = _state.value.query.trim()
         if (query.length < 2) return
+        // A sentence, or a command, is understood; a title is searched.
+        if (Understanding.command(query) != null || Understanding.looksNatural(query)) {
+            ask(query, spoken = false)
+            return
+        }
         remember(query)
         search(query, page = 1)
     }

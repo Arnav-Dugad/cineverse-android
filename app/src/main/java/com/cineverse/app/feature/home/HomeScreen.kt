@@ -113,6 +113,15 @@ fun HomeScreen(
     val onWifi by rememberUnmetered()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    var arranging by remember { mutableStateOf(false) }
+    if (arranging) {
+        ArrangeSheet(
+            rows = state.continueWatching,
+            onSave = viewModel::arrange,
+            onReset = viewModel::resetArrangement,
+            onDismiss = { arranging = false },
+        )
+    }
     val barPx = with(LocalDensity.current) { 110.dp.toPx() }
     val latestScrolled by androidx.compose.runtime.rememberUpdatedState(onScrolledPastHero)
 
@@ -168,6 +177,7 @@ fun HomeScreen(
                         onMark = viewModel::markNext,
                         onSnooze = viewModel::snooze,
                         onDismiss = viewModel::dismiss,
+                        onArrange = { arranging = true },
                     )
                 }
             }
@@ -234,7 +244,7 @@ fun HomeScreen(
  * the picture is already half gone by the time the edge arrives.
  */
 @Composable
-private fun Hero(
+internal fun Hero(
     items: List<MediaItem>,
     loading: Boolean,
     logos: Map<String, String>,
@@ -622,6 +632,7 @@ private fun ContinueSection(
     onMark: (ContinueRow) -> Unit,
     onSnooze: (ContinueRow) -> Unit,
     onDismiss: (ContinueRow) -> Unit,
+    onArrange: () -> Unit = {},
 ) {
     // One clock for every countdown in the row, ticking once a second only
     // while a countdown that needs seconds is on screen.
@@ -650,7 +661,13 @@ private fun ContinueSection(
         if (upNext.isNotEmpty() && !touched) rowState.scrollToItem(0)
     }
     Column(Modifier.fillMaxWidth()) {
-        SectionHeader("Continue watching", count = rows.size + upNext.size)
+        SectionHeader(
+            "Continue watching",
+            count = rows.size + upNext.size,
+            // Only worth offering with something to put in order.
+            onSeeAll = if (rows.size >= 2) onArrange else null,
+            actionLabel = "Arrange",
+        )
         Spacer(Modifier.height(12.dp))
         LazyRow(
             state = rowState,
@@ -774,7 +791,7 @@ private fun UpNextCard(item: com.cineverse.app.data.airing.UpNextItem, now: Long
 private fun ReturningSection(items: List<com.cineverse.app.data.airing.ReturningItem>, onOpen: (MediaItem) -> Unit) {
     val colors = CvTheme.colors
     Column(Modifier.fillMaxWidth()) {
-        SectionHeader("Returning this month", kicker = "Back with a new season", count = items.size)
+        SectionHeader("Returning this month", count = items.size)
         Spacer(Modifier.height(12.dp))
         LazyRow(
             contentPadding = PaddingValues(horizontal = ScreenPadding),

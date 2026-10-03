@@ -76,6 +76,8 @@ fun SectionHeader(
      * own voice, and printing both would be saying it twice.
      */
     titleLogo: String? = null,
+    /** What the action on the right says. */
+    actionLabel: String = "See all",
     onSeeAll: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
@@ -86,15 +88,18 @@ fun SectionHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            if (kicker != null) {
-                Text(
-                    kicker.uppercase(),
-                    style = KickerStyle,
-                    color = colors.text3,
-                    modifier = Modifier.padding(bottom = 3.dp),
-                )
-            }
+            // No sub-heading line above rail titles any more: one line per
+            // rail reads cleaner. A rail derived from a title says so on the
+            // SAME line - "More like" before that title's own logo.
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (titleLogo != null && kicker != null) {
+                    Text(
+                        "$kicker ",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = colors.text,
+                        maxLines = 1,
+                    )
+                }
                 if (titleLogo != null) {
                     TonedLogo(
                         titleLogo,
@@ -123,7 +128,7 @@ fun SectionHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("See all", style = MaterialTheme.typography.labelMedium, color = colors.text2)
+                Text(actionLabel, style = MaterialTheme.typography.labelMedium, color = colors.text2)
                 Icon(
                     Icons.AutoMirrored.Rounded.ArrowForward,
                     contentDescription = null,
@@ -198,20 +203,8 @@ fun PosterRail(
                 ) {
                     itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
                         if (numbered) {
-                            // The number sits BESIDE the card and is clipped by the
-                            // row, which is what makes a Top 10 read as a chart
-                            // rather than as ten posters with labels. Drawn in the
-                            // page colour with a hairline edge so it reads as cut
-                            // out of the background rather than printed on it.
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    "${index + 1}",
-                                    style = MaterialTheme.typography.displayLarge,
-                                    color = CvTheme.colors.text.copy(alpha = 0.16f),
-                                    modifier = Modifier
-                                        .padding(end = 2.dp)
-                                        .offset(y = 10.dp),
-                                )
+                            // A chart position, then the poster laid over it.
+                            TopTenCard(rank = index + 1, cardWidth = cardWidth) { slot ->
                                 PosterCard(
                                     item = item,
                                     onOpen = onOpen,
@@ -222,7 +215,7 @@ fun PosterRail(
                                     rating = ratingOf(item),
                                     matchPercent = matchOf(item),
                                     onLongPress = onLongPress,
-                                    modifier = Modifier.dealIn(index, revealed).railDepth(),
+                                    modifier = slot.dealIn(index, revealed).railDepth(),
                                 )
                             }
                             return@itemsIndexed

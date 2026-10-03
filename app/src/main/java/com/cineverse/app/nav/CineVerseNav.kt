@@ -199,6 +199,8 @@ fun CineVerseNav(
 
     // Home's bar is a scrim over the hero and glass once the hero has gone.
     var homeScrolled by remember { mutableStateOf(false) }
+    // Home, Films or Series - which front page the Home tab is showing.
+    var homeSection by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
 
     Scaffold(
         containerColor = colors.ink,
@@ -214,6 +216,8 @@ fun CineVerseNav(
                     overArt = currentTab == Tab.Home && !homeScrolled,
                     inboxCount = if (shelf.loaded && signedInUid != null) inboxCount else 0,
                     onInbox = { navController.navigate(Route.Inbox) },
+                    section = if (currentTab == Tab.Home) homeSection else null,
+                    onSection = { homeSection = it },
                 )
             }
         },
@@ -266,17 +270,35 @@ fun CineVerseNav(
             popExitTransition = { popExit() },
         ) {
             cvComposable<Route.Home> {
-                HomeScreen(
-                    viewModel = cvViewModel("home") { HomeViewModel(app) },
-                    onOpen = open,
-                    onBrowse = { navController.navigate(it) },
-                    onContinue = { row ->
-                        navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
-                    },
-                    onPeek = peek::open,
-                    contentPadding = padding,
-                    onScrolledPastHero = { homeScrolled = it },
-                )
+                // Each front page keeps its own scroll and filters while you
+                // switch between them; the switch itself is a quick crossfade.
+                androidx.compose.animation.Crossfade(homeSection, label = "frontPage") { section ->
+                    when (section) {
+                        1, 2 -> {
+                            val type = if (section == 1) MediaType.Movie else MediaType.Tv
+                            com.cineverse.app.feature.catalog.CatalogScreen(
+                                viewModel = cvViewModel("catalog_${type.wire}") {
+                                    com.cineverse.app.feature.catalog.CatalogViewModel(app, type)
+                                },
+                                onOpen = open,
+                                onPeek = peek::open,
+                                contentPadding = padding,
+                                onScrolledPastHero = { homeScrolled = it },
+                            )
+                        }
+                        else -> HomeScreen(
+                            viewModel = cvViewModel("home") { HomeViewModel(app) },
+                            onOpen = open,
+                            onBrowse = { navController.navigate(it) },
+                            onContinue = { row ->
+                                navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
+                            },
+                            onPeek = peek::open,
+                            contentPadding = padding,
+                            onScrolledPastHero = { homeScrolled = it },
+                        )
+                    }
+                }
             }
 
             cvComposable<Route.Discover> {
@@ -342,14 +364,44 @@ fun CineVerseNav(
                 )
             }
 
-            cvComposable<Route.Search> {
+            // Search, and the same search listening from the start. A sentence
+            // can ask to go somewhere or play something, so it is given the way.
+            val searchScreen: @Composable (Boolean) -> Unit = { listen ->
                 SearchScreen(
                     viewModel = cvViewModel("search") { SearchViewModel(app) },
                     onOpen = open,
                     onBack = { navController.popBackStack() },
                     onPerson = { navController.navigate(Route.Person(it)) },
+                    onTrailer = { key, title -> navController.navigate(Route.Trailer(key, title)) },
+                    onNavigate = { page ->
+                        // A tab is a place, not a step: search closes first, or
+                        // it is saved into Home's stack and comes back the next
+                        // time Home is opened.
+                        fun tab(tab: Tab) {
+                            navController.popBackStack()
+                            goToTab(tab)
+                        }
+                        when (page) {
+                            "home" -> { homeSection = 0; tab(Tab.Home) }
+                            "movies" -> { homeSection = 1; tab(Tab.Home) }
+                            "tv" -> { homeSection = 2; tab(Tab.Home) }
+                            "list" -> tab(Tab.MyList)
+                            "stats" -> tab(Tab.Stats)
+                            "discover" -> tab(Tab.Discover)
+                            "profile" -> tab(Tab.Profile)
+                            "inbox" -> navController.navigate(Route.Inbox)
+                            "settings" -> navController.navigate(Route.Settings)
+                            "franchises" -> navController.navigate(Route.Franchises)
+                            "box-office" -> navController.navigate(Route.BoxOffice)
+                            "year" -> navController.navigate(Route.YourYear())
+                            "top10" -> navController.navigate(Route.TopTen("movie"))
+                        }
+                    },
+                    startListening = listen,
                 )
             }
+            cvComposable<Route.Search> { searchScreen(false) }
+            cvComposable<Route.VoiceSearch> { searchScreen(true) }
 
             cvComposable<Route.Auth> {
                 AuthScreen(
@@ -378,6 +430,17 @@ fun CineVerseNav(
                     },
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onBrand = { brand -> navController.navigate(Route.Studio(brand.id, brand.isNetwork, brand.name)) },
+                )
+            }
+
+            cvComposable<Route.TopTen> { entry ->
+                val route: Route.TopTen = entry.toRoute()
+                com.cineverse.app.feature.topten.TopTenScreen(
+                    viewModel = cvViewModel("topten") {
+                        com.cineverse.app.feature.topten.TopTenViewModel(app, MediaType.of(route.type))
+                    },
+                    onOpen = open,
+                    onBack = { navController.popBackStack() },
                 )
             }
 

@@ -71,11 +71,14 @@ class StatsSectionsRepository(
             val uid = auth.uid.value ?: return@launch
             runCatching {
                 store.collection("users").document(uid).set(
-                    // The whole map each time, which is what the website writes:
-                    // a field-path delete would be the only other way to reopen
-                    // a section and is far easier to get wrong.
+                    // The whole map each time, REPLACING the field. This used
+                    // SetOptions.merge(), and Firestore merges nested maps key
+                    // by key - so reopening a section wrote a map without its
+                    // key, the old `true` survived the merge, and the section
+                    // could never be opened again. mergeFields replaces this one
+                    // field and still leaves the rest of the document alone.
                     mapOf("statsSections" to next.associateWith { true }),
-                    SetOptions.merge(),
+                    SetOptions.mergeFields("statsSections"),
                 ).await()
             }
             pending.value = null

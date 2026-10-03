@@ -114,6 +114,8 @@ fun DetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val collection by viewModel.collection.collectAsStateWithLifecycle()
     val exactAir by viewModel.exactAir.collectAsStateWithLifecycle()
+    val castHours by viewModel.castHours.collectAsStateWithLifecycle()
+    val pitch by viewModel.pitch.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -160,27 +162,20 @@ fun DetailScreen(
     }
 
     val accent by com.cineverse.app.core.ui.rememberPosterAccent(detail.posterPath, settings.titleColour)
-    val glow by androidx.compose.animation.animateColorAsState(
-        accent ?: androidx.compose.ui.graphics.Color.Transparent,
+    // The title's colour as a TINT of the page: the hero's artwork (and its
+    // trailer) dissolves into this, and the block beneath carries it on and
+    // fades it back to the page colour. Both scroll together, so the colour
+    // travels with the content and there is never a seam between them.
+    val tint by androidx.compose.animation.animateColorAsState(
+        accent?.let { androidx.compose.ui.graphics.lerp(colors.ink, it, if (colors.isDark) 0.22f else 0.14f) } ?: colors.ink,
         androidx.compose.animation.core.tween(900),
-        label = "accent",
+        label = "tint",
     )
     androidx.compose.runtime.CompositionLocalProvider(com.cineverse.app.core.ui.LocalTitleAccent provides accent) {
     Box(
         modifier
             .fillMaxSize()
             .background(colors.ink)
-            // The title's own colour, glowing behind its header and fading as
-            // the page scrolls away from it.
-            .drawBehind {
-                if (glow.alpha > 0f) drawRect(
-                    androidx.compose.ui.graphics.Brush.radialGradient(
-                        listOf(glow.copy(alpha = 0.30f * (1f - collapsed)), androidx.compose.ui.graphics.Color.Transparent),
-                        center = androidx.compose.ui.geometry.Offset(size.width * 0.5f, size.height * 0.42f),
-                        radius = size.width * 1.05f,
-                    )
-                )
-            }
     ) {
         LazyColumn(
             state = listState,
@@ -188,6 +183,7 @@ fun DetailScreen(
         ) {
             item(key = "hero") {
                 DetailHero(
+                    tint = tint,
                     detail = detail,
                     collapsed = collapsed,
                     autoplay = settings.autoplay &&
@@ -197,6 +193,15 @@ fun DetailScreen(
             }
 
             item(key = "head") {
+                Box(
+                    Modifier.background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to tint,
+                            0.55f to androidx.compose.ui.graphics.lerp(tint, colors.ink, 0.6f),
+                            1f to colors.ink,
+                        )
+                    )
+                ) {
                 DetailHead(
                     detail = detail,
                     scores = state.scores,
@@ -215,6 +220,7 @@ fun DetailScreen(
                     onLists = { sheet = TitleSheet.Lists },
                     onProgress = { sheet = TitleSheet.Progress },
                 )
+                }
             }
 
             // Directly under the actions and above the tabs, so it is on screen
@@ -240,6 +246,12 @@ fun DetailScreen(
                 ?.let { next ->
                 item(key = "next") {
                     NextEpisodePanel(next, Modifier.padding(top = 16.dp), exactAt = exactAir)
+                }
+            }
+
+            pitch?.let { forYou ->
+                item(key = "forYou") {
+                    ForYouCard(forYou, Modifier.padding(horizontal = 18.dp).padding(top = 18.dp))
                 }
             }
 
@@ -296,6 +308,7 @@ fun DetailScreen(
                     onPerson = onPerson,
                     onOpen = onOpen,
                     onBrand = onBrand,
+                    castHours = castHours,
                 )
 
                 DetailTab.More -> item(key = "more") {
@@ -390,7 +403,13 @@ private fun tabsFor(detail: TitleDetail): List<DetailTab> =
     else listOf(DetailTab.About, DetailTab.More)
 
 @Composable
-private fun DetailHero(detail: TitleDetail, collapsed: Float, autoplay: Boolean) {
+private fun DetailHero(
+    detail: TitleDetail,
+    collapsed: Float,
+    autoplay: Boolean,
+    /** The page colour the artwork dissolves into - ink, tinted by the poster. */
+    tint: Color = CvTheme.colors.ink,
+) {
     val colors = CvTheme.colors
     // Clipped: the parallax translates the artwork, which would otherwise paint
     // outside the hero where nothing covers it. It also makes the fractional
@@ -474,11 +493,11 @@ private fun DetailHero(detail: TitleDetail, collapsed: Float, autoplay: Boolean)
                         0f to colors.ink.copy(alpha = 0.55f),
                         0.20f to Color.Transparent,
                         0.48f to Color.Transparent,
-                        0.62f to colors.ink.copy(alpha = 0.18f),
-                        0.76f to colors.ink.copy(alpha = 0.52f),
-                        0.88f to colors.ink.copy(alpha = 0.84f),
-                        0.96f to colors.ink.copy(alpha = 0.97f),
-                        1f to colors.ink,
+                        0.62f to tint.copy(alpha = 0.18f),
+                        0.76f to tint.copy(alpha = 0.52f),
+                        0.88f to tint.copy(alpha = 0.84f),
+                        0.96f to tint.copy(alpha = 0.97f),
+                        1f to tint,
                     )
                 )
         )

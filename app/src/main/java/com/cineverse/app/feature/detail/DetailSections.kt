@@ -382,8 +382,11 @@ private fun PreviouslyCard(title: String, state: PreviouslyState, onLoad: () -> 
                         is PreviouslyState.Loading -> "Reading what you have watched…"
                         is PreviouslyState.Empty -> "The episode guide has nothing to summarise yet"
                         is PreviouslyState.Ready ->
-                            if (state.previously.onDevice) "Summarised on your phone by Gemini Nano"
-                            else "From the episode guide"
+                            when {
+                                state.previously.onDevice -> "Summarised on your phone by Gemini Nano"
+                                state.previously.cloud -> "Summarised by Gemini, from episodes you've seen"
+                                else -> "From the episode guide"
+                            }
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.text3,
@@ -594,9 +597,10 @@ fun LazyListScope.aboutSection(
     onPerson: (Person) -> Unit,
     onOpen: (MediaItem) -> Unit,
     onBrand: (Brand) -> Unit = {},
+    castHours: Map<Int, com.cineverse.app.data.cast.ActorHours> = emptyMap(),
 ) {
     if (detail.cast.isNotEmpty()) {
-        item(key = "cast") { CastRow(detail.cast, onPerson) }
+        item(key = "cast") { CastRow(detail.cast, onPerson, castHours) }
     }
     if (detail.crew.isNotEmpty()) {
         item(key = "crew") { CrewRow(detail.crew, onPerson) }
@@ -825,7 +829,11 @@ private fun ProviderTile(
 }
 
 @Composable
-private fun CastRow(cast: List<Person>, onPerson: (Person) -> Unit) {
+private fun CastRow(
+    cast: List<Person>,
+    onPerson: (Person) -> Unit,
+    hours: Map<Int, com.cineverse.app.data.cast.ActorHours> = emptyMap(),
+) {
     val colors = CvTheme.colors
     Column(Modifier.padding(bottom = 18.dp)) {
         SectionHeader("Cast")
@@ -866,6 +874,20 @@ private fun CastRow(cast: List<Person>, onPerson: (Person) -> Unit) {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                    // Your time with them across everything you have watched,
+                    // arriving as each person's credits are read.
+                    hours[person.id]?.let { time ->
+                        val arrive = com.cineverse.app.core.ui.rememberArrival(1f, 0, 500)
+                        Text(
+                            "≈ ${time.label} with you",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.gold,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .graphicsLayer { alpha = arrive; translationY = (1f - arrive) * 8f },
                         )
                     }
                 }
@@ -1027,4 +1049,79 @@ private fun money(value: Long): String = when {
     value >= 1_000_000_000 -> "$%.2fB".format(value / 1_000_000_000.0)
     value >= 1_000_000 -> "$%.1fM".format(value / 1_000_000.0)
     else -> "$%,d".format(value)
+}
+
+/**
+ * "Why you'll like it": Gemini's two sentences on how this title sits with
+ * what you have loved, and a ring for how well. Arrives quietly - it is only
+ * ever there when Gemini answered, so there is no placeholder to flash.
+ */
+@Composable
+fun ForYouCard(pitch: com.cineverse.app.data.ai.Pitch, modifier: Modifier = Modifier) {
+    val colors = CvTheme.colors
+    val shown = com.cineverse.app.core.ui.rememberArrival(1f, durationMillis = 620)
+    val fill = com.cineverse.app.core.ui.rememberArrival(pitch.fit / 100f, delayMillis = 200, durationMillis = 1100)
+    val tone = when {
+        pitch.fit >= 75 -> com.cineverse.app.core.design.Palette.Green2
+        pitch.fit >= 50 -> com.cineverse.app.core.design.Palette.Gold
+        else -> com.cineverse.app.core.design.Palette.Red2
+    }
+    Row(
+        modifier
+            .graphicsLayer { alpha = shown; translationY = (1f - shown) * 18f }
+            .fillMaxWidth()
+            .clip(CvShape.Large)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(
+                        com.cineverse.app.core.design.Palette.Purple.copy(alpha = 0.13f),
+                        colors.text.copy(alpha = 0.03f),
+                    )
+                )
+            )
+            .border(1.dp, colors.text.copy(alpha = 0.07f), CvShape.Large)
+            .padding(16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.AutoAwesome,
+                    null,
+                    tint = com.cineverse.app.core.design.Palette.Purple2,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(7.dp))
+                Text("Why you might like it", style = MaterialTheme.typography.labelLarge, color = colors.text2)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(pitch.why, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+            Spacer(Modifier.height(8.dp))
+            Text("Gemini, from your ratings and history", style = MaterialTheme.typography.labelSmall, color = colors.text3)
+        }
+        Spacer(Modifier.width(14.dp))
+        Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val stroke = 5.dp.toPx()
+                val inset = stroke / 2
+                val arc = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+                drawArc(
+                    color = colors.text.copy(alpha = 0.08f),
+                    startAngle = 0f, sweepAngle = 360f, useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset), size = arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+                drawArc(
+                    color = tone,
+                    startAngle = -90f, sweepAngle = 360f * fill, useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset), size = arc,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("${(fill * 100).toInt()}", style = MaterialTheme.typography.titleMedium, color = colors.text)
+                Text("match", style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)), color = colors.text3)
+            }
+        }
+    }
 }

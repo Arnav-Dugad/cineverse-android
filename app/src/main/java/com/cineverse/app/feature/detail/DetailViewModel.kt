@@ -93,6 +93,12 @@ class DetailViewModel(
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
 
+    private val _pitch = MutableStateFlow<com.cineverse.app.data.ai.Pitch?>(null)
+
+    /** Gemini on how this sits with your taste; null until (and unless) it answers. */
+    val pitch: StateFlow<com.cineverse.app.data.ai.Pitch?> = _pitch.asStateFlow()
+    private var pitchAsked = false
+
     init {
         if (type == MediaType.Tv) com.cineverse.app.core.shortcuts.HabitShortcuts.reportOpened(app.context, id)
         // Paint from the cache first if we have been here before, so coming back
@@ -125,7 +131,9 @@ class DetailViewModel(
                 if (detail.isSeries) loadSeason(opening)
                 loadScores(detail)
                 if (detail.collectionId > 0) loadCollection(detail.collectionId)
+                if (_state.value.tab == DetailTab.About) loadCastHours()
                 detail.nextEpisode?.let { loadExactAir(detail, it) }
+                loadPitch(detail)
             }
             .onFailure { error ->
                 if (_state.value.detail == null) {
@@ -173,7 +181,54 @@ class DetailViewModel(
         return detail.seasons.lastOrNull()?.number ?: 1
     }
 
-    fun selectTab(tab: DetailTab) { _state.value = _state.value.copy(tab = tab) }
+    fun selectTab(tab: DetailTab) {
+        _state.value = _state.value.copy(tab = tab)
+        if (tab == DetailTab.About) loadCastHours()
+    }
+
+    private val _castHours = MutableStateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>>(emptyMap())
+
+    /** Hours you have spent with each of the cast, for the About tab. */
+    val castHours: StateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>> = _castHours.asStateFlow()
+    private var castHoursLoaded = false
+
+    /**
+     * Each cast member's credits, a few at a time, only once About is shown.
+     * Twelve people, cached for a week by the HTTP layer after the first look.
+     */
+    fun loadCastHours() {
+        if (castHoursLoaded) return
+        val detail = _state.value.detail ?: return
+        castHoursLoaded = true
+        viewModelScope.launch {
+            val gate = kotlinx.coroutines.sync.Semaphore(3)
+            detail.cast.take(12).forEach { person ->
+                launch {
+                    gate.acquire()
+                    try {
+                        val full = runCatching { app.tmdb.person(person.id) }.getOrNull() ?: return@launch
+                        val hours = com.cineverse.app.data.cast.ActorHours.of(
+                            full, app.library.library.value, app.episodes.progress.value,
+                        )
+                        if (hours.minutes > 0) _castHours.value = _castHours.value + (person.id to hours)
+                    } finally {
+                        gate.release()
+                    }
+                }
+            }
+        }
+    }
+
+    /** Once per visit, and only for something you have not seen. */
+    private fun loadPitch(detail: TitleDetail) {
+        if (pitchAsked) return
+        val library = app.library.library.value
+        if (!library.loaded || library.isWatched(detail.key) || app.episodes.progress.value[detail.id]?.watchedCount?.let { it > 0 } == true) return
+        pitchAsked = true
+        viewModelScope.launch {
+            _pitch.value = runCatching { app.forYou.pitch(detail, library) }.getOrNull()
+        }
+    }
 
     fun selectSeason(season: Int) {
         if (season == _state.value.season && _state.value.episodes.isNotEmpty()) return

@@ -89,6 +89,8 @@ object Notifications {
         body: String,
         deepLink: String,
         imageUrl: String?,
+        /** An episode to offer "Mark watched" for: show id, season, episode, label. */
+        markWatched: MarkTarget? = null,
     ) {
         if (!canPost(context)) return
         ensureChannels(context)
@@ -134,6 +136,26 @@ object Notifications {
 
         if (art != null) builder.setLargeIcon(art)
 
+        // Tick it from the shade. A broadcast, not an activity: the app does
+        // not open, the receiver writes the tick and confirms in place.
+        if (markWatched != null) {
+            val mark = Intent(context, MarkWatchedReceiver::class.java)
+                .setAction(MarkWatchedReceiver.ACTION)
+                .putExtra(MarkWatchedReceiver.EXTRA_SHOW, markWatched.showId)
+                .putExtra(MarkWatchedReceiver.EXTRA_SEASON, markWatched.season)
+                .putExtra(MarkWatchedReceiver.EXTRA_EPISODE, markWatched.episode)
+                .putExtra(MarkWatchedReceiver.EXTRA_NOTIFICATION, id)
+                .putExtra(MarkWatchedReceiver.EXTRA_TITLE, title)
+                .putExtra(MarkWatchedReceiver.EXTRA_LABEL, markWatched.label)
+            val action = PendingIntent.getBroadcast(
+                context,
+                id,
+                mark,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(R.drawable.ic_notification, "Mark watched", action)
+        }
+
         // The check is INLINE rather than delegated to canPost(), because lint
         // follows the call it can see and not the helper one function away. It
         // is the same check; writing it here is what makes lint agree.
@@ -170,3 +192,6 @@ object Notifications {
     /** A stable, collision-resistant id from a key the sweep already computes. */
     fun idFor(key: String): Int = key.hashCode() and 0x7FFFFFFF
 }
+
+/** The episode a notification can tick. */
+data class MarkTarget(val showId: Int, val season: Int, val episode: Int, val label: String)
