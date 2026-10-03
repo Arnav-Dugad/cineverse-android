@@ -30,6 +30,10 @@ data class SearchState(
     /** What the user actually sees. */
     val shown: List<MediaItem> = emptyList(),
     val history: List<String> = emptyList(),
+    /** People the search found - a row of faces above the posters. */
+    val people: List<com.cineverse.app.data.model.Person> = emptyList(),
+    /** What an empty search box offers instead of a blank page. */
+    val trending: List<MediaItem> = emptyList(),
     val loading: Boolean = false,
     val page: Int = 1,
     val totalPages: Int = 1,
@@ -61,9 +65,20 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
 
     val library: StateFlow<Library> = app.library.library
 
-    private val history = ArrayDeque<String>()
+    // Kept on the device, the eight most recent. It lived only in memory, so
+    // leaving Search and coming back found the list empty every time.
+    private val prefs = app.context.getSharedPreferences("search", android.content.Context.MODE_PRIVATE)
+    private val history = ArrayDeque(
+        prefs.getString("history", "").orEmpty().split('\n').filter { it.isNotBlank() }.take(8)
+    )
 
     init {
+        _state.value = _state.value.copy(history = history.toList())
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                trending = app.tmdb.trending("all", "day").filter { it.hasArt }.take(18),
+            )
+        }
         // 280 ms: long enough that typing "severance" is one request rather than
         // nine, short enough that it still feels like it is keeping up.
         _state
@@ -117,8 +132,10 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
     fun onQueryChange(value: String) {
         _state.value = _state.value.copy(query = value)
         if (value.isBlank()) {
+            generation++
             _state.value = _state.value.copy(
-                results = emptyList(), shown = emptyList(), page = 1, totalPages = 1,
+                results = emptyList(), shown = emptyList(), people = emptyList(),
+                page = 1, totalPages = 1, loading = false,
             )
         }
     }
@@ -134,18 +151,42 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
         history.remove(query)
         history.addFirst(query)
         while (history.size > 8) history.removeLast()
+        persist()
+    }
+
+    fun forget(query: String) {
+        history.remove(query)
+        persist()
+    }
+
+    fun clearHistory() {
+        history.clear()
+        persist()
+    }
+
+    private fun persist() {
+        prefs.edit().putString("history", history.joinToString("\n")).apply()
         _state.value = _state.value.copy(history = history.toList())
     }
 
+    /** Bumped by every search, so only the newest one may paint. */
+    private var generation = 0
+
     private fun search(query: String, page: Int) = viewModelScope.launch {
+        val mine = ++generation
         _state.value = _state.value.copy(loading = true)
-        val (items, total) = app.tmdb.search(query, page, app.settings.settings.value.adult)
+        val found = app.tmdb.searchPage(query, page, app.settings.settings.value.adult)
+        // A late answer to a query the user has since changed is dropped, not
+        // painted over what they are now typing. The newer search owns the
+        // loading flag and will clear it.
+        if (mine != generation) return@launch
         val existing = if (page == 1) emptyList() else _state.value.results
         _state.value = _state.value.copy(
-            results = (existing + items).distinctBy { it.key },
+            results = (existing + found.items).distinctBy { it.key },
+            people = if (page == 1) found.people else _state.value.people,
             loading = false,
             page = page,
-            totalPages = total,
+            totalPages = found.totalPages,
         ).withFilter()
     }
 

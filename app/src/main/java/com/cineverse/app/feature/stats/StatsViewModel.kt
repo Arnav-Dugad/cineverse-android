@@ -1,5 +1,9 @@
 package com.cineverse.app.feature.stats
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -34,6 +38,8 @@ data class StatsState(
     val totalMinutes: Int = 0,
     val loaded: Boolean = false,
     val deep: DeepStats = DeepStats(),
+    /** "You watch Severance on weeknights, The Bear on weekends", or "". */
+    val pattern: String = "",
 )
 
 /**
@@ -51,6 +57,37 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
     val sections: StateFlow<Set<String>> = app.statsSections.collapsed
 
     fun toggleSection(id: String) = app.statsSections.toggle(id)
+
+    private val _cast = kotlinx.coroutines.flow.MutableStateFlow<com.cineverse.app.data.cast.CastHours?>(null)
+
+    /**
+     * Hours with the people on screen. A request per show, so worked out only
+     * when the shows it reads change - the top twenty by time watched - and
+     * never on the critical path of the page.
+     */
+    val castHours: StateFlow<com.cineverse.app.data.cast.CastHours?> = _cast
+
+    init {
+        viewModelScope.launch {
+            app.episodes.progress
+                .map { shows ->
+                    shows.values.filter { it.watchedCount > 0 }
+                        .sortedByDescending { it.minutesWatched }
+                        .take(20)
+                        .map { it.tmdbId to it.watchedCount }
+                }
+                .distinctUntilChanged()
+                .filter { it.isNotEmpty() }
+                .collectLatest {
+                    val animated = app.library.library.value.watched.values
+                        .filter { it.type == com.cineverse.app.data.model.MediaType.Tv && 16 in it.genres }
+                        .map { it.tmdbId }.toSet()
+                    _cast.value = runCatching {
+                        app.castHours.compute(app.episodes.progress.value.values, animated)
+                    }.getOrNull()
+                }
+        }
+    }
 
     val state: StateFlow<StatsState> =
         combine(
@@ -112,7 +149,7 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
         }
 
         val figures = listOf(
-            Figure("Watch time", hours(totalMinutes), "${totalMinutes / 60} hours in total"),
+            Figure("Watch time", hours(totalMinutes), daysLine(totalMinutes)),
             Figure("Films", films.size.toString(), "${filmMinutes / 60}h"),
             Figure("Series", series.size.toString(), "$episodes episodes"),
             Figure("Current streak", "$streak", if (streak == 1) "day" else "days"),
@@ -130,16 +167,21 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
             longestStreak = longest,
             totalMinutes = totalMinutes,
             deep = buildDeepStats(lib, shows, totalMinutes, streak, longest),
+            pattern = com.cineverse.app.data.recap.Recaps.insight(shows.values),
             loaded = true,
         )
     }
 
-    private fun hours(minutes: Int): String {
-        val h = minutes / 60
-        return when {
-            h >= 1000 -> "${h / 1000}.${(h % 1000) / 100}k h"
-            else -> "${h}h"
-        }
+    /**
+     * "5,720h", never "5.7k h". The figure is the headline of the card and a
+     * unit glued to an abbreviation reads as a typo; the full number fits.
+     */
+    private fun hours(minutes: Int): String = "%,dh".format(java.util.Locale.US, minutes / 60)
+
+    /** The same time, said the way people actually feel it. */
+    private fun daysLine(minutes: Int): String {
+        val days = minutes / (60 * 24)
+        return if (days >= 2) "about $days days of it" else "${minutes / 60} hours in total"
     }
 
     /** Days in a row ending today or yesterday — missing today is not a break yet. */

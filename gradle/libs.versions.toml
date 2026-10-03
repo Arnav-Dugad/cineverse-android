@@ -25,6 +25,11 @@ glance = "1.2.0"
 splashscreen = "1.2.0"
 paging = "3.5.1"
 browser = "1.9.0"
+webkit = "1.17.1"
+# The ONE pre-release here, on purpose. Gemini Nano's on-device summariser has
+# no stable artifact yet; it is used only behind a device-capability check,
+# with a plain fallback, so a phone without Nano loses nothing.
+mlkitSummarization = "1.0.0-beta1"
 desugar = "2.1.5"
 benchmark = "1.5.0"
 profileinstaller = "1.4.1"
@@ -69,6 +74,8 @@ androidx-work = { group = "androidx.work", name = "work-runtime-ktx", version.re
 androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
+mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summarization", version.ref = "mlkitSummarization" }
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 

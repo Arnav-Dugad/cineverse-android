@@ -77,7 +77,7 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
     val state: StateFlow<MyListState> =
         combine(
             segment, filter, listId, genres,
-            app.library.library, app.episodes.progress,
+            app.library.library, app.episodes.progress, app.unlockedLists.ids,
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val seg = values[0] as ListSegment
@@ -89,6 +89,10 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
             val lib = values[4] as Library
             @Suppress("UNCHECKED_CAST")
             val shows = values[5] as Map<Int, com.cineverse.app.data.model.ShowProgress>
+            @Suppress("UNCHECKED_CAST")
+            val open = values[6] as Set<String>
+            // Lists whose PIN has not been entered this session.
+            val locked = lib.lists.filter { it.hasPin && it.id !in open }.map { it.id }.toSet()
 
             val all = when (seg) {
                 // EVERYTHING saved, watched or not.
@@ -102,6 +106,9 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
                     // A custom list narrows the watchlist rather than replacing
                     // it, so the segment still means the same thing either way.
                     .filter { list.isBlank() || it.lists.contains(list) }
+                    // In "All", a title that lives ONLY in locked lists stays
+                    // hidden: showing it here would undo the PIN entirely.
+                    .filter { list.isNotBlank() || it.lists.isEmpty() || !it.lists.all { id -> id in locked } }
                     .sortedByDescending { it.addedAt }
                     .map { it.asItem() }
 
@@ -153,4 +160,32 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
     fun setFilter(value: MediaFilter) { filter.value = value }
 
     fun selectList(id: String) { listId.value = id }
+
+    // ---------- PIN locks ----------
+
+    /** Lists opened with their PIN this session. */
+    val unlocked: StateFlow<Set<String>> = app.unlockedLists.ids
+
+    suspend fun verifyPin(list: com.cineverse.app.data.model.UserList, pin: String): Boolean =
+        com.cineverse.app.data.lock.ListLocks.verify(pin, list.lockSalt, list.lockHash)
+
+    fun unlock(list: com.cineverse.app.data.model.UserList) = app.unlockedLists.unlock(list.id)
+
+    fun relock(list: com.cineverse.app.data.model.UserList) = app.unlockedLists.lock(list.id)
+
+    suspend fun setPin(list: com.cineverse.app.data.model.UserList, pin: String): Boolean {
+        val salt = com.cineverse.app.data.lock.ListLocks.newSalt()
+        val hash = com.cineverse.app.data.lock.ListLocks.derive(pin, salt)
+        val saved = app.library.saveListLock(list.id, salt, hash)
+        // Setting a PIN leaves the list open for now - you just proved you
+        // know it - exactly as the website does.
+        if (saved) app.unlockedLists.unlock(list.id)
+        return saved
+    }
+
+    suspend fun removePin(list: com.cineverse.app.data.model.UserList): Boolean {
+        val saved = app.library.saveListLock(list.id, null, null)
+        if (saved) app.unlockedLists.lock(list.id)
+        return saved
+    }
 }

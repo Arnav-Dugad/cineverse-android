@@ -1,5 +1,8 @@
 package com.cineverse.app.feature.list
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -71,6 +74,9 @@ fun MyListScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var picking by remember { mutableStateOf(false) }
+    val unlocked by viewModel.unlocked.collectAsStateWithLifecycle()
+    var pinTarget by remember { mutableStateOf<Pair<com.cineverse.app.data.model.UserList, PinMode>?>(null) }
+    var lockOptions by remember { mutableStateOf<com.cineverse.app.data.model.UserList?>(null) }
     val library by viewModel.library.collectAsStateWithLifecycle()
     var filters by remember { mutableStateOf(false) }
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
@@ -89,13 +95,43 @@ fun MyListScreen(
 
     // What Pick for me chooses from: the list as you are looking at it, filters
     // and all, minus anything already watched.
-    val pickable = if (state.segment == ListSegment.Watchlist) {
+    // A locked list draws NOTHING of itself - not its titles, not its count,
+    // not a pick from it - until the PIN is entered.
+    val selectedList = library.lists.firstOrNull { it.id == state.listId }
+    val lockedNow = state.segment == ListSegment.Watchlist &&
+        selectedList?.hasPin == true && selectedList.id !in unlocked
+    val pickable = if (state.segment == ListSegment.Watchlist && !lockedNow) {
         state.items.filterNot { library.isWatched(it.key) }
     } else emptyList()
     com.cineverse.app.core.ui.OnShake(shakeToPick && pickable.size >= 3 && !picking) {
         haptics?.play(Haptic.Celebrate)
         picking = true
     }
+    lockOptions?.let { list ->
+        LockOptionsSheet(
+            list = list,
+            unlocked = list.id in unlocked,
+            onPick = { mode -> lockOptions = null; if (mode != null) pinTarget = list to mode },
+            onLockNow = { viewModel.relock(list); lockOptions = null },
+            onDismiss = { lockOptions = null },
+        )
+    }
+    pinTarget?.let { (list, mode) ->
+        PinSheet(
+            list = list,
+            mode = mode,
+            verify = { pin -> viewModel.verifyPin(list, pin) },
+            onDone = { pin ->
+                when (mode) {
+                    PinMode.Unlock -> { viewModel.unlock(list); true }
+                    PinMode.Set, PinMode.Change -> viewModel.setPin(list, pin)
+                    PinMode.Remove -> viewModel.removePin(list)
+                }
+            },
+            onDismiss = { pinTarget = null },
+        )
+    }
+
     if (picking && pickable.isNotEmpty()) {
         com.cineverse.app.feature.pick.PickSheet(
             picks = pickable,
@@ -173,10 +209,10 @@ fun MyListScreen(
             onOpen = { filters = true },
             trailing = {
                 Text(
-                    if (state.filter.isDefault) {
-                        "${state.all.size} title${if (state.all.size == 1) "" else "s"}"
-                    } else {
-                        "${state.items.size} of ${state.all.size}"
+                    when {
+                        lockedNow -> "Locked"
+                        state.filter.isDefault -> "${state.all.size} title${if (state.all.size == 1) "" else "s"}"
+                        else -> "${state.items.size} of ${state.all.size}"
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.text3,
@@ -199,7 +235,17 @@ fun MyListScreen(
                     haptics?.play(Haptic.Select); viewModel.selectList("")
                 }
                 for (list in library.lists) {
-                    ListChip(list.name, state.listId == list.id) {
+                    ListChip(
+                        label = list.name,
+                        active = state.listId == list.id,
+                        lock = when {
+                            !list.hasPin -> null
+                            list.id in unlocked -> false
+                            else -> true
+                        },
+                        // Hold a list to set, change or remove its PIN.
+                        onLongPress = { haptics?.play(Haptic.Peek); lockOptions = list },
+                    ) {
                         haptics?.play(Haptic.Select); viewModel.selectList(list.id)
                     }
                 }
@@ -207,7 +253,9 @@ fun MyListScreen(
         }
 
         val items = state.items
-        if (state.filteredOut) {
+        if (lockedNow && selectedList != null) {
+            LockedPanel(selectedList, onUnlock = { pinTarget = selectedList to PinMode.Unlock })
+        } else if (state.filteredOut) {
             EmptyState(
                 title = "No titles match your filters",
                 body = "Loosen one of them, or reset them all.",
@@ -240,7 +288,9 @@ fun MyListScreen(
                         item = item,
                         onOpen = onOpen,
                         width = posterCellWidth(),
-                        watched = library.isWatched(item.key),
+                        // On "Watching" every show is in progress by definition;
+                        // a green tick there said "finished", which it is not.
+                        watched = state.segment != ListSegment.Watching && library.isWatched(item.key),
                         saved = library.isSaved(item.key),
                         rating = library.ratingOf(item.key),
                     )
@@ -306,19 +356,45 @@ fun EmptyState(
 }
 
 /** One custom list, as a chip. */
+/**
+ * One custom list, as a chip. [lock] is null for a list with no PIN, true
+ * while it is locked and false once it has been opened this session.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ListChip(label: String, active: Boolean, onClick: () -> Unit) {
+private fun ListChip(
+    label: String,
+    active: Boolean,
+    lock: Boolean? = null,
+    onLongPress: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val colors = CvTheme.colors
-    Box(
+    Row(
         Modifier
             .height(34.dp)
             .clip(CvShape.Pill)
             .background(if (active) colors.text else colors.glass)
             .border(1.dp, if (active) Color.Transparent else colors.hairline, CvShape.Pill)
-            .clickableNoRipple(onClick)
+            .combinedClickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onLongClick = onLongPress,
+                onClick = onClick,
+            )
             .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (lock != null) {
+            androidx.compose.material3.Icon(
+                if (lock) androidx.compose.material.icons.Icons.Rounded.Lock
+                else androidx.compose.material.icons.Icons.Rounded.LockOpen,
+                if (lock) "Locked" else "Unlocked",
+                tint = if (active) colors.ink else colors.text3,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.size(5.dp))
+        }
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,

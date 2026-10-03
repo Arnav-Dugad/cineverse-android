@@ -175,6 +175,42 @@ fun FranchisesScreen(
                     }
                 }
 
+                if (state.filter == FranchiseFilter.Television) {
+                    val families = state.tv
+                    if (families == null) {
+                        item(key = "tv_loading") {
+                            Box(
+                                Modifier
+                                    .padding(horizontal = ScreenPadding)
+                                    .fillMaxWidth()
+                                    .height(96.dp)
+                                    .clip(CvShape.Large)
+                                    .shimmer()
+                            )
+                        }
+                    } else {
+                        item(key = "tv_note") {
+                            Text(
+                                if (families.isEmpty()) FranchiseFilter.Television.empty
+                                else "TMDB keeps no collections for television, so these are grouped by name. The total is what a search for that name found - read it as found, not as everything that exists.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.text3,
+                                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 4.dp),
+                            )
+                        }
+                        items(families.size, key = { "tv_" + families[it].key }) { index ->
+                            TvFamilyCard(
+                                family = families[index],
+                                onOpen = onOpen,
+                                modifier = Modifier
+                                    .padding(horizontal = ScreenPadding)
+                                    .riseIn("tv_" + families[index].key, index, shown),
+                            )
+                        }
+                    }
+                    return@LazyColumn
+                }
+
                 val visible = state.visible
                 if (visible.isEmpty()) {
                     item(key = "none") {
@@ -370,6 +406,68 @@ private fun FranchiseCard(
     }
 }
 
+/** A television family: its posters as a fanned strip, how far through, what is next. */
+@Composable
+private fun TvFamilyCard(
+    family: com.cineverse.app.data.franchise.TvFamily,
+    onOpen: (MediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    Column(modifier.fillMaxWidth().glass(CvShape.Large, strength = 0.8f).padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(family.name, style = MaterialTheme.typography.titleMedium, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${family.seen} of ${family.found} found" + (family.nextUp?.let { " · next: ${it.title}" } ?: ""),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.text3,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                "${(family.fraction * 100).toInt()}%",
+                style = MaterialTheme.typography.titleMedium.tabular(),
+                color = if (family.complete) colors.gold else colors.text,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        GrowBar(family.fraction, color = if (family.complete) colors.gold else com.cineverse.app.core.design.Palette.Red2)
+        Spacer(Modifier.height(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(family.members, key = { it.key }) { show ->
+                val seen = show.id in family.seenIds
+                Box(
+                    Modifier
+                        .width(62.dp)
+                        .height(93.dp)
+                        .clip(CvShape.Small)
+                        .clickableNoRipple { onOpen(show) }
+                ) {
+                    CvImage(
+                        Img.poster(show.posterPath), show.title,
+                        Modifier.matchParentSize().graphicsLayer { alpha = if (seen) 1f else 0.5f },
+                    )
+                    if (seen) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                                .size(16.dp)
+                                .clip(CvShape.Circle)
+                                .background(colors.green),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun metaLine(row: FranchiseRow): String = buildList {
     add(row.progress.label)
     if (row.progress.upcoming > 0) add("${row.progress.upcoming} still to come")
@@ -470,6 +568,10 @@ enum class FranchiseFilter(val label: String, val empty: String) {
     Gaps("With gaps", "No gaps. Everything you have started, you have watched in order."),
     Complete("Complete", "No series finished yet — the first one is usually closer than it looks."),
     All("Everything", "No film series in your history yet."),
+    Television(
+        "Television",
+        "No television families yet. A show joins one when its title names the franchise before a colon or a dash, like Star Trek: Discovery.",
+    ),
 }
 
 data class FranchiseRow(
@@ -486,6 +588,8 @@ data class FranchisesState(
     val rows: List<FranchiseRow>? = null,
     val filter: FranchiseFilter = FranchiseFilter.Progress,
     val expanded: Set<Int> = emptySet(),
+    /** Television families, grouped by name. Null while they resolve. */
+    val tv: List<com.cineverse.app.data.franchise.TvFamily>? = null,
 ) {
     fun rowsFor(filter: FranchiseFilter): List<FranchiseRow> {
         val all = rows.orEmpty()
@@ -496,6 +600,7 @@ data class FranchisesState(
             FranchiseFilter.Gaps -> open.filter { it.gaps.isNotEmpty() }
             FranchiseFilter.Complete -> all.filter { it.progress.complete }
             FranchiseFilter.All -> all
+            FranchiseFilter.Television -> emptyList()
         }.sortedWith(
             // Closest to done first, then fewest films left — the ones actually finishable.
             compareByDescending<FranchiseRow> { it.progress.fraction }
@@ -505,7 +610,10 @@ data class FranchisesState(
     }
 
     val visible: List<FranchiseRow> get() = rowsFor(filter)
-    val counts: Map<FranchiseFilter, Int> get() = FranchiseFilter.entries.associateWith { rowsFor(it).size }
+    val counts: Map<FranchiseFilter, Int>
+        get() = FranchiseFilter.entries.associateWith {
+            if (it == FranchiseFilter.Television) tv.orEmpty().size else rowsFor(it).size
+        }
     val seenParts: Int get() = rows.orEmpty().sumOf { it.progress.seen }
     val trackedParts: Int get() = rows.orEmpty().sumOf { it.progress.released }
     val minutesLeft: Int get() = rows.orEmpty().filter { !it.progress.complete }.sumOf { it.minutesLeft }
@@ -516,11 +624,12 @@ class FranchisesViewModel(private val app: AppContainer) : ViewModel() {
     private val rows = MutableStateFlow<List<FranchiseRow>?>(null)
     private val filter = MutableStateFlow(FranchiseFilter.Progress)
     private val expanded = MutableStateFlow<Set<Int>>(emptySet())
+    private val tv = MutableStateFlow<List<com.cineverse.app.data.franchise.TvFamily>?>(null)
 
     val state: StateFlow<FranchisesState> = combine(
-        rows, filter, expanded, app.auth.uid,
-    ) { rows, filter, expanded, uid ->
-        FranchisesState(signedIn = uid != null, rows = rows, filter = filter, expanded = expanded)
+        rows, filter, expanded, app.auth.uid, tv,
+    ) { rows, filter, expanded, uid, tv ->
+        FranchisesState(signedIn = uid != null, rows = rows, filter = filter, expanded = expanded, tv = tv)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FranchisesState())
 
     init {
@@ -540,6 +649,13 @@ class FranchisesViewModel(private val app: AppContainer) : ViewModel() {
                 .collectLatest { (ids, watched, runtimes) ->
                     rows.value = resolve(ids, watched, runtimes)
                 }
+        }
+        viewModelScope.launch {
+            app.library.library
+                .filter { it.loaded }
+                .map { library -> com.cineverse.app.data.franchise.TvFamilies.families(library) }
+                .distinctUntilChanged()
+                .collectLatest { families -> tv.value = resolveTv(families) }
         }
     }
 
@@ -561,6 +677,43 @@ class FranchisesViewModel(private val app: AppContainer) : ViewModel() {
                 minutesLeft = Franchises.remainingMinutes(progress, runtimes),
             )
         }
+    }
+
+    /**
+     * Every member TMDB knows of each family, by one search per family name.
+     * A show the viewer demonstrably watched always counts, even when the
+     * search missed it; the total is "found on TMDB", never "exists".
+     */
+    private suspend fun resolveTv(
+        families: List<Pair<String, List<com.cineverse.app.data.model.WatchedItem>>>,
+    ): List<com.cineverse.app.data.franchise.TvFamily> {
+        val dropped = app.episodes.progress.value.values.filter { it.dropped }.map { it.tmdbId }.toSet()
+        val gate = Semaphore(3)
+        return coroutineScope {
+            families.take(24).map { (stem, watchedShows) ->
+                async {
+                    gate.withPermit {
+                        val found = app.tmdb.searchTv(stem)
+                            .filter { com.cineverse.app.data.franchise.TvFamilies.belongs(it.title, stem) }
+                        val byId = LinkedHashMap<Int, MediaItem>()
+                        found.forEach { byId[it.id] = it }
+                        watchedShows.forEach { show -> if (show.tmdbId !in byId) byId[show.tmdbId] = show.asItem() }
+                        val members = byId.values.sortedBy { it.releaseDate.ifBlank { "9999" } }
+                        if (members.size < 2) return@withPermit null
+                        val seen = watchedShows.map { it.tmdbId }.toSet()
+                        com.cineverse.app.data.franchise.TvFamily(
+                            key = com.cineverse.app.data.franchise.TvFamilies.fold(stem),
+                            name = stem,
+                            members = members,
+                            seenIds = seen,
+                            unseen = members.filter { it.id !in seen && it.id !in dropped },
+                        )
+                    }
+                }
+            }.awaitAll()
+        }.filterNotNull().sortedWith(
+            compareByDescending<com.cineverse.app.data.franchise.TvFamily> { it.fraction }.thenByDescending { it.seen }
+        )
     }
 
     fun setFilter(value: FranchiseFilter) { filter.value = value }

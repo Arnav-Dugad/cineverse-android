@@ -39,6 +39,8 @@ data class MediaDto(
     @SerialName("original_language") val originalLanguage: String? = null,
     val adult: Boolean = false,
     @SerialName("known_for_department") val knownForDepartment: String? = null,
+    /** A person result's best-known titles - what a search for a name is really after. */
+    @SerialName("known_for") val knownFor: List<MediaDto> = emptyList(),
 )
 
 @Serializable
@@ -294,6 +296,8 @@ data class EpisodeDto(
     val runtime: Int? = null,
     @SerialName("vote_average") val voteAverage: Double = 0.0,
     @SerialName("vote_count") val voteCount: Int = 0,
+    /** "standard", "mid_season" or "finale" - how a finale is told from an episode. */
+    @SerialName("episode_type") val episodeType: String? = null,
 )
 
 @Serializable

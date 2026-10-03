@@ -98,7 +98,7 @@ class CineVerseApp : Application(), SingletonImageLoader.Factory {
  * processor, a build-time code generation step and a class of error that only
  * appears at runtime, to replace twenty lines of `by lazy`.
  */
-class AppContainer(private val context: Context) {
+class AppContainer(val context: Context) {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -174,6 +174,23 @@ class AppContainer(private val context: Context) {
     val recommender: Recommender by lazy { Recommender(tmdb) }
 
     val boxOffice by lazy { com.cineverse.app.data.boxoffice.BoxOfficeRepository(tmdb, http) }
+
+    val unlockedLists by lazy { com.cineverse.app.data.lock.UnlockedLists() }
+
+    val previouslyOn by lazy { com.cineverse.app.data.recap.PreviouslyOn(context) }
+
+    val inbox by lazy {
+        com.cineverse.app.data.inbox.InboxRepository(context, library.library, episodes.progress, airing, scope)
+    }
+
+    val castHours by lazy { com.cineverse.app.data.cast.CastHoursRepository(context, tmdb) }
+
+    val airing by lazy {
+        com.cineverse.app.data.airing.AiringRepository(
+            tmdb,
+            com.cineverse.app.data.airing.ExactTimes(context, http),
+        )
+    }
 
     /**
      * Bumped once per launch, never on navigation.

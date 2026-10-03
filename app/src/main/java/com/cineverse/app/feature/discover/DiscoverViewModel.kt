@@ -65,6 +65,10 @@ class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
                     "sort_by" to "vote_average.desc",
                     "vote_count.gte" to "300",
                     "vote_count.lte" to "2500",
+                    // Out for a year at least. A film in its opening weeks has a
+                    // few hundred votes from the people who queued for it, and
+                    // those are always tens: that is hype, not a hidden gem.
+                    "primary_release_date.lte" to java.time.LocalDate.now().minusYears(1).toString(),
                 ),
             )
         }

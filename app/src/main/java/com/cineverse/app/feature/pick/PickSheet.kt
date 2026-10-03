@@ -139,6 +139,11 @@ fun PickSheet(
                     style = MaterialTheme.typography.titleLarge,
                     color = if (chosen != null) colors.text else colors.text3,
                     textAlign = TextAlign.Center,
+                    // Two lines reserved whatever the title, so a long one
+                    // landing does not make the whole sheet jump.
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -160,7 +165,7 @@ fun PickSheet(
             }
             Spacer(Modifier.height(14.dp))
             Text(
-                "From ${picks.size} titles",
+                "From ${picks.size} ${if (picks.size == 1) "title" else "titles"} you have not seen",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.text3,
             )

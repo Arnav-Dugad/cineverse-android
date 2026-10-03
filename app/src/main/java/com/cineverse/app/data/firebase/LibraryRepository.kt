@@ -228,6 +228,26 @@ class LibraryRepository(
         batch.commit().await()
     }
 
+    /**
+     * Write or clear a list's PIN lock, in the website's exact shape, so a PIN
+     * set on either opens the list on both.
+     */
+    suspend fun saveListLock(id: String, salt: String?, hash: String?): Boolean {
+        val uid = auth.uid.value ?: return false
+        val value: Any = if (salt != null && hash != null) mapOf(
+            "v" to 1,
+            "algo" to "PBKDF2-SHA256",
+            "iterations" to com.cineverse.app.data.lock.ListLocks.ITERATIONS,
+            "salt" to salt,
+            "hash" to hash,
+            "updatedAt" to System.currentTimeMillis(),
+        ) else FieldValue.delete()
+        return runCatching {
+            user(uid).collection("lists").document(id)
+                .set(mapOf("lock" to value), com.google.firebase.firestore.SetOptions.merge()).await()
+        }.isSuccess
+    }
+
     suspend fun setLists(key: String, lists: List<String>) {
         val uid = auth.uid.value ?: return
         val clean = lists.distinct().ifEmpty { listOf("watchlist") }
@@ -401,6 +421,11 @@ internal fun DocumentSnapshot.toList(): UserList = UserList(
     icon = str("icon"),
     createdAt = millis("createdAt"),
     locked = getBoolean("locked") == true,
+    // The lock is an OBJECT on the website's documents. This used to read a
+    // boolean that nothing writes, so a list locked on the laptop showed every
+    // title on the phone.
+    lockSalt = ((get("lock") as? Map<*, *>)?.get("salt") as? String).orEmpty(),
+    lockHash = ((get("lock") as? Map<*, *>)?.get("hash") as? String).orEmpty(),
 )
 
 internal fun DocumentSnapshot.toMovieProgress(): MovieProgress? {

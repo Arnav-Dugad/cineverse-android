@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.core.design.CineVerseTheme
 import com.cineverse.app.core.design.CvHaptics
 import com.cineverse.app.nav.CineVerseNav
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -84,5 +85,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // The habit shortcuts are rebuilt as you arrive and as you leave, so a
+    // long-press on the icon later this evening offers this evening's shows.
+    override fun onStart() {
+        super.onStart()
+        refreshHabits()
+    }
+
+    override fun onStop() {
+        refreshHabits()
+        super.onStop()
+    }
+
+    private fun refreshHabits() {
+        val app = (application as CineVerseApp).container
+        val shows = app.episodes.progress.value.values
+        if (shows.isEmpty()) return
+        app.scope.launch { com.cineverse.app.core.shortcuts.HabitShortcuts.refresh(applicationContext, shows) }
     }
 }

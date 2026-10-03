@@ -58,7 +58,17 @@ data class HomeState(
     /** item key -> its YouTube trailer key, for the hero to play behind itself. */
     val heroTrailers: Map<String, String> = emptyMap(),
     val offline: Boolean = false,
+    /** Caught-up shows with an episode on the way, soonest first. */
+    val upNext: List<com.cineverse.app.data.airing.UpNextItem> = emptyList(),
+    /** Shows you finished whose next season premieres this month. */
+    val returning: List<com.cineverse.app.data.airing.ReturningItem> = emptyList(),
 )
+
+/** TMDB's Talk and News genres: nightly programming, not shows you pick. */
+private val NOT_SHOWS = setOf(10767, 10763)
+
+/** Below this many posters a rail looks broken rather than curated. */
+private const val MIN_RAIL = 8
 
 class HomeViewModel(private val app: AppContainer) : ViewModel() {
 
@@ -71,8 +81,26 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
     val library: StateFlow<Library> = app.library.library
     val progress: StateFlow<Map<Int, ShowProgress>> = app.episodes.progress
 
+    val settings: StateFlow<com.cineverse.app.data.prefs.Settings> = app.settings.settings
+
+    // Every property is declared ABOVE `init`, and that is load-bearing. The
+    // collectors started in `init` run on Dispatchers.Main.immediate against
+    // StateFlows that already hold a value, so they execute during
+    // construction — and a property declared further down the class has not
+    // been assigned yet. `snoozed` used to live beside rebuildContinue, and
+    // reading it there threw a NullPointerException on a non-null Set.
+    /** Keys snoozed this session. Deliberately not persisted — see [snooze]. */
+    private var snoozed: Set<String> = emptySet()
+
+    /** Which shows the airing rails were last built for, and when. */
+    private var airingSignature = ""
+    private var airingAt = 0L
+    private var airingJob: kotlinx.coroutines.Job? = null
+    /** The catalogue load; the airing rails wait for it, they never race it. */
+    private var loadJob: kotlinx.coroutines.Job? = null
+
     init {
-        load()
+        loadJob = load()
         // Continue Watching is derived, not fetched: it is a view over the
         // episode documents and the library, so it must rebuild the instant
         // either changes — which is what makes a tick on the detail page move
@@ -80,6 +108,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         combine(app.episodes.progress, app.library.library) { shows, lib -> shows to lib }
             .onEach { (shows, lib) ->
                 rebuildContinue(shows, lib)
+                if (lib.loaded) refreshAiring(shows, lib)
                 // Recommendations cannot be built until the library has actually
                 // arrived — it is a Firestore listener, so at the moment `load()`
                 // runs it is still empty and a profile built from it is empty too.
@@ -99,6 +128,37 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         app.online
             .onEach { online -> _state.value = _state.value.copy(offline = !online) }
             .launchIn(viewModelScope)
+    }
+
+    /**
+     * Up Next and Returning this month. Both cost a request per show, so they
+     * are rebuilt only when the set of shows they read changes, or after half
+     * an hour - not on every tick of an episode.
+     */
+    private fun refreshAiring(
+        shows: Map<Int, ShowProgress>,
+        lib: Library,
+        force: Boolean = false,
+    ) {
+        val watchedShows = lib.watched.values.filter { it.type == MediaType.Tv }.map { it.tmdbId }.sorted()
+        val caughtUp = com.cineverse.app.data.airing.Airing.candidates(shows).map { it.tmdbId }
+        val signature = (caughtUp + listOf(-1) + watchedShows).joinToString(",")
+        val stale = System.currentTimeMillis() - airingAt > 30 * 60_000L
+        if (!force && signature == airingSignature && !stale) return
+        airingSignature = signature
+        airingAt = System.currentTimeMillis()
+        airingJob?.cancel()
+        airingJob = viewModelScope.launch {
+            // Home's own rails first. Up Next and Returning are a request per
+            // show, and started together with the catalogue they queued ahead
+            // of it and left the hero and every rail on skeletons.
+            loadJob?.join()
+            val upNext = async { runCatching { app.airing.upNext(shows) }.getOrDefault(emptyList()) }
+            val returning = async {
+                runCatching { app.airing.returning(shows, watchedShows) }.getOrDefault(emptyList())
+            }
+            _state.value = _state.value.copy(upNext = upNext.await(), returning = returning.await())
+        }
     }
 
     /** The hero's and every rail's save button. */
@@ -121,7 +181,6 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
      * plenty of titles have no treatment, and a blank space where the name was
      * is not a trade anyone would take.
      */
-    val settings: StateFlow<com.cineverse.app.data.prefs.Settings> = app.settings.settings
 
     fun ensureHeroLogo(item: MediaItem) {
         val held = _state.value
@@ -209,7 +268,8 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
 
     fun refresh() {
         _state.value = _state.value.copy(refreshing = true)
-        load()
+        loadJob = load()
+        refreshAiring(app.episodes.progress.value, app.library.library.value, force = true)
     }
 
     /**
@@ -247,6 +307,9 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 "vote_average.gte" to "7.2",
                 "vote_count.gte" to "200",
                 "vote_count.lte" to "1500",
+                // A year out at least, or the rail is this month's releases
+                // riding their opening-week scores (see Discover's twin).
+                "primary_release_date.lte" to java.time.LocalDate.now().minusYears(1).toString(),
             ))
         }
         val upcoming = async { app.tmdb.movies("upcoming", region = region) }
@@ -260,7 +323,12 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 "with_genres" to "35", "sort_by" to "popularity.desc", "vote_count.gte" to "150",
             ))
         }
-        val topRated = async { app.tmdb.movies("top_rated") }
+        // TMDB's own top-rated list lets in a film with a few hundred early
+        // votes; two pages, kept to the established ones, is the actual canon.
+        val topRated = async {
+            (app.tmdb.movies("top_rated") + app.tmdb.movies("top_rated", page = 2))
+                .filter { it.voteCount >= 2_000 }
+        }
         val animation = async {
             app.tmdb.discover(MediaType.Movie, mapOf(
                 "with_genres" to "16", "sort_by" to "popularity.desc", "vote_count.gte" to "200",
@@ -277,14 +345,14 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         val topTv = async { app.tmdb.series("top_rated") }
 
         val heroes = trending.await().filter { it.backdropPath != null }.take(8)
-        val rails = buildList {
+        val rawRails = buildList {
             add(Rail("pop_movies", "Popular Movies", items = popMovies.await(),
                 seeAll = browse("Popular Movies", "movie", "popular")))
-            add(Rail("top10", "Top 10 Movies This Week", items = top10Movies.await().take(10),
+            add(Rail("top10", "Top 10 Movies This Week", items = top10Movies.await(),
                 numbered = true))
             add(Rail("pop_tv", "Popular TV Shows", items = popTv.await(),
                 seeAll = browse("Popular TV Shows", "tv", "popular")))
-            add(Rail("top10_tv", "Top 10 Shows This Week", items = top10Tv.await().take(10),
+            add(Rail("top10_tv", "Top 10 Shows This Week", items = top10Tv.await(),
                 numbered = true))
             add(Rail("acclaimed", "Critically Acclaimed", items = acclaimed.await(),
                 seeAll = browse("Critically Acclaimed", "movie", sort = "vote_average.desc")))
@@ -306,7 +374,8 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             add(Rail("world", "World Cinema", items = world.await()))
             add(Rail("top_tv", "Top Rated TV", items = topTv.await(),
                 seeAll = browse("Top Rated TV", "tv", "top_rated")))
-        }.filter { it.items.isNotEmpty() }
+        }
+        val rails = curate(rawRails)
 
         _state.value = _state.value.copy(
             hero = heroes,
@@ -314,6 +383,32 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             loading = false,
             refreshing = false,
         )
+    }
+
+    /**
+     * The rails, made to read as one front page rather than fifteen queries.
+     *
+     *  - Talk shows and news are left out of the TV rails. They are popular in
+     *    the sense of being on every night, and a Top 10 of chat shows is not a
+     *    list of anything anyone would choose to watch.
+     *  - A title appears ONCE. Batman turning up in Top Picks, Hidden Gems and
+     *    Top Rated reads as a page that ran out of ideas. Rails keep their own
+     *    order and each drops what an earlier rail already showed - except a
+     *    ranked Top 10, which is a ranking and keeps every position.
+     *  - A rail that dedupes down to almost nothing keeps its originals: four
+     *    posters is not a rail.
+     */
+    private fun curate(rails: List<Rail>): List<Rail> {
+        val shown = HashSet<String>()
+        return rails.map { rail ->
+            val clean = rail.items.filterNot { item ->
+                item.type == MediaType.Tv && item.genreIds.any { it in NOT_SHOWS }
+            }
+            val fresh = if (rail.numbered) clean else clean.filterNot { it.key in shown }
+            val kept = if (rail.numbered || fresh.size >= MIN_RAIL) fresh else clean
+            shown += kept.take(if (rail.numbered) 10 else kept.size).map { it.key }
+            rail.copy(items = if (rail.numbered) kept.take(10) else kept)
+        }.filter { it.items.isNotEmpty() }
     }
 
     /**
@@ -391,8 +486,6 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
      * lowest unwatched one that has aired — and a show you are caught up on
      * drops off the row entirely rather than sitting there with nothing to tap.
      */
-    /** Keys snoozed this session. Deliberately not persisted — see [snooze]. */
-    private var snoozed: Set<String> = emptySet()
 
     private fun rebuildContinue(shows: Map<Int, ShowProgress>, lib: Library) = viewModelScope.launch {
         val rows = mutableListOf<ContinueRow>()
@@ -412,7 +505,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                 ),
                 season = season,
                 episode = episode,
-                remaining = (total - show.watchedCount).coerceAtLeast(0),
+                remaining = show.airedRemaining,
                 absolute = show.isAbsolute,
                 progress = if (total > 0) show.watchedCount.toFloat() / total else 0f,
                 lastAt = show.log.lastOrNull()?.stamp ?: show.updatedAt,

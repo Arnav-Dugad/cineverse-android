@@ -37,6 +37,11 @@ sealed interface Route {
     @Serializable data class Trailer(val key: String, val title: String) : Route
     @Serializable data class Collection(val id: Int) : Route
 
+    @Serializable data object Inbox : Route
+
+    /** A studio's or a network's whole catalogue. */
+    @Serializable data class Studio(val id: Int, val network: Boolean, val name: String) : Route
+
     /** Your year in films and finished series. Zero means "the sensible one". */
     @Serializable data class YourYear(val year: Int = 0) : Route
 

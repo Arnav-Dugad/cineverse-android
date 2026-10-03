@@ -84,6 +84,25 @@ interface TmdbApi {
     @GET("collection/{id}")
     suspend fun collection(@Path("id") id: Int): CollectionDto
 
+    @GET("tv/{id}/aggregate_credits")
+    suspend fun tvAggregateCredits(@Path("id") id: Int): AggregateCreditsDto
+
+    @GET("movie/{id}/credits")
+    suspend fun movieCredits(@Path("id") id: Int): CreditsDto
+
+    /** A studio. A network has the same shape at network/{id}. */
+    @GET("company/{id}")
+    suspend fun company(@Path("id") id: Int): StudioDto
+
+    @GET("network/{id}")
+    suspend fun network(@Path("id") id: Int): StudioDto
+
+    @GET("discover/{kind}")
+    suspend fun discoverPage(
+        @Path("kind") kind: String,
+        @QueryMap params: Map<String, String>,
+    ): PageDto<MediaDto>
+
     @GET("{kind}/{id}/external_ids")
     suspend fun externalIds(
         @Path("kind") kind: String,
@@ -119,3 +138,26 @@ data class GenreListDto(val genres: List<GenreDto> = emptyList())
 
 @kotlinx.serialization.Serializable
 data class ProviderListDto(val results: List<ProviderDto> = emptyList())
+
+@kotlinx.serialization.Serializable
+data class StudioDto(
+    val id: Int = 0,
+    val name: String = "",
+    @kotlinx.serialization.SerialName("logo_path") val logoPath: String? = null,
+    val headquarters: String? = null,
+    @kotlinx.serialization.SerialName("origin_country") val originCountry: String? = null,
+    val description: String? = null,
+    val homepage: String? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class AggregateCreditsDto(val cast: List<AggregateCastDto> = emptyList())
+
+@kotlinx.serialization.Serializable
+data class AggregateCastDto(
+    val id: Int = 0,
+    val name: String = "",
+    @kotlinx.serialization.SerialName("profile_path") val profilePath: String? = null,
+    @kotlinx.serialization.SerialName("total_episode_count") val totalEpisodeCount: Int = 0,
+    val order: Int = 0,
+)

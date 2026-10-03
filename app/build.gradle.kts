@@ -194,6 +194,8 @@ dependencies {
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.paging.compose)
     implementation(libs.androidx.browser)
+    implementation(libs.androidx.webkit)
+    implementation(libs.mlkit.genai.summarization)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
 

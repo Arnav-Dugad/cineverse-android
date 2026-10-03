@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.stats
 
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -62,9 +64,11 @@ fun StatsScreen(
     onYear: () -> Unit = {},
     onCollection: (Int) -> Unit = {},
     onFranchises: () -> Unit = {},
+    onPerson: (Int) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val folded by viewModel.sections.collectAsStateWithLifecycle()
+    val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
 
     if (state.loaded && !state.signedIn) {
@@ -159,6 +163,25 @@ fun StatsScreen(
         // change at all.
         val deep = state.deep
         val fold: (String) -> Unit = viewModel::toggleSection
+
+        if (state.pattern.isNotBlank()) item(key = "pattern") {
+            PatternCard(state.pattern, Modifier.padding(horizontal = ScreenPadding))
+        }
+
+        castHours?.takeIf { it.people.isNotEmpty() }?.let { cast ->
+            item(key = "cast") {
+                CollapsiblePanel(
+                    id = "castHours",
+                    kicker = "Who you watch",
+                    title = "Time with the cast",
+                    collapsed = "castHours" in folded,
+                    onToggle = fold,
+                    help = "Worked out from the episodes you have ticked on your twenty most-watched " +
+                        "live-action shows; voice casts of animation are left out. TMDB does not say " +
+                        "which episodes each regular is in, so these are estimates.",
+                ) { CastHoursBody(cast, onPerson) }
+            }
+        }
 
         if (deep.tv.tracked > 0) item(key = "tv") {
             CollapsiblePanel(
@@ -404,10 +427,13 @@ private fun MonthBars(months: List<Pair<String, Int>>, modifier: Modifier = Modi
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (count > 0) {
+                    // A bar is narrow; "2335" wrapped onto two lines under it.
                     Text(
-                        "$count",
+                        if (count >= 1000) "%.1fk".format(java.util.Locale.US, count / 1000f) else "$count",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.text3,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                     Spacer(Modifier.height(3.dp))
                 }
@@ -525,6 +551,103 @@ private fun YearCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.displaySmall,
                 color = Color.White.copy(alpha = 0.22f),
             )
+        }
+    }
+}
+
+/** When you watch, in a sentence - the website's viewing patterns. */
+@Composable
+private fun PatternCard(text: String, modifier: Modifier = Modifier) {
+    val colors = CvTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .glass(CvShape.XLarge, strength = 0.7f)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Rounded.Schedule, null,
+            tint = colors.cyan, modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text("WHEN YOU WATCH", style = KickerStyle, color = colors.text3)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+        }
+    }
+}
+
+@Composable
+private fun CastHoursBody(cast: com.cineverse.app.data.cast.CastHours, onPerson: (Int) -> Unit) {
+    val colors = CvTheme.colors
+    val top = (cast.people.maxOfOrNull { it.minutes } ?: 1).coerceAtLeast(1)
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // A milestone crossed since you last looked gets its moment.
+        cast.crossed.firstOrNull()?.let { (person, hours) ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(CvShape.Large)
+                    .background(colors.gold.copy(alpha = 0.14f))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Rounded.EmojiEvents, null,
+                    tint = colors.gold, modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "You've now watched $hours hours of ${person.name}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.text,
+                )
+            }
+        }
+        cast.people.forEachIndexed { index, person ->
+            Row(
+                Modifier.fillMaxWidth().clip(CvShape.Medium).clickableNoRipple { onPerson(person.id) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(42.dp).clip(CvShape.Circle).background(colors.surface2)) {
+                    com.cineverse.app.core.ui.CvImage(
+                        com.cineverse.app.core.ui.Img.profile(person.profile), person.name, Modifier.fillMaxSize(),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            person.name,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "≈ ${person.hours}h",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (index == 0) colors.gold else colors.text2,
+                        )
+                    }
+                    Text(
+                        person.shows.take(3).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.text3,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    com.cineverse.app.core.ui.GrowBar(
+                        person.minutes.toFloat() / top,
+                        color = if (index == 0) colors.gold else colors.cyan,
+                        height = 4.dp,
+                        delayMillis = index * 60,
+                    )
+                }
+            }
         }
     }
 }

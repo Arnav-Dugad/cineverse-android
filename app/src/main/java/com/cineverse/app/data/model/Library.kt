@@ -93,7 +93,15 @@ data class UserList(
     val icon: String = "",
     val createdAt: Long = 0L,
     val locked: Boolean = false,
-)
+    /**
+     * The website's PIN lock, `lock: { salt, hash, ... }` on the list document:
+     * PBKDF2-SHA256 over the PIN, 150,000 rounds. Both empty means no PIN.
+     */
+    val lockSalt: String = "",
+    val lockHash: String = "",
+) {
+    val hasPin: Boolean get() = lockSalt.isNotBlank() && lockHash.isNotBlank()
+}
 
 /**
  * One row of the watch log: an episode, when it was marked, and whether the
@@ -222,6 +230,21 @@ data class ShowProgress(
         if (isAbsolute) return episode <= airedEpisode
         return season < airedSeason || (season == airedSeason && episode <= airedEpisode)
     }
+
+    /**
+     * Episodes still to watch that have actually AIRED.
+     *
+     * "2 left" on a show you are caught up on, where the second is next week's,
+     * reads as a nag about something nobody can watch yet. The totals count
+     * every episode TMDB has filed; this counts only the ones you could press
+     * play on today.
+     */
+    val airedRemaining: Int
+        get() = structure.keys.sumOf { season ->
+            episodeNumbers(season).count { episode ->
+                !isWatched(season, episode) && hasAired(season, episode)
+            }
+        }
 
     /** Minutes watched, for the stats page and the hours clubs. */
     val minutesWatched: Int

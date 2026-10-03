@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -108,9 +109,11 @@ fun DetailScreen(
     onShare: (TitleDetail) -> Unit,
     modifier: Modifier = Modifier,
     onCollection: (Int) -> Unit = {},
+    onBrand: (com.cineverse.app.data.model.Brand) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val collection by viewModel.collection.collectAsStateWithLifecycle()
+    val exactAir by viewModel.exactAir.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -156,7 +159,29 @@ fun DetailScreen(
         }
     }
 
-    Box(modifier.fillMaxSize().background(colors.ink)) {
+    val accent by com.cineverse.app.core.ui.rememberPosterAccent(detail.posterPath, settings.titleColour)
+    val glow by androidx.compose.animation.animateColorAsState(
+        accent ?: androidx.compose.ui.graphics.Color.Transparent,
+        androidx.compose.animation.core.tween(900),
+        label = "accent",
+    )
+    androidx.compose.runtime.CompositionLocalProvider(com.cineverse.app.core.ui.LocalTitleAccent provides accent) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(colors.ink)
+            // The title's own colour, glowing behind its header and fading as
+            // the page scrolls away from it.
+            .drawBehind {
+                if (glow.alpha > 0f) drawRect(
+                    androidx.compose.ui.graphics.Brush.radialGradient(
+                        listOf(glow.copy(alpha = 0.30f * (1f - collapsed)), androidx.compose.ui.graphics.Color.Transparent),
+                        center = androidx.compose.ui.geometry.Offset(size.width * 0.5f, size.height * 0.42f),
+                        radius = size.width * 1.05f,
+                    )
+                )
+            }
+    ) {
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(bottom = 140.dp),
@@ -214,7 +239,7 @@ fun DetailScreen(
                 ?.takeIf { settings.countdowns && it.airDate.isNotBlank() }
                 ?.let { next ->
                 item(key = "next") {
-                    NextEpisodePanel(next, Modifier.padding(top = 16.dp))
+                    NextEpisodePanel(next, Modifier.padding(top = 16.dp), exactAt = exactAir)
                 }
             }
 
@@ -256,6 +281,9 @@ fun DetailScreen(
                     onHeatMode = viewModel::setHeatMode,
                     onNumbers = viewModel::toggleNumbers,
                     onAllEpisodes = viewModel::toggleAllEpisodes,
+                    onSeasonRecap = { viewModel.openSeasonRecap(it) },
+                    onSeriesRecap = { viewModel.openSeriesRecap() },
+                    onPreviously = { viewModel.loadPreviously() },
                     onOpenEpisode = { season, episode ->
                         viewModel.selectSeason(season)
                         viewModel.selectTab(DetailTab.Episodes)
@@ -267,6 +295,7 @@ fun DetailScreen(
                     awards = state.awards,
                     onPerson = onPerson,
                     onOpen = onOpen,
+                    onBrand = onBrand,
                 )
 
                 DetailTab.More -> item(key = "more") {
@@ -296,7 +325,26 @@ fun DetailScreen(
         com.cineverse.app.core.ui.ScrollHint(
             listState = listState,
             modifier = Modifier.align(Alignment.BottomCenter),
+            avoid = "head",
         )
+    }
+    }
+
+    when (val recap = state.recap) {
+        is RecapView.Season -> com.cineverse.app.feature.recap.SeasonRecapSheet(
+            title = detail.title,
+            backdrop = detail.backdropPath,
+            recap = recap.recap,
+            onDismiss = viewModel::closeRecap,
+        )
+        is RecapView.Series -> com.cineverse.app.feature.recap.SeriesFinaleSheet(
+            title = detail.title,
+            backdrop = detail.backdropPath,
+            recap = recap.recap,
+            celebrate = settings.confetti,
+            onDismiss = viewModel::closeRecap,
+        )
+        null -> Unit
     }
 
     when (sheet) {

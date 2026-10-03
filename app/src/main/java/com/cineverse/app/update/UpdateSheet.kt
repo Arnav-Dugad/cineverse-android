@@ -1,5 +1,9 @@
 package com.cineverse.app.update
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -254,14 +258,7 @@ private fun Downloading(state: UpdateState.Downloading) {
             color = colors.text,
         )
         Spacer(Modifier.height(20.dp))
-        LinearProgressIndicator(
-            progress = { fraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CvShape.Pill),
-            color = Palette.Red2,
-            trackColor = colors.glassStrong,
-            gapSize = 0.dp,
-            drawStopIndicator = {},
-        )
+        FilmStrip(fraction)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
@@ -274,6 +271,75 @@ private fun Downloading(state: UpdateState.Downloading) {
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.text,
             )
+        }
+    }
+}
+
+/**
+ * The download as a strip of film: twelve frames between two rows of sprocket
+ * holes, each lighting up as its share of the megabytes arrives - the one
+ * that is filling glows as far as it has got. A bar says "progress"; a strip
+ * of film says "a new CineVerse is coming in".
+ */
+@Composable
+private fun FilmStrip(fraction: Float) {
+    val colors = CvTheme.colors
+    val frames = 12
+    val percent = (fraction * 100).toInt()
+    androidx.compose.foundation.Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+                contentDescription = "Downloaded $percent percent"
+            }
+    ) {
+        val radius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
+        drawRoundRect(color = Color(0xFF111118), cornerRadius = radius)
+        // Sprocket holes, top and bottom.
+        val hole = androidx.compose.ui.geometry.Size(5.dp.toPx(), 4.dp.toPx())
+        val holes = 24
+        val gapX = size.width / holes
+        for (row in listOf(3.dp.toPx(), size.height - 3.dp.toPx() - hole.height)) {
+            for (i in 0 until holes) {
+                drawRoundRect(
+                    color = Color(0xFF2A2A36),
+                    topLeft = androidx.compose.ui.geometry.Offset(i * gapX + (gapX - hole.width) / 2, row),
+                    size = hole,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx()),
+                )
+            }
+        }
+        // The frames.
+        val pad = 3.dp.toPx()
+        val top = 10.dp.toPx()
+        val height = size.height - top * 2
+        val frameWidth = (size.width - pad * (frames + 1)) / frames
+        for (i in 0 until frames) {
+            val left = pad + i * (frameWidth + pad)
+            val lit = ((fraction * frames) - i).coerceIn(0f, 1f)
+            drawRoundRect(
+                color = Color(0xFF1C1C26),
+                topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                size = androidx.compose.ui.geometry.Size(frameWidth, height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+            )
+            if (lit > 0f) {
+                // Red through to gold along the strip, so the end of the
+                // download looks like the end of the reel.
+                val t = i / (frames - 1f)
+                val tone = androidx.compose.ui.graphics.lerp(Palette.Red2, Palette.Gold, t)
+                drawRoundRect(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(tone.copy(alpha = lit), tone.copy(alpha = 0.55f * lit)),
+                        startY = top, endY = top + height,
+                    ),
+                    topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                    size = androidx.compose.ui.geometry.Size(frameWidth, height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                )
+            }
         }
     }
 }

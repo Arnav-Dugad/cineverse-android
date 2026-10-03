@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.search
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -81,6 +83,7 @@ fun SearchScreen(
     onOpen: (MediaItem) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onPerson: (Int) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -160,27 +163,45 @@ fun SearchScreen(
         }
 
         when {
-            state.query.isBlank() && state.history.isNotEmpty() -> {
-                Column(Modifier.padding(horizontal = ScreenPadding, vertical = 12.dp)) {
-                    Text("RECENT", style = KickerStyle, color = colors.text3)
-                    Spacer(Modifier.height(10.dp))
-                    for (entry in state.history) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(CvShape.Medium)
-                                .clickableNoRipple { viewModel.onQueryChange(entry); viewModel.submit() }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Rounded.History,
-                                null,
-                                tint = colors.text3,
-                                modifier = Modifier.size(17.dp),
+            // An empty box is not an empty page: what you searched for before,
+            // then what everyone is watching today.
+            state.query.isBlank() -> {
+                LazyVerticalGrid(
+                    columns = posterGridCells(),
+                    contentPadding = PaddingValues(
+                        start = ScreenPadding, end = ScreenPadding, top = 8.dp, bottom = BottomBarSpace,
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    if (state.history.isNotEmpty()) {
+                        item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
+                            RecentSearches(
+                                history = state.history,
+                                onPick = { entry -> viewModel.onQueryChange(entry); viewModel.submit() },
+                                onForget = viewModel::forget,
+                                onClear = viewModel::clearHistory,
                             )
-                            Spacer(Modifier.size(12.dp))
-                            Text(entry, style = MaterialTheme.typography.bodyMedium, color = colors.text2)
+                        }
+                    }
+                    if (state.trending.isNotEmpty()) {
+                        item(key = "trending_head", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                "TRENDING TODAY",
+                                style = KickerStyle,
+                                color = colors.text3,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                        items(state.trending, key = { "t_${it.key}" }) { item ->
+                            PosterCard(
+                                item = item,
+                                onOpen = onOpen,
+                                width = posterCellWidth(),
+                                watched = library.isWatched(item.key),
+                                saved = library.isSaved(item.key),
+                                rating = library.ratingOf(item.key),
+                            )
                         }
                     }
                 }
@@ -265,6 +286,11 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
+                        if (state.people.isNotEmpty() && state.filter.isDefault) {
+                            item(key = "people", span = { GridItemSpan(maxLineSpan) }) {
+                                PeopleRow(state.people, onPerson)
+                            }
+                        }
                         items(state.shown, key = { it.key }) { item ->
                             PosterCard(
                                 item = item,
@@ -297,5 +323,122 @@ fun SearchScreen(
             onChange = viewModel::setFilter,
             onDismiss = { filters = false },
         )
+    }
+}
+
+@Composable
+private fun RecentSearches(
+    history: List<String>,
+    onPick: (String) -> Unit,
+    onForget: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("RECENT", style = KickerStyle, color = colors.text3, modifier = Modifier.weight(1f))
+            Text(
+                "Clear",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+                modifier = Modifier
+                    .clip(CvShape.Pill)
+                    .clickableNoRipple(onClear)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        for (entry in history) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(CvShape.Medium)
+                    .clickableNoRipple { onPick(entry) }
+                    .padding(vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.History, null, tint = colors.text3, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    entry,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.text2,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.Rounded.Close, "Forget $entry",
+                    tint = colors.text3,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CvShape.Circle)
+                        .clickableNoRipple { onForget(entry) }
+                        .padding(7.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The people a search found, as faces. Shown above the posters because a name
+ * typed into a search box is usually a person, and the person is the answer.
+ */
+@Composable
+private fun PeopleRow(people: List<com.cineverse.app.data.model.Person>, onPerson: (Int) -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    Column {
+        Text("PEOPLE", style = KickerStyle, color = colors.text3)
+        Spacer(Modifier.height(10.dp))
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(people.size, key = { people[it].id }) { index ->
+                val person = people[index]
+                Column(
+                    Modifier
+                        .width(84.dp)
+                        .clickableNoRipple {
+                            haptics?.play(com.cineverse.app.core.design.Haptic.Tap)
+                            onPerson(person.id)
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier
+                            .size(76.dp)
+                            .clip(CvShape.Circle)
+                            .background(colors.surface2),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (person.profilePath != null) {
+                            com.cineverse.app.core.ui.CvImage(
+                                com.cineverse.app.core.ui.Img.profile(person.profilePath),
+                                person.name,
+                                Modifier.matchParentSize(),
+                            )
+                        } else {
+                            Text(
+                                person.name.take(1),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = colors.text3,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        person.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text,
+                        maxLines = 2,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    person.job?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = colors.text3, maxLines = 1)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
     }
 }

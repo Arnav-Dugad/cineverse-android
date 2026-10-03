@@ -16,7 +16,7 @@ reference library attached, and everything in the app follows from that:
 
 | | |
 |---|---|
-| **Home** | A hero that rotates through what is trending, Continue Watching, and a dozen rails including "because you're watching" |
+| **Home** | A hero that rotates through what is trending, Up Next counting down to the episode you are waiting for, Continue Watching, Returning this month, and a dozen rails |
 | **Discover** | Films, series, in cinemas, coming soon, top rated, six moods, Surprise me (or shake), Franchises and Box Office |
 | **My List** | Watchlist, what you are in the middle of, and what you have finished — sortable by IMDb |
 | **Stats** | Hours, streaks, twelve weeks of viewing, what you actually watch, and **Your year** month by month |
@@ -25,6 +25,8 @@ reference library attached, and everything in the app follows from that:
 | **Franchises** | Every film series you have started: what is left, what you skipped, roughly how long a finish takes |
 | **Box Office** | The all-time chart and the franchise league, from reported figures only — Indian films in crore too |
 | **A person** | How many of their films you have seen, and the best-rated ones you have not |
+| **Inbox** | New episodes, returning seasons, films on your list releasing, finished series and your monthly recap |
+| **A studio** | Any studio's or network's whole catalogue, by era, rating, genre and box office |
 
 The reasoning behind all of that — why nine nav items became five tabs, why the
 episode tick is where it is, what each animation is for — is written down in
@@ -50,7 +52,9 @@ encoding and the offline queue cannot disagree with each other.
 ## What the phone does that the website cannot
 
 - **A Glance widget** whose tick marks an episode watched without opening the app
-- **Launcher shortcuts** — Up next, Search, My List
+- **Launcher shortcuts** — Up next, Search, My List, plus the shows you usually watch at this time of day
+- **Gemini Nano** — "Previously on" summarised on the phone, from episodes you have already seen
+- **Exact air times** — the broadcaster's own minute, in your time zone
 - **Rich haptics** composed from the hardware's own primitives, not `vibrate(ms)`
 - **Material You** — the whole app can take its accent from your wallpaper
 - **Predictive back**, edge-to-edge, per-app language, a themed monochrome icon

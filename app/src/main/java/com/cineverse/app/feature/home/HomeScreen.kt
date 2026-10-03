@@ -1,5 +1,8 @@
 package com.cineverse.app.feature.home
 
+import androidx.compose.foundation.layout.aspectRatio
+import com.cineverse.app.core.design.tabular
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -47,7 +50,7 @@ import kotlin.math.abs
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.mutableStateOf
 import com.cineverse.app.feature.trailer.YouTubePlayer
@@ -88,6 +91,10 @@ import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.ContinueRow
 import com.cineverse.app.data.model.MediaItem
 import com.cineverse.app.nav.Route
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun HomeScreen(
@@ -98,12 +105,31 @@ fun HomeScreen(
     onPeek: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    /** True once the hero has scrolled up behind the top bar. */
+    onScrolledPastHero: (Boolean) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val onWifi by rememberUnmetered()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val barPx = with(LocalDensity.current) { 110.dp.toPx() }
+    val latestScrolled by androidx.compose.runtime.rememberUpdatedState(onScrolledPastHero)
+
+    // The top bar turns from scrim to glass the moment the hero's foot passes
+    // under it: from then on it is over posters and text, not artwork.
+    LaunchedEffect(listState) {
+        androidx.compose.runtime.snapshotFlow {
+            val first = listState.layoutInfo.visibleItemsInfo.firstOrNull()
+            when {
+                first == null -> false
+                first.index > 0 -> true
+                else -> first.offset + first.size < barPx
+            }
+        }.distinctUntilChanged().collect { latestScrolled(it) }
+    }
+    // Leaving Home hands the bar back in its resting state.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { latestScrolled(false) } }
 
     PullToRefresh(
         refreshing = state.refreshing,
@@ -132,9 +158,10 @@ fun HomeScreen(
                 )
             }
 
-            if (state.continueWatching.isNotEmpty()) {
+            if (state.continueWatching.isNotEmpty() || state.upNext.isNotEmpty()) {
                 item(key = "continue") {
                     ContinueSection(
+                        upNext = state.upNext,
                         rows = state.continueWatching,
                         onContinue = onContinue,
                         onOpen = onOpen,
@@ -142,6 +169,12 @@ fun HomeScreen(
                         onSnooze = viewModel::snooze,
                         onDismiss = viewModel::dismiss,
                     )
+                }
+            }
+
+            if (state.returning.isNotEmpty()) {
+                item(key = "returning") {
+                    ReturningSection(state.returning, onOpen)
                 }
             }
 
@@ -582,6 +615,7 @@ private fun Hero(
  */
 @Composable
 private fun ContinueSection(
+    upNext: List<com.cineverse.app.data.airing.UpNextItem>,
     rows: List<ContinueRow>,
     onContinue: (ContinueRow) -> Unit,
     onOpen: (MediaItem) -> Unit,
@@ -589,13 +623,45 @@ private fun ContinueSection(
     onSnooze: (ContinueRow) -> Unit,
     onDismiss: (ContinueRow) -> Unit,
 ) {
+    // One clock for every countdown in the row, ticking once a second only
+    // while a countdown that needs seconds is on screen.
+    val live = upNext.any { it.exact && it.at > System.currentTimeMillis() }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(live) {
+        while (live) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1_000L - now % 1_000L)
+        }
+    }
+    // Up Next arrives after the row is already drawn, and a LazyRow keeps the
+    // card you were looking at in place when items are inserted before it -
+    // so the new cards appeared off the left edge, unseen. If the row is still
+    // at its start, it follows them back; a row you scrolled yourself stays put.
+    val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+    var touched by remember { mutableStateOf(false) }
+    // Only a finger counts as the user scrolling - a drag on the row - never
+    // the programmatic scroll below.
+    LaunchedEffect(rowState) {
+        rowState.interactionSource.interactions.collect { interaction ->
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) touched = true
+        }
+    }
+    LaunchedEffect(upNext.size) {
+        if (upNext.isNotEmpty() && !touched) rowState.scrollToItem(0)
+    }
     Column(Modifier.fillMaxWidth()) {
-        SectionHeader("Continue watching", count = rows.size)
+        SectionHeader("Continue watching", count = rows.size + upNext.size)
         Spacer(Modifier.height(12.dp))
         LazyRow(
+            state = rowState,
             contentPadding = PaddingValues(horizontal = ScreenPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // The website's Up Next: shows you are caught up on lead the row,
+            // counting down to the episode they are waiting for.
+            items(upNext, key = { "up_${it.show.id}" }) { item ->
+                UpNextCard(item, now) { onOpen(item.show.asItem()) }
+            }
             items(rows, key = { it.item.key }) { row ->
                 ContinueCard(
                     row = row,
@@ -605,6 +671,147 @@ private fun ContinueSection(
                     onSnooze = onSnooze,
                     onDismiss = onDismiss,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * A show you are caught up on, and the episode it is waiting for: the still if
+ * TMDB has one, a countdown, and what kind of episode it is. It counts to the
+ * second when the broadcaster's own time is known, and to the day when only a
+ * date is.
+ */
+@Composable
+private fun UpNextCard(item: com.cineverse.app.data.airing.UpNextItem, now: Long, onOpen: () -> Unit) {
+    val colors = CvTheme.colors
+    val countdown = com.cineverse.app.data.airing.Airing.countdown(item, now)
+    val out = countdown == "Out now"
+    Column(Modifier.width(248.dp).clickableNoRipple(onOpen)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(CvShape.Large)
+                .background(colors.surface2)
+        ) {
+            CvImage(
+                Img.still(item.next.still ?: item.show.backdrop ?: item.show.poster),
+                item.show.name,
+                Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color(0x8006060B),
+                            0.4f to Color.Transparent,
+                            1f to Color(0xCC06060B),
+                        )
+                    )
+            )
+            Row(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .clip(CvShape.Pill)
+                    .background(if (out) Palette.Green.copy(alpha = 0.9f) else Color(0xCC06060B))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!out) {
+                    Icon(
+                        Icons.Rounded.Schedule, null,
+                        tint = Palette.Gold, modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                }
+                Text(
+                    countdown,
+                    style = MaterialTheme.typography.labelMedium.tabular(),
+                    color = Color.White,
+                    maxLines = 1,
+                )
+            }
+            Text(
+                item.kind.uppercase(),
+                style = KickerStyle,
+                color = if (item.kind == "New episode") Color.White.copy(alpha = 0.8f) else Palette.Gold,
+                modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
+            )
+        }
+        Text(
+            item.show.name,
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 9.dp),
+        )
+        Text(
+            buildString {
+                append("S${item.next.season} E${item.next.episode}")
+                if (item.exact && !out) append("  ·  ${com.cineverse.app.data.airing.Airing.localTime(item.at)}")
+                else if (item.next.name.isNotBlank() && !item.next.name.matches(Regex("Episode \\d+"))) {
+                    append("  ·  ${item.next.name}")
+                }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.text3,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * The website's "Returning this month": shows you finished, back with a new
+ * season this calendar month, each badged with when.
+ */
+@Composable
+private fun ReturningSection(items: List<com.cineverse.app.data.airing.ReturningItem>, onOpen: (MediaItem) -> Unit) {
+    val colors = CvTheme.colors
+    Column(Modifier.fillMaxWidth()) {
+        SectionHeader("Returning this month", kicker = "Back with a new season", count = items.size)
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = ScreenPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(items, key = { "ret_${it.show.id}" }) { entry ->
+                Column(Modifier.width(132.dp).clickableNoRipple { onOpen(entry.show.asItem()) }) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(2f / 3f)
+                            .clip(CvShape.Large)
+                            .background(colors.surface2)
+                    ) {
+                        CvImage(Img.poster(entry.show.poster), entry.show.name, Modifier.fillMaxSize())
+                        Text(
+                            entry.badge(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                                .clip(CvShape.Pill)
+                                .background(if (entry.out) Palette.Green.copy(alpha = 0.92f) else Palette.Red.copy(alpha = 0.92f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                    Text(
+                        entry.show.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text2,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 7.dp),
+                    )
+                }
             }
         }
     }
@@ -635,16 +842,29 @@ private fun ContinueCard(
     // The axis is decided by whichever way the finger committed first and
     // LOCKED for the rest of the gesture. A card that changes its mind halfway
     // because a thumb drifted is a card that performs the wrong action.
+    //
+    // And the card has to be HELD first. It used to answer any drag, which
+    // meant a scroll of the page that happened to start on a card ticked an
+    // episode, and the row itself could not be scrolled from a card at all.
+    // A press-and-hold lifts the card off the row; only a lifted card can be
+    // thrown. Everything else is a scroll, as a thumb expects.
     val offsetX = remember(row.item.key) { Animatable(0f) }
     val offsetY = remember(row.item.key) { Animatable(0f) }
     var axis by remember(row.item.key) { mutableStateOf<Int?>(null) }
     var armed by remember(row.item.key) { mutableStateOf(false) }
+    var lifted by remember(row.item.key) { mutableStateOf(false) }
+    // When a lift ended. A plain click fires on release however long the
+    // press was, so letting go of a held card opened the show; a release
+    // that ends a lift is not a tap.
+    var releasedAt by remember(row.item.key) { mutableStateOf(0L) }
+    val lift by animateFloatAsState(if (lifted) 1f else 0f, Motion.lively(), label = "lift")
     val trigger = with(density) { 72.dp.toPx() }
 
     fun reset() {
         scope.launch {
             axis = null
             armed = false
+            lifted = false
             launch { offsetX.animateTo(0f, Motion.landing()) }
             launch { offsetY.animateTo(0f, Motion.landing()) }
         }
@@ -661,9 +881,30 @@ private fun ContinueCard(
             Modifier
                 .width(248.dp)
                 .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+                .graphicsLayer {
+                    val grow = 1f + 0.045f * lift
+                    scaleX = grow
+                    scaleY = grow
+                    shadowElevation = 18f * lift
+                    shape = CvShape.Large
+                    clip = false
+                }
+                // The click goes OUTSIDE the gesture detector. The innermost
+                // handler sees a touch first, and `clickable` consumes the
+                // down - which, inside it, cancelled the long press before it
+                // could fire, so a held card simply opened the show.
+                .clickableNoRipple {
+                    if (lifted || System.currentTimeMillis() - releasedAt < 400) return@clickableNoRipple
+                    onOpen(row.item)
+                }
                 .pointerInput(row.item.key) {
-                    detectDragGestures(
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            lifted = true
+                            haptics?.play(Haptic.Peek)
+                        },
                         onDragEnd = {
+                            releasedAt = System.currentTimeMillis()
                             when {
                                 axis == AXIS_VERTICAL && offsetY.value <= -trigger -> {
                                     haptics?.play(Haptic.Success); onMark(row)
@@ -677,7 +918,7 @@ private fun ContinueCard(
                             }
                             reset()
                         },
-                        onDragCancel = { reset() },
+                        onDragCancel = { releasedAt = System.currentTimeMillis(); reset() },
                     ) { change, delta ->
                         change.consume()
                         scope.launch {
@@ -716,7 +957,6 @@ private fun ContinueCard(
                         }
                     }
                 }
-                .clickableNoRipple { onOpen(row.item) }
         ) {
         Box(
             Modifier
@@ -746,7 +986,10 @@ private fun ContinueCard(
                     .size(46.dp)
                     .clip(CircleShape)
                     .background(Color(0x66000000))
-                    .clickableNoRipple { onContinue(row) },
+                    .clickableNoRipple {
+                        if (lifted || System.currentTimeMillis() - releasedAt < 400) return@clickableNoRipple
+                        onContinue(row)
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -764,6 +1007,11 @@ private fun ContinueCard(
                     .padding(horizontal = 10.dp)
                     .padding(bottom = 8.dp),
             )
+            // Lifted and not yet thrown: say what each direction does. Three
+            // gestures nobody can see are three gestures nobody uses.
+            if (lift > 0.01f && axis == null) {
+                GestureHints(row, Modifier.matchParentSize().graphicsLayer { alpha = lift })
+            }
         }
         Text(
             row.item.title,
@@ -784,6 +1032,33 @@ private fun ContinueCard(
             modifier = Modifier.padding(top = 2.dp),
         )
         }
+    }
+}
+
+@Composable
+private fun GestureHints(row: ContinueRow, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .background(Color(0xD906060B))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        GestureHint(
+            Icons.Rounded.ArrowUpward,
+            if (row.isMovie) "Mark watched" else "Mark ${row.label} watched",
+            Palette.Green2,
+        )
+        GestureHint(Icons.Rounded.ArrowDownward, "Hide until your next tick", Palette.Gold)
+        GestureHint(Icons.AutoMirrored.Rounded.ArrowBack, "Remove from this row", Palette.Red2)
+    }
+}
+
+@Composable
+private fun GestureHint(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1)
     }
 }
 

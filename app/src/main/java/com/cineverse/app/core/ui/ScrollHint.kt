@@ -64,8 +64,25 @@ fun ScrollHint(
     listState: LazyListState,
     modifier: Modifier = Modifier,
     label: String = "Scroll for more",
+    /**
+     * The item the hint must never sit on top of - a title page's action row.
+     * If that item already runs past the bottom of the screen, the page is
+     * visibly cut off, which says "scroll" by itself, and a hint drawn there
+     * would only cover the buttons.
+     */
+    avoid: Any? = null,
 ) {
     val colors = CvTheme.colors
+    val clearancePx = with(androidx.compose.ui.platform.LocalDensity.current) { 96.dp.toPx() }
+    val blocked by remember(avoid) {
+        derivedStateOf {
+            if (avoid == null) return@derivedStateOf false
+            val info = listState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.key == avoid }
+                ?: return@derivedStateOf false
+            item.offset + item.size > info.viewportEndOffset - clearancePx
+        }
+    }
 
     // Anything at all: one notch of scroll means the hint has done its job.
     val scrolled by remember {
@@ -79,7 +96,7 @@ fun ScrollHint(
     if (scrolled) spent.value = true
 
     AnimatedVisibility(
-        visible = !spent.value,
+        visible = !spent.value && !blocked,
         enter = fadeIn(tween(600, delayMillis = 1_400)),
         exit = fadeOut(tween(220)),
         modifier = modifier,

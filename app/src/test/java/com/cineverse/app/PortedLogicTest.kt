@@ -168,6 +168,21 @@ class PortedLogicTest {
         assertEquals(1, completion.total)
     }
 
+    // ---------- list locks ----------
+
+    @Test
+    fun `a PIN hashes exactly as the website's WebCrypto does`() = kotlinx.coroutines.runBlocking {
+        // Reference computed independently with Python's hashlib.pbkdf2_hmac,
+        // which is the same primitive as WebCrypto's deriveBits.
+        val expected = "323247021475ee65232662a445d29691344d3b196edc512b25d5d8b539f34442"
+        val salt = "9f2c4e1ab3d07788"
+        assertEquals(expected, com.cineverse.app.data.lock.ListLocks.derive("2580", salt))
+        assertTrue(com.cineverse.app.data.lock.ListLocks.verify("2580", salt, expected))
+        assertFalse(com.cineverse.app.data.lock.ListLocks.verify("2581", salt, expected))
+        assertFalse(com.cineverse.app.data.lock.ListLocks.isValidPin("123"))
+        assertFalse(com.cineverse.app.data.lock.ListLocks.isValidPin("12a4"))
+    }
+
     // ---------- your year ----------
 
     private fun at(date: String): Long =

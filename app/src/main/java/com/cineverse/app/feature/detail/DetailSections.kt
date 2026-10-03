@@ -1,5 +1,9 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -247,6 +251,9 @@ fun LazyListScope.episodesSection(
     onNumbers: () -> Unit,
     onOpenEpisode: (Int, Int) -> Unit,
     onAllEpisodes: () -> Unit,
+    onSeasonRecap: (Int) -> Unit = {},
+    onSeriesRecap: () -> Unit = {},
+    onPreviously: () -> Unit = {},
 ) {
     val detail = state.detail ?: return
     val next = progress?.nextUp()
@@ -291,6 +298,26 @@ fun LazyListScope.episodesSection(
         )
     }
 
+    // Back after a break: what happened, before the next one.
+    if (next != null && (progress?.watchedCount ?: 0) > 0) {
+        item(key = "previously") {
+            PreviouslyCard(detail.title, state.previously, onPreviously)
+        }
+    }
+
+    // Finished: the recap is one tap away, under the season it describes.
+    val seasonTotal = progress?.structure?.get(state.season) ?: 0
+    val seasonDone = progress != null && seasonTotal > 0 && progress.watchedIn(state.season) >= seasonTotal
+    if (progress?.complete == true || seasonDone) {
+        item(key = "recap") {
+            RecapBanner(
+                series = progress?.complete == true,
+                season = state.season,
+                onClick = { if (progress?.complete == true) onSeriesRecap() else onSeasonRecap(state.season) },
+            )
+        }
+    }
+
     if (state.loadingEpisodes) {
         items(5, key = { "skel_$it" }) {
             Box(
@@ -318,6 +345,115 @@ fun LazyListScope.episodesSection(
             } else null,
             onOpen = { onToggle(episode.season, episode.number) },
             modifier = Modifier.padding(horizontal = ScreenPadding - 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun PreviouslyCard(title: String, state: PreviouslyState, onLoad: () -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    Column(
+        Modifier
+            .padding(horizontal = ScreenPadding, vertical = 6.dp)
+            .fillMaxWidth()
+            .clip(CvShape.Large)
+            .background(colors.text.copy(alpha = 0.05f))
+            .clickableNoRipple {
+                if (state is PreviouslyState.Idle || state is PreviouslyState.Empty) {
+                    haptics?.play(com.cineverse.app.core.design.Haptic.Tap)
+                    onLoad()
+                }
+            }
+            .animateContentSize()
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                androidx.compose.material.icons.Icons.Rounded.History, null,
+                tint = colors.cyan, modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Previously on $title", style = MaterialTheme.typography.titleSmall, color = colors.text, maxLines = 1)
+                Text(
+                    when (state) {
+                        is PreviouslyState.Idle -> "Catch up on the last three episodes, without spoilers"
+                        is PreviouslyState.Loading -> "Reading what you have watched…"
+                        is PreviouslyState.Empty -> "The episode guide has nothing to summarise yet"
+                        is PreviouslyState.Ready ->
+                            if (state.previously.onDevice) "Summarised on your phone by Gemini Nano"
+                            else "From the episode guide"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.text3,
+                )
+            }
+        }
+        if (state is PreviouslyState.Loading) {
+            Spacer(Modifier.height(10.dp))
+            repeat(3) {
+                Box(Modifier.fillMaxWidth(if (it == 2) 0.6f else 1f).height(12.dp).clip(CvShape.Pill).shimmer())
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+        if (state is PreviouslyState.Ready) {
+            Spacer(Modifier.height(10.dp))
+            for (line in state.previously.lines) {
+                Row(Modifier.padding(vertical = 3.dp)) {
+                    Text("•", style = MaterialTheme.typography.bodyMedium, color = colors.cyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text(line, style = MaterialTheme.typography.bodyMedium, color = colors.text2)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecapBanner(series: Boolean, season: Int, onClick: () -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    Row(
+        Modifier
+            .padding(horizontal = ScreenPadding, vertical = 6.dp)
+            .fillMaxWidth()
+            .clip(CvShape.Large)
+            .background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    listOf(
+                        (if (series) colors.gold else com.cineverse.app.core.design.Palette.Red2).copy(alpha = 0.22f),
+                        colors.text.copy(alpha = 0.04f),
+                    )
+                )
+            )
+            .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (series) androidx.compose.material.icons.Icons.Rounded.EmojiEvents
+            else androidx.compose.material.icons.Icons.Rounded.AutoAwesome,
+            null,
+            tint = if (series) colors.gold else com.cineverse.app.core.design.Palette.Red2,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (series) "Series complete" else "Season $season complete",
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.text,
+            )
+            Text(
+                if (series) "Your whole run, season by season" else "Your recap of the season",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.text3,
+            )
+        }
+        Icon(
+            androidx.compose.material.icons.Icons.AutoMirrored.Rounded.KeyboardArrowRight, null,
+            tint = colors.text3,
         )
     }
 }
@@ -457,6 +593,7 @@ fun LazyListScope.aboutSection(
     awards: com.cineverse.app.data.awards.Awards,
     onPerson: (Person) -> Unit,
     onOpen: (MediaItem) -> Unit,
+    onBrand: (Brand) -> Unit = {},
 ) {
     if (detail.cast.isNotEmpty()) {
         item(key = "cast") { CastRow(detail.cast, onPerson) }
@@ -468,7 +605,7 @@ fun LazyListScope.aboutSection(
         item(key = "awards") { AwardsPanel(awards, Modifier.padding(bottom = 18.dp)) }
     }
     if (detail.brands.isNotEmpty()) {
-        item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp)) }
+        item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp), onBrand) }
     }
     item(key = "facts") { Facts(detail) }
 }
@@ -494,8 +631,9 @@ fun LazyListScope.aboutSection(
  * none of them is wrong.
  */
 @Composable
-fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier) {
+fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier, onBrand: (Brand) -> Unit = {}) {
     val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
     if (brands.isEmpty()) return
     Column(modifier.fillMaxWidth()) {
         SectionHeader("Made by")
@@ -512,6 +650,8 @@ fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier) {
                         .clip(CvShape.Medium)
                         .background(colors.text.copy(alpha = 0.10f))
                         .border(1.dp, colors.hairline, CvShape.Medium)
+                        // Every mark opens that studio's or network's catalogue.
+                        .clickableNoRipple { haptics?.play(Haptic.Tap); onBrand(brand) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -839,7 +979,9 @@ private fun Facts(detail: TitleDetail) {
         if (detail.revenue > 0) add("Box office" to money(detail.revenue))
     }
     if (rows.isEmpty()) return
-    Column(Modifier.padding(horizontal = ScreenPadding, vertical = 6.dp)) {
+    // A clear gap above: the studio names end right where this begins, and
+    // with six dp between them the heading read as part of that list.
+    Column(Modifier.padding(horizontal = ScreenPadding).padding(top = 22.dp, bottom = 6.dp)) {
         Text("DETAILS", style = KickerStyle, color = colors.text3)
         Spacer(Modifier.height(10.dp))
         Column(

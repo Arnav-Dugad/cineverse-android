@@ -88,6 +88,86 @@ data class FranchiseMoney(
     val topFilm: FilmMoney? get() = films.filter { it.revenue > 0 }.maxByOrNull { it.revenue }
 }
 
+/** One director's run through the chart. */
+@Immutable
+data class DirectorMoney(
+    val id: Int,
+    val name: String,
+    val profile: String?,
+    val films: List<FilmMoney>,
+    val consistency: Consistency,
+) {
+    val revenue: Long get() = films.sumOf { it.revenue }
+    val topFilm: FilmMoney? get() = films.maxByOrNull { it.revenue }
+    private val budgeted: List<FilmMoney> get() = films.filter { it.budget > 0 && it.revenue > 0 }
+    /** Films that earned past the hit line, out of those with a known budget. */
+    val hitRate: Int?
+        get() = budgeted.takeIf { it.isNotEmpty() }?.let { known ->
+            known.count { (it.multiple ?: 0.0) >= Directors.hitThreshold(it) } * 100 / known.size
+        }
+}
+
+@Immutable
+data class Consistency(val score: Int?, val label: String, val sample: Int)
+
+/**
+ * The director league, ported from the website's box-office.js: who made the
+ * most money across the all-time chart, how often their films were hits, and
+ * how CONSISTENT they are - money and audience reception blended, steadied by
+ * how many films there are to judge.
+ */
+object Directors {
+
+    /** A hit is twice the budget; an Indian production is judged at 2.5x. */
+    fun hitThreshold(film: FilmMoney): Double = if (film.isIndian) 2.5 else 2.0
+
+    fun consistency(films: List<FilmMoney>): Consistency {
+        fun clamp(v: Double) = v.coerceIn(0.0, 100.0)
+        fun median(values: List<Double>): Double {
+            val o = values.sorted(); val m = o.size / 2
+            return if (o.size % 2 == 1) o[m] else (o[m - 1] + o[m]) / 2
+        }
+        val rows = films.mapNotNull { film ->
+            val hasFinancial = film.budget > 0 && film.revenue > 0
+            val hasAudience = film.vote > 0 && film.voteCount >= 40
+            if (!hasFinancial && !hasAudience) return@mapNotNull null
+            val financial = if (hasFinancial) {
+                clamp(64 + kotlin.math.log2(maxOf(0.05, film.multiple!! / hitThreshold(film))) * 22)
+            } else null
+            val audience = if (hasAudience) {
+                val confidence = film.voteCount / (film.voteCount + 650.0)
+                val adjusted = film.vote * confidence + 6.3 * (1 - confidence)
+                clamp((adjusted - 4.5) / 4 * 100)
+            } else null
+            when {
+                financial == null -> audience
+                audience == null -> financial
+                else -> financial * .62 + audience * .38
+            }
+        }
+        if (rows.isEmpty()) return Consistency(null, "Not enough data", 0)
+        val middle = median(rows)
+        val deviation = median(rows.map { kotlin.math.abs(it - middle) })
+        val stability = clamp(100 - deviation * 2.15)
+        val successes = rows.count { it >= 60 }
+        val adjustedRate = (successes + 2.0) / (rows.size + 4) * 100
+        val confidence = 1 - kotlin.math.exp(-rows.size / 6.0)
+        val raw = adjustedRate * .42 + middle * .40 + stability * .18
+        val score = (50 + (raw - 50) * confidence).roundToIntSafe()
+        val label = when {
+            rows.size < 3 -> "Not enough films"
+            score >= 82 -> "Elite consistency"
+            score >= 70 -> "Reliable"
+            score >= 58 -> "Steady"
+            score >= 45 -> "Mixed"
+            else -> "Volatile"
+        }
+        return Consistency(if (rows.size < 3) null else score, label, rows.size)
+    }
+
+    private fun Double.roundToIntSafe(): Int = kotlin.math.round(this).toInt()
+}
+
 private val IndianLanguages = setOf("hi", "ta", "te", "ml", "kn", "bn", "mr", "pa", "gu", "ur", "or", "as")
 
 class BoxOfficeRepository(
@@ -194,6 +274,38 @@ class BoxOfficeRepository(
         return coroutineScope {
             ids.distinct().map { id -> async { gate.withPermit { tmdb.filmMoney(id) } } }.awaitAll()
         }.filterNotNull()
+    }
+
+    /**
+     * Directors ranked by what their films in the chart made. Credits are
+     * fetched only now, when the league is asked for, ten at a time.
+     */
+    suspend fun directors(chart: List<FilmMoney>, limit: Int = 40, onProgress: (Float) -> Unit = {}): List<DirectorMoney> {
+        val gate = Semaphore(6)
+        var done = 0
+        val credits = coroutineScope {
+            chart.map { film ->
+                async {
+                    gate.withPermit {
+                        (film to tmdb.directorsOf(film.id)).also {
+                            done++
+                            onProgress(done.toFloat() / chart.size.coerceAtLeast(1))
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        val byDirector = LinkedHashMap<Int, Pair<Triple<Int, String, String?>, MutableList<FilmMoney>>>()
+        for ((film, directors) in credits) {
+            for (director in directors) {
+                byDirector.getOrPut(director.first) { director to mutableListOf() }.second += film
+            }
+        }
+        return byDirector.values
+            .map { (who, films) -> DirectorMoney(who.first, who.second, who.third, films, Directors.consistency(films)) }
+            .filter { it.revenue > 0 }
+            .sortedWith(compareByDescending<DirectorMoney> { it.revenue }.thenByDescending { it.films.size }.thenBy { it.name })
+            .take(limit)
     }
 
     fun clear() {

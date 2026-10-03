@@ -85,7 +85,7 @@ class ContinueWidget : GlanceAppWidget() {
                     absolute = show.isAbsolute,
                     watched = show.watchedCount,
                     total = show.totalEpisodes,
-                    remaining = (show.totalEpisodes - show.watchedCount).coerceAtLeast(0),
+                    remaining = show.airedRemaining,
                 )
             }
 

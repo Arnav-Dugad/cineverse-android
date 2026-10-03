@@ -171,7 +171,9 @@ private fun libraryIntel(lib: Library, watched: List<WatchedItem>): LibraryIntel
     val dated = watched.filter { it.year.length >= 4 }
     val oldest = dated.minByOrNull { it.year }
     val newest = dated.maxByOrNull { it.year }
-    val longest = watched.filter { it.runtime > 0 }.maxByOrNull { it.runtime }
+    // Films only. A series' runtime field holds the whole run on some
+    // documents, which made Doraemon "the longest" at a thousand hours.
+    val longest = watched.filter { it.type == MediaType.Movie && it.runtime in 1..999 }.maxByOrNull { it.runtime }
     val topLanguage = watched.mapNotNull { it.language.takeIf { l -> l.isNotBlank() } }
         .groupingBy { it }.eachCount().maxByOrNull { it.value }
     val topCountry = watched.mapNotNull { it.country.takeIf { c -> c.isNotBlank() } }
@@ -180,11 +182,11 @@ private fun libraryIntel(lib: Library, watched: List<WatchedItem>): LibraryIntel
     val facts = buildList {
         oldest?.let { add(Triple("Oldest", it.title, it.year)) }
         newest?.let { add(Triple("Newest", it.title, it.year)) }
-        longest?.let { add(Triple("Longest", it.title, "${it.runtime / 60}h ${it.runtime % 60}m")) }
+        longest?.let { add(Triple("Longest film", it.title, com.cineverse.app.data.franchise.formatMinutes(it.runtime))) }
         topLanguage?.let {
             add(Triple("Language", languageName(it.key), "${it.value} titles"))
         }
-        topCountry?.let { add(Triple("Country", it.key, "${it.value} titles")) }
+        topCountry?.let { add(Triple("Country", countryName(it.key), "${it.value} titles")) }
         val unrated = watched.count { lib.ratingOf(it.key) == 0 }
         add(Triple("Unrated", unrated.toString(), "of ${watched.size} watched"))
     }
@@ -210,9 +212,23 @@ private fun tvIntel(shows: Map<Int, ShowProgress>): TvIntel {
     // The biggest sitting: the day the most episodes were ticked. Bulk marks are
     // included because a season you swept through in one evening really was one
     // evening, and excluding them would make a real binge invisible.
-    val byDay = tracked.flatMap { it.log }
-        .groupBy { startOfDayLocal(it.stamp) }
-        .mapValues { it.value.size }
+    //
+    // Unless the day could not physically have happened. An import, or "mark
+    // the whole show" on a long anime, files hundreds of episodes under one
+    // date; 1,886 episodes is not a sitting. A day whose marks add up to more
+    // than twenty-four hours of runtime is bookkeeping, and only its single
+    // ticks are counted.
+    val byDay = tracked
+        .flatMap { show ->
+            val minutes = if (show.episodeRuntime > 0) show.episodeRuntime else 42
+            show.log.map { row -> row to minutes }
+        }
+        .groupBy { (row, _) -> startOfDayLocal(row.stamp) }
+        .mapValues { (_, rows) ->
+            val runtime = rows.sumOf { (_, minutes) -> minutes }
+            if (runtime <= 24 * 60) rows.size else rows.count { (row, _) -> !row.bulk }
+        }
+        .filterValues { it > 0 }
     val biggest = byDay.maxByOrNull { it.value }?.let { it.key to it.value }
 
     // Closest to finishing, because that is the question this panel exists for.
@@ -223,10 +239,12 @@ private fun tvIntel(shows: Map<Int, ShowProgress>): TvIntel {
                 id = show.tmdbId,
                 title = show.title,
                 poster = show.poster,
-                left = (show.totalEpisodes - show.watchedCount).coerceAtLeast(0),
+                left = show.airedRemaining,
                 fraction = (show.watchedCount.toFloat() / show.totalEpisodes).coerceIn(0f, 1f),
             )
         }
+        // Caught up is not "close to finishing": there is nothing to watch yet.
+        .filter { it.left > 0 }
         .sortedWith(compareBy({ it.left }, { -it.fraction }))
         .take(5)
 
@@ -257,7 +275,8 @@ private fun tasteMap(watched: List<WatchedItem>): TasteMap {
             6,
         ),
         languages = slices(watched.map { languageName(it.language) }, 6),
-        countries = slices(watched.map { it.country }, 6),
+        // Named, not coded: "IN" is a two-letter puzzle, "India" is an answer.
+        countries = slices(watched.map { countryName(it.country) }, 6),
     )
 }
 
@@ -417,6 +436,14 @@ private fun monthLabel(key: String): String {
  * platform's own name for the tag, which is correct far more often than a
  * hand-written list and is already localised.
  */
+internal fun countryName(code: String): String {
+    if (code.isBlank()) return ""
+    return runCatching {
+        Locale("", code).getDisplayCountry(Locale.getDefault())
+            .takeIf { it.isNotBlank() && it != code }
+    }.getOrNull() ?: code.uppercase()
+}
+
 internal fun languageName(code: String): String {
     if (code.isBlank()) return ""
     return runCatching {

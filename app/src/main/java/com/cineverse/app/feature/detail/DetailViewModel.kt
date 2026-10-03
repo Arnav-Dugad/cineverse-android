@@ -40,7 +40,24 @@ data class DetailState(
     val awards: com.cineverse.app.data.awards.Awards = com.cineverse.app.data.awards.Awards(),
     val loadingHeatmap: Boolean = false,
     val undo: UndoMark? = null,
+    /** A season recap or the series finale, while one is open. */
+    val recap: RecapView? = null,
+    /** "Previously on", once asked for: null, loading, or the lines. */
+    val previously: PreviouslyState = PreviouslyState.Idle,
 )
+
+sealed interface PreviouslyState {
+    data object Idle : PreviouslyState
+    data object Loading : PreviouslyState
+    data object Empty : PreviouslyState
+    data class Ready(val previously: com.cineverse.app.data.recap.Previously) : PreviouslyState
+}
+
+/** Which recap is up. */
+sealed interface RecapView {
+    data class Season(val recap: com.cineverse.app.data.recap.SeasonRecap) : RecapView
+    data class Series(val recap: com.cineverse.app.data.recap.SeriesRecap) : RecapView
+}
 
 /** What the snackbar offers to put back. */
 @Immutable
@@ -64,7 +81,20 @@ class DetailViewModel(
     /** The library key for this title, known before the title page has loaded. */
     val key: String = "${type.wire}_$id"
 
+    // Above `init` on purpose: a cached title makes load() finish during
+    // construction, and it reaches loadCollection, which reads this.
+    private val _collection = MutableStateFlow<com.cineverse.app.data.franchise.CollectionInfo?>(null)
+
+    /** The collection a film belongs to, for the "part of" card and its meter. */
+    val collection: StateFlow<com.cineverse.app.data.franchise.CollectionInfo?> = _collection.asStateFlow()
+
+    private val _exactAir = MutableStateFlow<Long?>(null)
+
+    /** The next episode's broadcast time to the minute, when TVmaze knows it. */
+    val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
+
     init {
+        if (type == MediaType.Tv) com.cineverse.app.core.shortcuts.HabitShortcuts.reportOpened(app.context, id)
         // Paint from the cache first if we have been here before, so coming back
         // to a title is instant rather than a spinner over a page you just read.
         app.tmdb.cachedDetail(id, type, app.settings.settings.value.region)?.let { cached ->
@@ -95,6 +125,7 @@ class DetailViewModel(
                 if (detail.isSeries) loadSeason(opening)
                 loadScores(detail)
                 if (detail.collectionId > 0) loadCollection(detail.collectionId)
+                detail.nextEpisode?.let { loadExactAir(detail, it) }
             }
             .onFailure { error ->
                 if (_state.value.detail == null) {
@@ -107,10 +138,24 @@ class DetailViewModel(
             }
     }
 
-    private val _collection = MutableStateFlow<com.cineverse.app.data.franchise.CollectionInfo?>(null)
-
-    /** The collection a film belongs to, for the "part of" card and its meter. */
-    val collection: StateFlow<com.cineverse.app.data.franchise.CollectionInfo?> = _collection.asStateFlow()
+    private fun loadExactAir(detail: TitleDetail, next: com.cineverse.app.data.model.Episode) = viewModelScope.launch {
+        if (next.airDate.isBlank()) return@launch
+        val brief = com.cineverse.app.data.airing.TvBrief(
+            id = detail.id,
+            name = detail.title,
+            originalName = detail.originalTitle,
+            poster = detail.posterPath,
+            backdrop = detail.backdropPath,
+            status = "",
+            firstAirDate = detail.releaseDate,
+            seasonDates = emptyMap(),
+            next = com.cineverse.app.data.airing.NextEpisode(
+                season = next.season, episode = next.number, name = next.name,
+                airDate = next.airDate, still = next.stillPath, type = "",
+            ),
+        )
+        _exactAir.value = runCatching { app.airing.times.lookup(brief) }.getOrNull()
+    }
 
     private fun loadCollection(id: Int) = viewModelScope.launch {
         if (_collection.value?.id == id) return@launch
@@ -231,8 +276,68 @@ class DetailViewModel(
 
     fun toggleEpisode(season: Int, episode: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
+        val before = app.episodes.of(id)
         app.episodes.toggleEpisode(detail, season, episode)
         refreshHeatmap()
+        celebrate(before, season)
+    }
+
+    /**
+     * Finishing a season raises its recap; finishing the whole show raises the
+     * finale instead. Only on the transition - re-ticking an episode of a
+     * season that was already complete does not throw the card at you again.
+     */
+    private fun celebrate(before: ShowProgress?, season: Int) {
+        val after = app.episodes.of(id) ?: return
+        fun seasonDone(show: ShowProgress?) =
+            show != null && (show.structure[season] ?: 0) > 0 && show.watchedIn(season) >= (show.structure[season] ?: 0)
+        if (seasonDone(before) || !seasonDone(after)) return
+        if (after.complete && before?.complete != true) openSeriesRecap() else openSeasonRecap(season)
+    }
+
+    fun openSeasonRecap(season: Int) = viewModelScope.launch {
+        val show = app.episodes.of(id) ?: return@launch
+        val episodes = _state.value.allSeasons[season] ?: app.tmdb.season(id, season)
+        _state.value = _state.value.copy(
+            recap = RecapView.Season(com.cineverse.app.data.recap.Recaps.season(show, season, episodes)),
+        )
+    }
+
+    fun openSeriesRecap() = viewModelScope.launch {
+        val show = app.episodes.of(id) ?: return@launch
+        val numbers = show.seasons.filterValues { it.isNotEmpty() }.keys.filter { it > 0 }
+        val all = _state.value.allSeasons + app.tmdb.allSeasons(id, numbers - _state.value.allSeasons.keys)
+        _state.value = _state.value.copy(
+            allSeasons = all,
+            recap = RecapView.Series(com.cineverse.app.data.recap.Recaps.series(show, all)),
+        )
+    }
+
+    fun closeRecap() { _state.value = _state.value.copy(recap = null) }
+
+    /**
+     * The last three episodes you ticked before the next one, summarised.
+     * Only ticked episodes are read, so it cannot spoil a thing.
+     */
+    fun loadPreviously() = viewModelScope.launch {
+        if (_state.value.previously is PreviouslyState.Loading) return@launch
+        val show = app.episodes.of(id) ?: return@launch
+        val next = show.nextUp() ?: return@launch
+        _state.value = _state.value.copy(previously = PreviouslyState.Loading)
+        val watched = mutableListOf<com.cineverse.app.data.model.Episode>()
+        for (season in show.structure.keys.filter { it in 1..next.first }.sortedDescending()) {
+            val episodes = _state.value.allSeasons[season] ?: app.tmdb.season(id, season)
+            watched += episodes
+                .filter { show.isWatched(it.season, it.number) }
+                .filter { season < next.first || it.number < next.second }
+                .sortedByDescending { it.number }
+            if (watched.size >= 3) break
+        }
+        val picked = watched.take(3).reversed()
+        val result = app.previouslyOn.summarize(picked)
+        _state.value = _state.value.copy(
+            previously = result?.let { PreviouslyState.Ready(it) } ?: PreviouslyState.Empty,
+        )
     }
 
     fun markUpTo(season: Int, episode: Int) = viewModelScope.launch {
@@ -240,6 +345,7 @@ class DetailViewModel(
         val before = app.episodes.of(id)
         app.episodes.markUpTo(detail, season, episode)
         refreshHeatmap()
+        celebrate(before, season)
         val after = app.episodes.of(id)
         val added = (after?.seasons?.get(season).orEmpty() - before?.seasons?.get(season).orEmpty().toSet())
         if (added.isNotEmpty()) {

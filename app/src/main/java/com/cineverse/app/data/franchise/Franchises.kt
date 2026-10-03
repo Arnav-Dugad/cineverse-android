@@ -192,3 +192,76 @@ fun formatMinutes(minutes: Int): String {
         else -> "${rest}m"
     }
 }
+
+// ---------- television families ----------
+
+/** A family of shows grouped by the franchise name in their titles. */
+@Immutable
+data class TvFamily(
+    val key: String,
+    val name: String,
+    /** Every member TMDB's search found, plus any watched show it missed, oldest first. */
+    val members: List<MediaItem>,
+    val seenIds: Set<Int>,
+    /** Members not watched and not dropped, oldest first. */
+    val unseen: List<MediaItem>,
+) {
+    val found: Int get() = members.size
+    val seen: Int get() = seenIds.size
+    val fraction: Float get() = if (found > 0) seen.toFloat() / found else 0f
+    val complete: Boolean get() = found > 0 && seen >= found
+    val nextUp: MediaItem? get() = unseen.firstOrNull()
+}
+
+/**
+ * TMDB has collections for film and nothing for television, so a Star Trek or
+ * a Law & Order can only be grouped by NAME - ported from the website. It is
+ * deliberately strict: a show joins a family only when its title declares the
+ * franchise before a colon or a dash, or when its whole title IS a stem another
+ * show declared. A looser rule would put "Love, Death & Robots" in a family with
+ * "Love Island" and invent a franchise nobody is in.
+ */
+object TvFamilies {
+
+    private val Split = Regex("""^(.{2,40}?)\s*[:–—]\s+\S""")
+    private val Dash = Regex("""^(.{2,40}?)\s+-\s+\S""")
+
+    /** The franchise a title declares, or "" when it declares none. */
+    fun stem(title: String): String {
+        val clean = title.trim()
+        if (clean.isEmpty()) return ""
+        val match = Split.find(clean) ?: Dash.find(clean) ?: return ""
+        val stem = match.groupValues[1].trim()
+        return if (stem.length >= 3 && stem != clean) stem else ""
+    }
+
+    /** Case and punctuation never split a family; "&" is spelled "and". */
+    fun fold(value: String): String =
+        value.lowercase().replace("&", " and ").replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    /** Watched shows grouped into named families of two or more. (stem, shows) */
+    fun families(library: Library): List<Pair<String, List<com.cineverse.app.data.model.WatchedItem>>> {
+        val shows = library.watched.values.filter { it.type == MediaType.Tv && it.title.isNotBlank() }
+        val declared = HashMap<String, String>()
+        for (show in shows) stem(show.title).takeIf { it.isNotEmpty() }?.let { declared[fold(it)] = it }
+        if (declared.isEmpty()) return emptyList()
+        val groups = LinkedHashMap<String, MutableList<com.cineverse.app.data.model.WatchedItem>>()
+        for (show in shows) {
+            val key = fold(stem(show.title).ifEmpty { show.title })
+            if (key !in declared) continue
+            groups.getOrPut(key) { mutableListOf() } += show
+        }
+        return groups.filterValues { it.size >= 2 }
+            .map { (key, members) -> declared.getValue(key) to members.toList() }
+            .sortedWith(compareByDescending<Pair<String, List<com.cineverse.app.data.model.WatchedItem>>> { it.second.size }.thenBy { it.first })
+    }
+
+    /** Does a search result belong to the family, or merely mention it? */
+    fun belongs(title: String, stem: String): Boolean {
+        val f = fold(title)
+        val s = fold(stem)
+        if (f == s) return true
+        val declared = stem(title)
+        return declared.isNotEmpty() && fold(declared) == s
+    }
+}

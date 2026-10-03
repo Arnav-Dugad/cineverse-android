@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.person
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,6 +69,15 @@ fun PersonScreen(
     val library by viewModel.library.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
 
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    // Content scrolled under the clock gets a scrim, as every other page has.
+    val scrolled by androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 40
+        }
+    }
+    val scrim by androidx.compose.animation.core.animateFloatAsState(if (scrolled) 1f else 0f, label = "scrim")
+
     Box(modifier.fillMaxSize().background(colors.ink)) {
         if (person == null) {
             Box(Modifier.fillMaxSize().shimmer())
@@ -80,6 +90,7 @@ fun PersonScreen(
                 .filter { it.item.posterPath != null }
 
             LazyVerticalGrid(
+                state = gridState,
                 columns = posterGridCells(),
                 contentPadding = PaddingValues(
                     start = ScreenPadding, end = ScreenPadding, bottom = BottomBarSpace,
@@ -157,6 +168,21 @@ fun PersonScreen(
             }
         }
 
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = scrim }
+                .background(colors.ink)
+                .windowInsetsPadding(WindowInsets.statusBars)
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(58.dp)
+                .graphicsLayer { alpha = scrim }
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(colors.ink, colors.ink.copy(alpha = 0f))))
+        )
         Box(
             Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)

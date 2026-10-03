@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -104,6 +105,9 @@ fun DetailHead(
     onLists: () -> Unit,
     onProgress: () -> Unit,
 ) {
+    val accent = com.cineverse.app.core.ui.LocalTitleAccent.current
+    // A sand or yellow accent would make white type unreadable on the button.
+    val onAccent = if (accent != null && accent.luminance() > 0.5f) Color(0xFF0B0B10) else Color.White
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
 
@@ -235,7 +239,7 @@ fun DetailHead(
                         .clip(CvShape.Pill)
                         .background(
                             Brush.horizontalGradient(
-                                listOf(Palette.Red, Palette.Red2)
+                                accent?.let { listOf(it.copy(alpha = 0.92f), it) } ?: listOf(Palette.Red, Palette.Red2)
                             )
                         )
                         .clickableNoRipple { haptics?.play(Haptic.Tap); onPlayTrailer() }
@@ -246,14 +250,14 @@ fun DetailHead(
                     Icon(
                         Icons.Rounded.PlayArrow,
                         null,
-                        tint = Color.White,
+                        tint = onAccent,
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
                         "Trailer",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Color.White,
+                        color = onAccent,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

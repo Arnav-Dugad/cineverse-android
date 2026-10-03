@@ -72,7 +72,9 @@ fun YouTubePlayer(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
-                setBackgroundColor(Color.Black.toArgb())
+                // Ambient video is transparent until it is actually playing, so
+                // the artwork underneath shows through - never a black frame.
+                setBackgroundColor(if (ambient) android.graphics.Color.TRANSPARENT else Color.Black.toArgb())
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 if (ambient) {
@@ -85,6 +87,20 @@ fun YouTubePlayer(
                     // The player is identical either way; only the chrome
                     // differs, and this one is asking for no chrome at all.
                     settings.userAgentString = DESKTOP_AGENT
+                    // And the client hints, which is the half that was missing:
+                    // WebView still announced Sec-CH-UA-Mobile, YouTube believed
+                    // the hint over the user agent, and served the mobile player
+                    // with its pause button parked over the hero.
+                    if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.USER_AGENT_METADATA)) {
+                        androidx.webkit.WebSettingsCompat.setUserAgentMetadata(
+                            settings,
+                            androidx.webkit.UserAgentMetadata.Builder()
+                                .setMobile(false)
+                                .setPlatform("macOS")
+                                .setPlatformVersion("14.0.0")
+                                .build(),
+                        )
+                    }
                     // Every touch eaten. One stray tap on an ambient trailer
                     // brings up YouTube's whole control overlay on top of the
                     // hero, and there is no way back from it -- the user did not
@@ -173,7 +189,11 @@ private fun embedHtml(
         append("&controls=").append(if (controls) 1 else 0)
         append("&playsinline=1&rel=0&iv_load_policy=3&cc_load_policy=0")
         append("&modestbranding=1&enablejsapi=1&disablekb=1&fs=0")
-        if (loop) append("&loop=1&playlist=").append(key)
+        // An ambient loop is done in script (see below), never with YouTube's
+        // own loop=1&playlist= trick: that makes the video a one-item PLAYLIST,
+        // and a playlist gets previous / pause / next drawn over the picture -
+        // exactly the chrome the hero must never show.
+        if (loop && !ambient) append("&loop=1&playlist=").append(key)
         append("&origin=").append(ORIGIN)
     }
 
@@ -189,15 +209,21 @@ private fun embedHtml(
     // to push them past the edges of a box that clips. `controls=0` alone does
     // not do it; the first screenshot of this had a pause button over the hero.
     val css = if (ambient) """
-        html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+        html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
         #wrap { position: absolute; inset: 0; overflow: hidden; }
         iframe {
           position: absolute; top: 50%; left: 50%;
-          width: 100vw; height: 56.25vw;
-          min-height: 100vh; min-width: 177.78vh;
-          transform: translate(-50%, -50%) scale(1.25);
+          /* A DESKTOP-sized player, scaled down to cover (see fit() below).
+             YouTube chooses its controls by the player's size: at phone width
+             it uses the compact player, whose centre pause button ignores
+             controls=0 and kept reappearing over the hero. */
+          width: 1280px; height: 720px;
+          transform: translate(-50%, -50%) scale(1);
+          transform-origin: 50% 50%;
           border: 0; pointer-events: none;
+          opacity: 0; transition: opacity .45s ease;
         }
+        iframe.playing { opacity: 1; }
     """ else """
         html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
         #wrap { position: absolute; inset: 0; }
@@ -217,6 +243,18 @@ private fun embedHtml(
                     allow="autoplay; encrypted-media; picture-in-picture"
                     allowfullscreen></iframe>
           </div>
+          <script>
+            // Cover the box with the 1280x720 player, then a little more so the
+            // edges where YouTube draws its title and watermark fall outside.
+            function fit() {
+              var p = document.getElementById('p');
+              if (!p || !$ambient) return;
+              var k = Math.max(window.innerWidth / 1280, window.innerHeight / 720) * 1.18;
+              p.style.transform = 'translate(-50%, -50%) scale(' + k + ')';
+            }
+            window.addEventListener('resize', fit);
+            fit();
+          </script>
           <script src="https://www.youtube.com/iframe_api"></script>
           <script>
             function onYouTubeIframeAPIReady() {
@@ -227,6 +265,25 @@ private fun embedHtml(
                   },
                   onStateChange: function (e) {
                     try { CineVerse.onState(e.data); } catch (err) {}
+                    if ($ambient) {
+                      // Ambient video is only ever SEEN while it is actually
+                      // playing. Buffering, paused and the end card are where
+                      // YouTube draws its title and controls; the artwork
+                      // underneath shows through instead.
+                      // Revealed only once playback has run long enough for
+                      // YouTube's controls to fade: showing the frame as soon
+                      // as it played put a big pause icon over the hero.
+                      var frame = document.getElementById('p');
+                      clearTimeout(window.cvReveal);
+                      if (e.data === 1) {
+                        // 3.2s: YouTube's chrome fades by itself about three
+                        // seconds into playback when nothing touches the player.
+                        window.cvReveal = setTimeout(function () { frame.className = 'playing'; }, 3200);
+                      } else {
+                        frame.className = '';
+                      }
+                      if (e.data === 0 && $loop) { e.target.seekTo(0); e.target.playVideo(); }
+                    }
                   }
                 }
               });

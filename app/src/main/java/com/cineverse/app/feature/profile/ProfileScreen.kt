@@ -172,7 +172,8 @@ fun ProfileScreen(
                 NavRow(
                     icon = Icons.Rounded.Tune,
                     title = "Settings",
-                    detail = "",
+                    // No detail line at all: an EMPTY one still took a line's
+                    // height and pushed the title above the row's centre.
                     onClick = { haptics?.play(Haptic.Tap); onOpenSettings() },
                 )
             }
@@ -224,11 +225,34 @@ fun ProfileScreen(
                                 }
                                 .padding(horizontal = 16.dp, vertical = 13.dp)
                         ) {
+                            // When, in which version, and what - in that order,
+                            // because "NullPointerException: Attempt to invoke
+                            // interface method" says nothing until you know
+                            // whether it was last night or last month, and
+                            // whether the version it happened in is still yours.
+                            val version = report.text.lineSequence().firstOrNull()
+                                ?.substringAfter("CineVerse ", "")?.substringBefore(" (")?.trim().orEmpty()
+                            val kind = report.summary.substringBefore(':').substringAfterLast('.')
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Closed unexpectedly",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.text,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    crashWhen(report.at),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.text3,
+                                )
+                            }
+                            Spacer(Modifier.height(3.dp))
                             Text(
-                                report.summary,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.text2,
-                                maxLines = 2,
+                                listOf(version.takeIf { it.isNotBlank() }?.let { "Version $it" }, kind)
+                                    .filterNotNull().joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.text3,
+                                maxLines = 1,
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -312,4 +336,17 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
             .glass(CvShape.XLarge),
         content = content,
     )
+}
+
+/** "Today, 20:18", "Yesterday, 09:02", or "3 Oct, 20:18". */
+private fun crashWhen(at: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val then = java.time.Instant.ofEpochMilli(at).atZone(zone)
+    val today = java.time.LocalDate.now(zone)
+    val time = then.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    return when (then.toLocalDate()) {
+        today -> "Today, $time"
+        today.minusDays(1) -> "Yesterday, $time"
+        else -> then.format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm", java.util.Locale.getDefault()))
+    }
 }

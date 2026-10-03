@@ -182,10 +182,19 @@ fun RewatchPanel(
  *    negative numbers.
  */
 @Composable
-fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
+fun NextEpisodePanel(
+    episode: Episode,
+    modifier: Modifier = Modifier,
+    /**
+     * The broadcaster's own timestamp, from TVmaze, when it is known. Without
+     * it the countdown runs to the start of the air DATE in the viewer's zone,
+     * which for an American show is often half a day early.
+     */
+    exactAt: Long? = null,
+) {
     val colors = CvTheme.colors
 
-    val airAt = remember(episode.airDate) {
+    val airAt = exactAt?.takeIf { it > 0 } ?: remember(episode.airDate) {
         runCatching {
             LocalDate.parse(episode.airDate)
                 .atStartOfDay(ZoneId.systemDefault())
@@ -193,6 +202,7 @@ fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
                 .toEpochMilli()
         }.getOrNull()
     } ?: return
+    val exact = exactAt != null && exactAt > 0
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(airAt) {
@@ -243,9 +253,13 @@ fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(
-                    if (remaining == 0L) "Out now" else "Date confirmed",
+                    when {
+                        remaining == 0L -> "Out now"
+                        exact -> "Exact time"
+                        else -> "Date confirmed"
+                    },
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.text3,
+                    color = if (exact && remaining > 0L) colors.cyan else colors.text3,
                 )
             }
         }
@@ -258,6 +272,16 @@ fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
             },
             style = MaterialTheme.typography.titleMedium,
             color = colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // When it is, in the viewer's own clock - the line people actually
+        // wanted when they asked "what time does it come out here?".
+        Text(
+            if (exact) "${com.cineverse.app.data.airing.Airing.localTime(airAt)} · your time"
+            else "Counting to the air date; the exact time is not published yet",
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.text3,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

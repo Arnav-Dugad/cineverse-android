@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -51,30 +52,51 @@ import com.cineverse.app.core.ui.glassPane
  * sits on the page colour.
  */
 @Composable
-fun CvTopBar(tab: Tab, onSearch: () -> Unit) {
+fun CvTopBar(
+    tab: Tab,
+    onSearch: () -> Unit,
+    overArt: Boolean = tab == Tab.Home,
+    inboxCount: Int = 0,
+    onInbox: (() -> Unit)? = null,
+) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
-    val overArt = tab == Tab.Home
+    val isHome = tab == Tab.Home
     val interaction = remember { MutableInteractionSource() }
+    // 1 over the hero, 0 once it has scrolled away. Crossfaded rather than
+    // switched, so the bar settles onto the page instead of popping.
+    val art by androidx.compose.animation.core.animateFloatAsState(
+        if (overArt) 1f else 0f,
+        androidx.compose.animation.core.tween(com.cineverse.app.core.design.Motion.Normal),
+        label = "barArt",
+    )
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .then(
-                // Over the hero the bar is a scrim rather than a surface, so the
-                // artwork reaches the top of the screen. It has to be a STRONG
-                // scrim: at 0.7 fading immediately, a poster's caption scrolling
-                // underneath was legible straight through the wordmark. It holds
-                // nearly full page colour behind the bar itself and only releases
-                // below it.
-                if (overArt) Modifier.background(
+    Box(Modifier.fillMaxWidth()) {
+        // Over the hero the bar is a scrim, so the artwork reaches the top of
+        // the screen. Below the hero it is the same glass as every other tab:
+        // the scrim alone left a poster scrolling under the wordmark at full
+        // brightness, because the wordmark sits where the scrim is fading out.
+        Box(
+            Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = art }
+                .background(
                     Brush.verticalGradient(
                         0f to colors.ink.copy(alpha = 0.95f),
                         0.62f to colors.ink.copy(alpha = 0.82f),
                         1f to Color.Transparent,
                     )
-                ) else Modifier.glassPane(PaneEdge.Bottom, colors.ink, opacity = 0.975f)
-            )
+                )
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = 1f - art }
+                .glassPane(PaneEdge.Bottom, colors.ink, opacity = 0.975f)
+        )
+    Box(
+        Modifier
+            .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
             .height(56.dp)
             .padding(horizontal = ScreenPadding - 6.dp),
@@ -85,9 +107,17 @@ fun CvTopBar(tab: Tab, onSearch: () -> Unit) {
         ) {
             CvMark(size = 22.dp)
             Text(
-                "  ${if (overArt) "CineVerse" else tab.label}",
+                "  ${if (isHome) "CineVerse" else tab.label}",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W800),
-                color = if (overArt) Palette.Red2 else colors.text,
+                color = if (isHome) Palette.Red2 else colors.text,
+            )
+        }
+        if (onInbox != null) {
+            com.cineverse.app.feature.inbox.InboxBell(
+                count = inboxCount,
+                color = androidx.compose.ui.graphics.lerp(colors.text, Color.White, art),
+                onClick = { haptics?.play(Haptic.Tap); onInbox() },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 44.dp),
             )
         }
         Box(
@@ -106,10 +136,11 @@ fun CvTopBar(tab: Tab, onSearch: () -> Unit) {
             val pressed by interaction.collectIsPressedAsState()
             AnimatedSearch(
                 active = pressed,
-                color = if (overArt) Color.White else colors.text,
+                color = androidx.compose.ui.graphics.lerp(colors.text, Color.White, art),
                 size = 23.dp,
             )
         }
+    }
     }
 }
 

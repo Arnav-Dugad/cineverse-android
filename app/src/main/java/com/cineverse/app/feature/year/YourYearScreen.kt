@@ -240,7 +240,7 @@ private fun YearPage(
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Figure(
-                    "Watch time", (summary.minutes / 60).toLong(), "hours, films + finished runs",
+                    "Watch time", (summary.minutes / 60).toLong(), "hours watched",
                     deltas?.third, Modifier.weight(1f),
                 )
                 Column(

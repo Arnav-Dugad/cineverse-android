@@ -135,6 +135,8 @@ fun CineVerseNav(
     var rateTarget by remember { mutableStateOf<MediaItem?>(null) }
     val history by app.updates.history.collectAsStateWithLifecycle()
     val shelf by app.library.library.collectAsStateWithLifecycle()
+    val inboxCount by app.inbox.unread.collectAsStateWithLifecycle()
+    val signedInUid by app.auth.uid.collectAsStateWithLifecycle()
     // -1 until the library has loaded, so its arrival is not mistaken for a save.
     var acknowledgedSaved by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
     val savedWaiting = if (shelf.loaded) shelf.saved.keys.count { it !in shelf.watched } else -1
@@ -146,10 +148,26 @@ fun CineVerseNav(
         app.messages.collectLatest { message -> snackbars.showSnackbar(message) }
     }
 
+    // Switching tab, the one way it is ever done: the bar and a link that
+    // names a tab both come through here.
+    fun goToTab(tab: Tab) {
+        navController.navigate(tab.route) {
+            popUpTo(Route.Home) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     // A shortcut, a widget row or a shared link, taken once.
+    //
+    // A link to a TAB switches to it, exactly as the bar does. It used to be
+    // pushed on top of whatever tab was showing, so the You tab's saved stack
+    // became "You, then Stats" - and from then on tapping You restored that
+    // stack and left you looking at Stats, with the tab apparently dead.
     LaunchedEffect(deepLink) {
         val route = deepLink ?: return@LaunchedEffect
-        navController.navigate(route) { launchSingleTop = true }
+        val tab = Tab.entries.firstOrNull { it.route == route }
+        if (tab != null) goToTab(tab) else navController.navigate(route) { launchSingleTop = true }
         onDeepLinkHandled()
     }
 
@@ -174,6 +192,14 @@ fun CineVerseNav(
         backStack?.destination?.hierarchy?.any { node -> node.hasRoute(tab.route::class) } == true
     }
 
+    // Every arrival starts with the bar showing. Scrolling a pushed page (Your
+    // Year, a title) tucks it away, and without this you came back to a tab
+    // with no way to leave it until you happened to scroll up.
+    LaunchedEffect(backStack?.id) { bars.show() }
+
+    // Home's bar is a scrim over the hero and glass once the hero has gone.
+    var homeScrolled by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = colors.ink,
         contentColor = colors.text,
@@ -185,6 +211,9 @@ fun CineVerseNav(
                 CvTopBar(
                     tab = currentTab,
                     onSearch = { navController.navigate(Route.Search) },
+                    overArt = currentTab == Tab.Home && !homeScrolled,
+                    inboxCount = if (shelf.loaded && signedInUid != null) inboxCount else 0,
+                    onInbox = { navController.navigate(Route.Inbox) },
                 )
             }
         },
@@ -199,11 +228,7 @@ fun CineVerseNav(
                     onAcknowledgeSaved = { acknowledgedSaved = it },
                     onSelect = { tab ->
                         bars.show()
-                        navController.navigate(tab.route) {
-                            popUpTo(Route.Home) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        goToTab(tab)
                     },
                 )
             }
@@ -250,6 +275,7 @@ fun CineVerseNav(
                     },
                     onPeek = peek::open,
                     contentPadding = padding,
+                    onScrolledPastHero = { homeScrolled = it },
                 )
             }
 
@@ -286,6 +312,7 @@ fun CineVerseNav(
                     onYear = { navController.navigate(Route.YourYear()) },
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onFranchises = { navController.navigate(Route.Franchises) },
+                    onPerson = { navController.navigate(Route.Person(it)) },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 )
             }
@@ -320,6 +347,7 @@ fun CineVerseNav(
                     viewModel = cvViewModel("search") { SearchViewModel(app) },
                     onOpen = open,
                     onBack = { navController.popBackStack() },
+                    onPerson = { navController.navigate(Route.Person(it)) },
                 )
             }
 
@@ -349,6 +377,28 @@ fun CineVerseNav(
                         com.cineverse.app.feature.detail.shareTitle(navController.context, detail)
                     },
                     onCollection = { navController.navigate(Route.Collection(it)) },
+                    onBrand = { brand -> navController.navigate(Route.Studio(brand.id, brand.isNetwork, brand.name)) },
+                )
+            }
+
+            cvComposable<Route.Inbox> {
+                com.cineverse.app.feature.inbox.InboxScreen(
+                    app = app,
+                    onOpen = open,
+                    onYear = { navController.navigate(Route.YourYear()) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.Studio> { entry ->
+                val route: Route.Studio = entry.toRoute()
+                com.cineverse.app.feature.studio.StudioScreen(
+                    viewModel = cvViewModel("studio_${route.network}_${route.id}") {
+                        com.cineverse.app.feature.studio.StudioViewModel(app, route)
+                    },
+                    title = route.name,
+                    onOpen = open,
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -401,6 +451,7 @@ fun CineVerseNav(
                     onOpen = open,
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onBack = { navController.popBackStack() },
+                    onPerson = { navController.navigate(Route.Person(it)) },
                 )
             }
 

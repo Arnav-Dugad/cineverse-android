@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -28,6 +29,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -157,6 +159,12 @@ fun SettingsScreen(
             )
                 Divider()
             SwitchRow(
+                title = "Colour from the poster",
+                checked = settings.titleColour,
+                onChange = viewModel::setTitleColour,
+            )
+                Divider()
+            SwitchRow(
                 title = "Match percentage",
                 checked = settings.posterMatch,
                 onChange = viewModel::setPosterMatch,
@@ -266,14 +274,12 @@ fun SettingsScreen(
 
         item(key = "group_content") {
             SettingsGroup("Content") {
-            ChoiceRow(
-                title = "Region",
-                options = REGIONS.map { it.second },
-                selected = REGIONS.firstOrNull { it.first == settings.region }?.second
-                    ?: REGIONS.first().second,
-                onSelect = { label ->
-                    REGIONS.firstOrNull { it.second == label }?.let { viewModel.setRegion(it.first) }
-                },
+            // Twelve countries do not fit a segmented control - they wrapped a
+            // letter at a time ("Indi / a"). A row that names the current one
+            // and opens the full list is the shape this choice needs.
+            RegionRow(
+                selected = settings.region,
+                onSelect = viewModel::setRegion,
             )
                 Divider()
             SwitchRow(
@@ -587,6 +593,84 @@ private val REGIONS = listOf(
     "JP" to "Japan",
     "KR" to "South Korea",
 )
+
+/** 🇮🇳 from "IN": two regional-indicator letters make a flag on every platform. */
+private fun flagOf(code: String): String =
+    code.uppercase().filter { it in 'A'..'Z' }.take(2)
+        .map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }
+        .joinToString("")
+
+@Composable
+private fun RegionRow(selected: String, onSelect: (String) -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val current = REGIONS.firstOrNull { it.first == selected } ?: REGIONS.first()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickableNoRipple { haptics?.play(Haptic.Tap); open = true }
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Region", style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            Text(
+                "Where to watch, and release dates",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+            )
+        }
+        Text(
+            "${flagOf(current.first)}  ${current.second}",
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.text2,
+        )
+        Spacer(Modifier.size(6.dp))
+        Icon(
+            Icons.AutoMirrored.Rounded.ArrowForwardIos, null,
+            tint = colors.text3, modifier = Modifier.size(14.dp),
+        )
+    }
+    if (open) {
+        com.cineverse.app.core.ui.CvSheet(onDismiss = { open = false }) {
+            Text("Region", style = MaterialTheme.typography.titleLarge, color = colors.text)
+            Spacer(Modifier.size(12.dp))
+            for ((code, name) in REGIONS) {
+                val active = code == current.first
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(CvShape.Medium)
+                        .background(if (active) colors.text.copy(alpha = 0.08f) else Color.Transparent)
+                        .clickableNoRipple {
+                            haptics?.play(Haptic.Select)
+                            onSelect(code)
+                            open = false
+                        }
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(flagOf(code), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.size(14.dp))
+                    Text(
+                        name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (active) colors.text else colors.text2,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (active) {
+                        Icon(
+                            Icons.Rounded.Check, "Selected",
+                            tint = com.cineverse.app.core.design.Palette.Red2,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 internal fun GroupHeading(text: String) {

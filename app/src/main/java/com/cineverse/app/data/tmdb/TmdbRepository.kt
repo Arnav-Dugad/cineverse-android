@@ -1,5 +1,7 @@
 package com.cineverse.app.data.tmdb
 
+import com.cineverse.app.data.model.Person
+
 import com.cineverse.app.data.model.Episode
 import com.cineverse.app.data.model.Genre
 import com.cineverse.app.data.model.MediaItem
@@ -34,6 +36,8 @@ class TmdbRepository(
     private val imdbIds = LruCache<String, String>(300)
     private val collectionCache = LruCache<Int, com.cineverse.app.data.franchise.CollectionInfo>(160)
     private val moneyCache = LruCache<Int, com.cineverse.app.data.boxoffice.FilmMoney>(600)
+    private val directorCache = LruCache<Int, List<Triple<Int, String, String?>>>(400)
+    private val briefCache = LruCache<Int, Pair<Long, com.cineverse.app.data.airing.TvBrief>>(200)
     private var movieGenres: List<Genre> = emptyList()
     private var tvGenres: List<Genre> = emptyList()
     private val genreLock = Mutex()
@@ -81,6 +85,55 @@ class TmdbRepository(
             }
         }.getOrDefault(emptyList<MediaItem>() to 1)
     }
+
+    /**
+     * A search page with the people kept.
+     *
+     * The plain [search] drops every person TMDB returns, which is right for a
+     * grid of posters and wrong for a search box: someone typing "nolan" is
+     * almost always after Christopher Nolan, and got four documentaries with
+     * the word in their titles instead. So the people come back as their own
+     * list, and when the strongest match on the page IS a person, the titles
+     * they are known for lead the results.
+     *
+     * Within a page, a title with almost no votes sorts after established ones
+     * (stably, so TMDB's relevance order survives inside each group): a
+     * student short with eleven votes should not outrank the film you meant.
+     */
+    suspend fun searchPage(query: String, page: Int = 1, adult: Boolean = false): SearchPage {
+        if (query.isBlank()) return SearchPage()
+        return runCatching {
+            withContext(io) {
+                val result = api.searchMulti(query, page, adult)
+                val people = result.results.filter { it.mediaType == "person" && it.id > 0 }
+                val media = result.results.filter { it.mediaType != "person" }
+                val lead = people.maxByOrNull { it.popularity }
+                val leadsPage = page == 1 && lead != null &&
+                    lead.popularity >= (media.maxOfOrNull { it.popularity } ?: 0.0)
+                val known = if (leadsPage) lead!!.knownFor.toItems().filter { it.hasArt } else emptyList()
+                val knownKeys = known.map { it.key }.toSet()
+                SearchPage(
+                    items = (known + media.toItems())
+                        .distinctBy { it.key }
+                        .sortedBy { if (it.voteCount >= 25 || it.key in knownKeys) 0 else 1 },
+                    people = if (page == 1) people.map { dto ->
+                        Person(
+                            id = dto.id,
+                            name = dto.name.orEmpty(),
+                            profilePath = dto.profilePath,
+                            job = dto.knownForDepartment,
+                        )
+                    }.filter { it.name.isNotBlank() } else emptyList(),
+                    totalPages = result.totalPages,
+                )
+            }
+        }.getOrDefault(SearchPage())
+    }
+
+    /** Series whose name matches, for grouping television families. */
+    suspend fun searchTv(query: String): List<MediaItem> =
+        if (query.isBlank()) emptyList()
+        else quiet { api.search("tv", query).results.toItems(MediaType.Tv) }
 
     /** The typeahead: fewer results, no paging, and failure is simply silence. */
     suspend fun suggest(query: String, adult: Boolean = false): List<MediaItem> =
@@ -179,6 +232,44 @@ class TmdbRepository(
     }
 
     /**
+     * A series with nothing appended: its status, its seasons' premiere dates
+     * and its next episode. Up Next and Returning read a few dozen of these at
+     * a time, and the full title payload is fifty times the size.
+     */
+    suspend fun tvBrief(id: Int): com.cineverse.app.data.airing.TvBrief? {
+        if (id <= 0) return null
+        briefCache[id]?.let { (at, brief) ->
+            if (System.currentTimeMillis() - at < 30 * 60_000L) return brief
+        }
+        return runCatching {
+            withContext(io) {
+                val dto = api.tv(id, append = "")
+                com.cineverse.app.data.airing.TvBrief(
+                    id = dto.id.takeIf { it > 0 } ?: id,
+                    name = dto.name,
+                    originalName = dto.originalName.orEmpty(),
+                    poster = dto.posterPath,
+                    backdrop = dto.backdropPath,
+                    status = dto.status.orEmpty(),
+                    firstAirDate = dto.firstAirDate.orEmpty(),
+                    seasonDates = dto.seasons.filter { it.seasonNumber > 0 }
+                        .associate { it.seasonNumber to it.airDate.orEmpty() },
+                    next = dto.nextEpisode?.let { next ->
+                        com.cineverse.app.data.airing.NextEpisode(
+                            season = next.seasonNumber,
+                            episode = next.episodeNumber,
+                            name = next.name,
+                            airDate = next.airDate.orEmpty(),
+                            still = next.stillPath,
+                            type = next.episodeType.orEmpty(),
+                        )
+                    },
+                )
+            }
+        }.getOrNull()?.also { briefCache.put(id, System.currentTimeMillis() to it) }
+    }
+
+    /**
      * One film's money and the few facts a box-office row shows. A bare detail
      * request with nothing appended: the chart reads two hundred of these, and
      * the full title payload is a hundred times the size.
@@ -210,6 +301,35 @@ class TmdbRepository(
         }.getOrNull()?.also { moneyCache.put(id, it) }
     }
 
+    /** A film's directors: (id, name, profile). Empty on failure. */
+    suspend fun directorsOf(id: Int): List<Triple<Int, String, String?>> {
+        directorCache[id]?.let { return it }
+        return runCatching {
+            withContext(io) {
+                api.movieCredits(id).crew.filter { it.job == "Director" && it.id > 0 }
+                    .distinctBy { it.id }
+                    .map { Triple(it.id, it.name, it.profilePath) }
+            }
+        }.getOrNull()?.also { directorCache.put(id, it) }.orEmpty()
+    }
+
+    /** A series' whole cast with how many episodes each was in. */
+    suspend fun tvCast(id: Int): List<AggregateCastDto> = quiet { api.tvAggregateCredits(id).cast }
+
+    /** A studio or network's own card: name, mark, where it is. */
+    suspend fun studio(id: Int, network: Boolean): StudioDto? = runCatching {
+        withContext(io) { if (network) api.network(id) else api.company(id) }
+    }.getOrNull()
+
+    /** One discover page with its totals, for a catalogue screen that counts. */
+    suspend fun discoverCounted(type: MediaType, params: Map<String, String>): Triple<List<MediaItem>, Int, Int> =
+        runCatching {
+            withContext(io) {
+                val page = api.discoverPage(type.wire, params)
+                Triple(page.results.toItems(type), page.totalPages.coerceAtMost(500), page.totalResults)
+            }
+        }.getOrDefault(Triple(emptyList(), 1, 0))
+
     /**
      * A title's IMDb id, which the outside-scores service needs and a saved
      * title does not carry. Permanent once known — it never changes.
@@ -236,6 +356,13 @@ class TmdbRepository(
     suspend fun genreNames(): Map<Int, String> =
         (genres(MediaType.Movie) + genres(MediaType.Tv)).associate { it.id to it.name }
 }
+
+/** One page of a search: titles, the people it found, and how far it goes. */
+data class SearchPage(
+    val items: List<MediaItem> = emptyList(),
+    val people: List<Person> = emptyList(),
+    val totalPages: Int = 1,
+)
 
 /** A tiny, allocation-free LRU. Room would be a database for something that is a map. */
 class LruCache<K : Any, V : Any>(private val max: Int) {
