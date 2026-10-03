@@ -41,6 +41,9 @@ object Http {
 
     private const val CACHE_BYTES = 192L * 1024 * 1024
 
+    /** The only hosts whose cache headers this app is entitled to rewrite. */
+    private val TMDB_HOSTS = setOf("api.themoviedb.org", "image.tmdb.org")
+
     fun client(context: Context): OkHttpClient {
         val cache = Cache(File(context.cacheDir, "http"), CACHE_BYTES)
         return OkHttpClient.Builder()
@@ -61,6 +64,18 @@ object Http {
     private object CacheRules : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val response = chain.proceed(chain.request())
+            // ONLY TMDB.
+            //
+            // These rules exist because TMDB sends no usable Cache-Control, and
+            // for a long time they were applied to every request the app made,
+            // including GitHub's. The fall-through of an hour then meant that
+            // checking for updates five minutes after a release went out was
+            // answered from disk with the previous release - the app saying it
+            // was up to date while a new version sat on the other end of a
+            // request it never made. A server that does send cache headers is
+            // telling you something, and overwriting that is not caching, it is
+            // guessing.
+            if (chain.request().url.host !in TMDB_HOSTS) return response
             val path = chain.request().url.encodedPath
             val seconds = when {
                 // Configuration and genre lists change a few times a decade.

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
+import okhttp3.CacheControl
 import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
@@ -141,17 +142,18 @@ class UpdateRepository(
     suspend fun loadHistory(force: Boolean = false): List<Release> {
         if (!force && _history.value.isNotEmpty()) return _history.value
         val releases = withContext(io) {
-            runCatching { fetchHistory() }.getOrNull().orEmpty()
+            runCatching { fetchHistory(fresh = force) }.getOrNull().orEmpty()
         }
         if (releases.isNotEmpty()) _history.value = releases
         return releases
     }
 
-    private fun fetchHistory(): List<Release> {
+    private fun fetchHistory(fresh: Boolean = false): List<Release> {
         val request = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases?per_page=30")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
+            .apply { if (fresh) cacheControl(CacheControl.FORCE_NETWORK) }
             .build()
         val body = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return emptyList()
@@ -170,7 +172,7 @@ class UpdateRepository(
         val sinceLast = System.currentTimeMillis() - settings.lastUpdateCheck.value
         if (!force && sinceLast < CHECK_INTERVAL_MS) return _state.value
         _state.value = UpdateState.Checking
-        val release = withContext(io) { runCatching { latest() }.getOrNull() }
+        val release = withContext(io) { runCatching { latest(fresh = force) }.getOrNull() }
         settings.markUpdateChecked()
         val next = when {
             release == null -> UpdateState.Failed("Could not reach GitHub.")
@@ -182,11 +184,16 @@ class UpdateRepository(
         return next
     }
 
-    private fun latest(): Release? {
+    private fun latest(fresh: Boolean = false): Release? {
         val request = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases/latest")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
+            // Somebody who has just pressed "Check for updates" is asking about
+            // the world as it is now, and an answer off the disk is not that -
+            // whatever GitHub's own freshness window says. A check runs at most
+            // every six hours by itself, so this costs one request.
+            .apply { if (fresh) cacheControl(CacheControl.FORCE_NETWORK) }
             // GitHub's unauthenticated rate limit is per IP and generous enough
             // for one call every six hours, so the app ships no token.
             .build()
