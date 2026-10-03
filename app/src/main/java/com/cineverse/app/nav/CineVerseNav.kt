@@ -374,12 +374,20 @@ fun CineVerseNav(
                     onPerson = { navController.navigate(Route.Person(it)) },
                     onTrailer = { key, title -> navController.navigate(Route.Trailer(key, title)) },
                     onNavigate = { page ->
-                        // A tab is a place, not a step: search closes first, or
-                        // it is saved into Home's stack and comes back the next
-                        // time Home is opened.
+                        // A tab is a place, not a step. Search closes first, or
+                        // switching tab saves it into Home's stack and it comes
+                        // back the next time Home is opened. Then, once the
+                        // close has landed, the tab is reached exactly as the
+                        // bar reaches it, so the saved tab states stay the
+                        // bar's own: doing both in one frame left a blank page,
+                        // and a home-made navigation left the Home tab dead.
                         fun tab(tab: Tab) {
                             navController.popBackStack()
-                            goToTab(tab)
+                            scope.launch {
+                                androidx.compose.runtime.withFrameNanos { }
+                                androidx.compose.runtime.withFrameNanos { }
+                                goToTab(tab)
+                            }
                         }
                         when (page) {
                             "home" -> { homeSection = 0; tab(Tab.Home) }
