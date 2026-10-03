@@ -56,11 +56,12 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.AnimatedBookmark
 import com.cineverse.app.core.ui.AnimatedCheck
 import com.cineverse.app.core.ui.AnimatedStar
 import com.cineverse.app.core.ui.CvImage
-import com.cineverse.app.core.ui.CvLogo
+import com.cineverse.app.core.ui.TonedLogo
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.ScoreRow
 import com.cineverse.app.core.ui.ScreenPadding
@@ -147,7 +148,7 @@ fun DetailHead(
         Spacer(Modifier.height(2.dp))
 
         if (detail.logoPath != null && showTitleLogo) {
-            CvLogo(
+            TonedLogo(
                 detail.logoPath,
                 detail.title,
                 Modifier.fillMaxWidth(0.86f).height(66.dp),
@@ -334,9 +335,7 @@ private fun MovieProgressStrip(minutes: Int, runtime: Int, onClick: () -> Unit) 
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(CvShape.Medium)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Medium)
+            .glass(CvShape.Medium)
             .clickableNoRipple(onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {

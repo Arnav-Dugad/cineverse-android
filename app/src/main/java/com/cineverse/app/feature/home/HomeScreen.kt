@@ -75,7 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.net.rememberUnmetered
 import com.cineverse.app.core.ui.CvImage
-import com.cineverse.app.core.ui.CvLogo
+import com.cineverse.app.core.ui.TonedLogo
 import com.cineverse.app.core.ui.ProgressBar
 import com.cineverse.app.core.ui.shimmer
 import com.cineverse.app.core.ui.Img
@@ -457,7 +457,7 @@ private fun Hero(
                 label = "heroTitle",
             ) { path ->
                 if (path != null) {
-                    CvLogo(
+                    TonedLogo(
                         path,
                         item.title,
                         Modifier

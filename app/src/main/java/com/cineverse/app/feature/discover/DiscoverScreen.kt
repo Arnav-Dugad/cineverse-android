@@ -45,6 +45,7 @@ import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.PosterRail
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.PullToRefresh
@@ -188,9 +189,7 @@ private fun DestinationCard(destination: Destination, onClick: () -> Unit) {
     Column(
         Modifier
             .width(96.dp)
-            .clip(CvShape.Large)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Large)
+            .glass(CvShape.Large)
             .clickableNoRipple(onClick)
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

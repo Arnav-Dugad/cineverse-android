@@ -35,6 +35,7 @@ import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.CountUpString
 import com.cineverse.app.core.ui.ScreenPadding
@@ -285,9 +286,7 @@ private fun FigureCard(figure: Figure, modifier: Modifier = Modifier) {
     val colors = CvTheme.colors
     Column(
         modifier
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
             .padding(16.dp)
     ) {
         Text(

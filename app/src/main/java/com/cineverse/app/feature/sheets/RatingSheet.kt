@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.Confetti
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
@@ -207,9 +208,7 @@ fun RatingSheet(
                 Box(
                     Modifier
                         .height(50.dp)
-                        .clip(CvShape.Pill)
-                        .background(colors.glass)
-                        .border(1.dp, colors.hairline, CvShape.Pill)
+                        .glass(CvShape.Pill)
                         .clickableNoRipple { haptics?.play(Haptic.Untick); onClear(); onDismiss() }
                         .padding(horizontal = 20.dp),
                     contentAlignment = Alignment.Center,

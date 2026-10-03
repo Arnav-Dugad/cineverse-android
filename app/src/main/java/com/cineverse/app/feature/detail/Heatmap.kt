@@ -56,6 +56,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.ScreenPadding
@@ -100,9 +101,7 @@ fun HeatmapPanel(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
     ) {
         Row(
             Modifier

@@ -48,6 +48,7 @@ import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.design.ThemeChoice
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.ScreenPadding
@@ -88,9 +89,7 @@ fun ProfileScreen(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = ScreenPadding, vertical = 10.dp)
-                    .clip(CvShape.XLarge)
-                    .background(colors.glass)
-                    .border(1.dp, colors.hairline, CvShape.XLarge)
+                    .glass(CvShape.XLarge)
                     .clickableNoRipple { if (user == null) onSignIn() }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -214,8 +213,7 @@ fun ProfileScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
-                                .clip(CvShape.Medium)
-                                .background(colors.glass)
+                                .glass(CvShape.Medium, raised = false)
                                 .clickableNoRipple {
                                     haptics?.play(Haptic.Tap)
                                     runCatching {

@@ -39,6 +39,7 @@ import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CountUpDecimal
 import com.cineverse.app.core.ui.CountUpText
 import com.cineverse.app.core.ui.CvImage
@@ -96,9 +97,7 @@ fun CollapsiblePanel(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
     ) {
         Row(
             Modifier
@@ -186,9 +185,7 @@ fun Panel(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
             .padding(16.dp)
     ) {
         Text(kicker.uppercase(), style = KickerStyle, color = colors.text3)

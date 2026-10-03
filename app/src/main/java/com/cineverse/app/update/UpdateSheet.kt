@@ -39,6 +39,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.clickableNoRipple
 
 /**
@@ -203,8 +204,7 @@ private fun Available(
                 Modifier
                     .fillMaxWidth()
                     .height(160.dp)
-                    .clip(CvShape.Large)
-                    .background(colors.glass)
+                    .glass(CvShape.Large, raised = false)
                     .padding(14.dp)
             ) {
                 Text(

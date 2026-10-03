@@ -41,6 +41,7 @@ import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.LocalHaptics
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.ScreenPadding
@@ -93,9 +94,7 @@ fun MyListScreen(
             Row(
                 Modifier
                     .weight(1f)
-                    .clip(CvShape.Pill)
-                    .background(colors.glass)
-                    .border(1.dp, colors.hairline, CvShape.Pill)
+                    .glass(CvShape.Pill)
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {

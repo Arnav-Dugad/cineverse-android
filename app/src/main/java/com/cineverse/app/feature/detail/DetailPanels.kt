@@ -46,6 +46,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.tabular
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.data.model.Episode
@@ -78,9 +79,7 @@ fun RewatchPanel(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -223,9 +222,7 @@ fun NextEpisodePanel(episode: Episode, modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -368,9 +365,7 @@ fun AwardsPanel(
         modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPadding)
-            .clip(CvShape.XLarge)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .glass(CvShape.XLarge)
             .padding(16.dp)
     ) {
         Text("RECOGNITION", style = KickerStyle, color = colors.text3)

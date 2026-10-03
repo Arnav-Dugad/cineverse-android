@@ -47,6 +47,7 @@ import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.MotionChoice
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.design.ThemeChoice
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.CvScreenBar
@@ -475,9 +476,7 @@ internal fun CountTile(label: String, value: Int, modifier: Modifier = Modifier)
     val colors = CvTheme.colors
     Column(
         modifier
-            .clip(CvShape.Large)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Large)
+            .glass(CvShape.Large)
             .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -523,9 +522,7 @@ internal fun StepperRow(
         Spacer(Modifier.width(12.dp))
         Row(
             Modifier
-                .clip(CvShape.Pill)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.Pill),
+                .glass(CvShape.Pill),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StepButton("\u2212", enabled && value > range.first) {
@@ -666,9 +663,7 @@ internal fun ChoiceRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(CvShape.Pill)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.Pill)
+                .glass(CvShape.Pill)
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {

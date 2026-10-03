@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.PosterCard
@@ -112,9 +113,7 @@ fun SearchScreen(
                 Modifier
                     .weight(1f)
                     .height(48.dp)
-                    .clip(CvShape.Pill)
-                    .background(colors.glass)
-                    .border(1.dp, colors.hairline, CvShape.Pill)
+                    .glass(CvShape.Pill)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -242,8 +241,7 @@ fun SearchScreen(
                             Spacer(Modifier.height(10.dp))
                             Box(
                                 Modifier
-                                    .clip(CvShape.Pill)
-                                    .background(colors.glass)
+                                    .glass(CvShape.Pill, raised = false)
                                     .clickableNoRipple {
                                         viewModel.setFilter(state.filter.clear())
                                     }

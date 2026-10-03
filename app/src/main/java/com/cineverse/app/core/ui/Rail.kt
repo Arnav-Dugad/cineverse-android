@@ -95,7 +95,7 @@ fun SectionHeader(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (titleLogo != null) {
-                    CvLogo(
+                    TonedLogo(
                         titleLogo,
                         title,
                         Modifier.height(34.dp).widthIn(max = 190.dp),

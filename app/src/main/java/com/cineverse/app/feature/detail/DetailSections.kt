@@ -66,6 +66,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.ScoreRow
@@ -187,9 +188,7 @@ fun SegmentedTabs(
             Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .clip(CvShape.Pill)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.Pill)
+                .glass(CvShape.Pill)
                 .padding(3.dp),
         ) {
             val slot = maxWidth / tabs.size.coerceAtLeast(1)
@@ -846,9 +845,7 @@ private fun Facts(detail: TitleDetail) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(CvShape.XLarge)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.XLarge)
+                .glass(CvShape.XLarge)
         ) {
             rows.forEachIndexed { index, (label, value) ->
                 Row(

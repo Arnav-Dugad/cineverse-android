@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Motion
@@ -133,9 +134,7 @@ private fun ScorePill(
         Modifier
             .scale(if (CvTheme.reducedMotion) 1f else 0.94f + appear * 0.06f)
             .height(30.dp)
-            .clip(CvShape.Pill)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Pill)
+            .glass(CvShape.Pill)
             .let { if (onClick != null) it.clickableNoRipple(onClick) else it }
             .padding(start = 7.dp, end = 11.dp)
             .semantics { contentDescription = description },

@@ -50,6 +50,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvSheet
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
@@ -99,8 +100,7 @@ fun FilterSheet(
                 Box(
                     Modifier
                         .height(36.dp)
-                        .clip(CvShape.Pill)
-                        .background(colors.glass)
+                        .glass(CvShape.Pill, raised = false)
                         .clickableNoRipple { haptics?.play(Haptic.Untick); onChange(filter.clear()) }
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.Center,
@@ -155,9 +155,7 @@ fun FilterSheet(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clip(CvShape.Medium)
-                        .background(colors.glass)
-                        .border(1.dp, colors.hairline, CvShape.Medium)
+                        .glass(CvShape.Medium)
                         .clickableNoRipple { set(filter.copy(hideWatched = !filter.hideWatched)) }
                         .padding(horizontal = 14.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically,

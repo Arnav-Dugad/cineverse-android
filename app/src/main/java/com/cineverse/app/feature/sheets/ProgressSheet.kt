@@ -45,6 +45,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvSheet
 import com.cineverse.app.core.ui.clickableNoRipple
 import kotlin.math.roundToInt
@@ -214,9 +215,7 @@ fun ProgressSheet(
                     Modifier
                         .weight(1f)
                         .height(38.dp)
-                        .clip(CvShape.Pill)
-                        .background(colors.glass)
-                        .border(1.dp, colors.hairline, CvShape.Pill)
+                        .glass(CvShape.Pill)
                         .clickableNoRipple { haptics?.play(Haptic.Select); minutes = value },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -232,9 +231,7 @@ fun ProgressSheet(
                 Box(
                     Modifier
                         .height(50.dp)
-                        .clip(CvShape.Pill)
-                        .background(colors.glass)
-                        .border(1.dp, colors.hairline, CvShape.Pill)
+                        .glass(CvShape.Pill)
                         .clickableNoRipple { haptics?.play(Haptic.Untick); onClear(); onDismiss() }
                         .padding(horizontal = 18.dp),
                     contentAlignment = Alignment.Center,

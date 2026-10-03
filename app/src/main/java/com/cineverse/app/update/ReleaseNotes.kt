@@ -54,6 +54,7 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvSheet
 import com.cineverse.app.core.ui.clickableNoRipple
 
@@ -120,9 +121,7 @@ fun WhatsNewSheet(
             Box(
                 Modifier
                     .height(50.dp)
-                    .clip(CvShape.Pill)
-                    .background(colors.glass)
-                    .border(1.dp, colors.hairline, CvShape.Pill)
+                    .glass(CvShape.Pill)
                     .clickableNoRipple { haptics?.play(Haptic.Tap); onHistory() }
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.Center,
@@ -293,9 +292,7 @@ private fun NotesBody(notes: String) {
         Modifier
             .fillMaxWidth()
             .heightIn(max = 300.dp)
-            .clip(CvShape.Large)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Large)
+            .glass(CvShape.Large)
             .padding(14.dp)
     ) {
         Text(
