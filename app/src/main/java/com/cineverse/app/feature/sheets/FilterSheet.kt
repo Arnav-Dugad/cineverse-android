@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,19 +113,19 @@ fun FilterSheet(
         Column(Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Spacer(Modifier.height(18.dp))
 
-            Group("Type") {
+            Group(0, "Type") {
                 for (value in TypeFilter.entries) {
                     Chip(value.label, filter.type == value) { set(filter.copy(type = value)) }
                 }
             }
 
-            Group("Sort by") {
+            Group(1, "Sort by") {
                 for (value in sorts) {
                     Chip(value.label, filter.sort == value) { set(filter.copy(sort = value)) }
                 }
             }
 
-            Group("Minimum rating") {
+            Group(2, "Minimum rating") {
                 Chip("Any", filter.minRating == 0) { set(filter.copy(minRating = 0)) }
                 for (value in listOf(6, 7, 8, 9)) {
                     Chip("$value+", filter.minRating == value) { set(filter.copy(minRating = value)) }
@@ -132,7 +133,7 @@ fun FilterSheet(
             }
 
             if (genres.isNotEmpty()) {
-                Group("Genre") {
+                Group(3, "Genre") {
                     Chip("Any", filter.genreId == 0) { set(filter.copy(genreId = 0)) }
                     for (genre in genres) {
                         Chip(genre.name, filter.genreId == genre.id) {
@@ -142,7 +143,7 @@ fun FilterSheet(
                 }
             }
 
-            Group("Decade") {
+            Group(4, "Decade") {
                 Chip("Any", filter.decade == 0) { set(filter.copy(decade = 0)) }
                 for (value in MediaFilter.decades()) {
                     Chip("${value}s", filter.decade == value) { set(filter.copy(decade = value)) }
@@ -219,10 +220,49 @@ fun FilterSheet(
     }
 }
 
+/**
+ * A group of chips that unfolds.
+ *
+ * Each group arrives a beat after the one above it, hinging down from its own
+ * top edge rather than fading in flat. That is the website's filter-fold, and
+ * the reason it works is that a filter sheet is a LIST OF CHOICES: unfolding
+ * them in order makes the eye travel the list once on the way in, so by the
+ * time the sheet has settled you already know what is in it.
+ *
+ * The hinge is a rotation about the X axis with a camera distance set, not a
+ * scale. A scale makes a panel grow; a rotation makes it swing, and the
+ * difference is entirely in the perspective.
+ */
 @Composable
-private fun Group(title: String, content: @Composable () -> Unit) {
+private fun Group(index: Int, title: String, content: @Composable () -> Unit) {
     val colors = CvTheme.colors
-    Column(Modifier.padding(bottom = 6.dp)) {
+    val reduced = CvTheme.reducedMotion
+    var shown by remember { mutableStateOf(reduced) }
+    LaunchedEffect(Unit) {
+        if (reduced) return@LaunchedEffect
+        // 55ms apart, capped: a sheet with eight groups should not take half a
+        // second to finish arriving.
+        kotlinx.coroutines.delay(40L + index.coerceAtMost(5) * 55L)
+        shown = true
+    }
+    val fold by animateFloatAsState(
+        targetValue = if (shown) 0f else 1f,
+        animationSpec = Motion.landing(),
+        label = "fold",
+    )
+
+    Column(
+        Modifier
+            .padding(bottom = 6.dp)
+            .graphicsLayer {
+                // Perspective, or the rotation reads as a vertical squash.
+                cameraDistance = 14f * density
+                rotationX = -62f * fold
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                alpha = 1f - fold
+                translationY = -10f * fold
+            }
+    ) {
         Text(title.uppercase(), style = KickerStyle, color = colors.text3)
         Spacer(Modifier.height(9.dp))
         Row(

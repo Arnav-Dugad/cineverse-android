@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +68,7 @@ fun ProfileScreen(
     onSignIn: () -> Unit,
     onOpenUpdate: () -> Unit,
     onOpenReleaseNotes: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
@@ -123,7 +125,7 @@ fun ProfileScreen(
                     )
                     Text(
                         user?.email?.takeIf { it.isNotBlank() }
-                            ?: "Sign in to sync with CineVerse on the web",
+                            ?: "Sign in to sync",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.text3,
                         maxLines = 1,
@@ -156,426 +158,38 @@ fun ProfileScreen(
             }
         }
 
-        item(key = "look") { GroupHeading("Look") }
-
-        item(key = "theme") {
-            ChoiceRow(
-                title = "Theme",
-                options = ThemeChoice.entries.map { it.name },
-                selected = settings.theme.name,
-                onSelect = { viewModel.setTheme(ThemeChoice.valueOf(it)) },
+        item(key = "settings") {
+            NavRow(
+                icon = Icons.Rounded.Tune,
+                title = "Settings",
+                detail = "",
+                onClick = { haptics?.play(Haptic.Tap); onOpenSettings() },
             )
-        }
-
-        item(key = "dynamic") {
-            SwitchRow(
-                title = "Match my wallpaper",
-                detail = "Take the accent colour from Android's theme instead of CineVerse red.",
-                checked = settings.dynamicColor,
-                onChange = viewModel::setDynamicColor,
-            )
-        }
-
-        item(key = "motion") {
-            ChoiceRow(
-                title = "Motion",
-                options = MotionChoice.entries.map { it.name },
-                selected = settings.motion.name,
-                onSelect = { viewModel.setMotion(MotionChoice.valueOf(it)) },
-            )
-        }
-
-        item(key = "haptics") {
-            SwitchRow(
-                title = "Haptics",
-                detail = "Every tick, swipe and milestone has its own feel.",
-                checked = settings.haptics,
-                onChange = viewModel::setHaptics,
-            )
-        }
-
-        item(key = "density") {
-            ChoiceRow(
-                title = "Poster size",
-                options = com.cineverse.app.data.prefs.GridDensity.entries.map { it.label },
-                selected = settings.gridDensity.label,
-                onSelect = { label ->
-                    com.cineverse.app.data.prefs.GridDensity.entries
-                        .firstOrNull { it.label == label }
-                        ?.let(viewModel::setGridDensity)
-                },
-            )
-        }
-
-        item(key = "captions") {
-            SwitchRow(
-                title = "Titles under posters",
-                detail = "The name and year beneath every poster, rather than artwork alone.",
-                checked = settings.posterCaptions,
-                onChange = viewModel::setPosterCaptions,
-            )
-        }
-
-        item(key = "posterMeta") {
-            SwitchRow(
-                title = "Year and type under posters",
-                detail = "Adds \"2020 · Series\" beneath the name.",
-                checked = settings.posterMeta,
-                onChange = viewModel::setPosterMeta,
-                enabled = settings.posterCaptions,
-            )
-        }
-
-        item(key = "corner") {
-            ChoiceRow(
-                title = "Poster corners",
-                options = com.cineverse.app.core.ui.PosterCorner.entries.map { it.label },
-                selected = runCatching {
-                    com.cineverse.app.core.ui.PosterCorner.valueOf(settings.posterCorner).label
-                }.getOrDefault(com.cineverse.app.core.ui.PosterCorner.Rounded.label),
-                onSelect = { label ->
-                    com.cineverse.app.core.ui.PosterCorner.entries
-                        .firstOrNull { it.label == label }
-                        ?.let { viewModel.setPosterCorner(it.name) }
-                },
-            )
-        }
-
-        item(key = "match") {
-            SwitchRow(
-                title = "Match percentage",
-                detail = "The \"94% match\" badge on recommendations.",
-                checked = settings.posterMatch,
-                onChange = viewModel::setPosterMatch,
-            )
-        }
-
-        item(key = "showRatings") {
-            SwitchRow(
-                title = "Ratings on posters",
-                detail = "The TMDB score in the corner of each card.",
-                checked = settings.showRatings,
-                onChange = viewModel::setShowRatings,
-            )
-        }
-
-        item(key = "showWatched") {
-            SwitchRow(
-                title = "Mark what you have seen",
-                detail = "A tick on posters you have already watched.",
-                checked = settings.showWatched,
-                onChange = viewModel::setShowWatched,
-            )
-        }
-
-        item(key = "startTab") {
-            ChoiceRow(
-                title = "Open on",
-                options = listOf("Home", "Discover", "My List", "Stats"),
-                selected = when (settings.startTab) {
-                    "discover" -> "Discover"
-                    "list" -> "My List"
-                    "stats" -> "Stats"
-                    else -> "Home"
-                },
-                onSelect = { label ->
-                    viewModel.setStartTab(
-                        when (label) {
-                            "Discover" -> "discover"
-                            "My List" -> "list"
-                            "Stats" -> "stats"
-                            else -> "home"
-                        }
-                    )
-                },
-            )
-        }
-
-        item(key = "watching") { GroupHeading("Watching") }
-
-        item(key = "spoilers") {
-            SwitchRow(
-                title = "Hide episode spoilers",
-                detail = "Blur the still and summary of an episode until you have watched it.",
-                checked = settings.spoilerShield,
-                onChange = viewModel::setSpoilerShield,
-            )
-        }
-
-        item(key = "autoplay") {
-            SwitchRow(
-                title = "Autoplay trailers",
-                detail = "A title's trailer starts by itself, muted, after a moment.",
-                checked = settings.autoplay,
-                onChange = viewModel::setAutoplay,
-            )
-        }
-
-        item(key = "wifi") {
-            SwitchRow(
-                title = "Only on Wi-Fi",
-                detail = "Never autoplay on mobile data.",
-                checked = settings.autoplayOnWifiOnly,
-                onChange = viewModel::setAutoplayWifi,
-                enabled = settings.autoplay,
-            )
-        }
-
-        item(key = "heroAuto") {
-            SwitchRow(
-                title = "Hero moves by itself",
-                detail = "Off leaves the featured title alone until you swipe it.",
-                checked = settings.heroAutoAdvance,
-                onChange = viewModel::setHeroAutoAdvance,
-            )
-        }
-
-        item(key = "heroSeconds") {
-            StepperRow(
-                title = "Seconds per slide",
-                detail = "How long the hero holds each title.",
-                value = settings.heroSeconds,
-                range = 4..30,
-                step = 1,
-                enabled = settings.heroAutoAdvance,
-                onChange = viewModel::setHeroSeconds,
-            )
-        }
-
-        item(key = "countdowns") {
-            SwitchRow(
-                title = "Countdown to the next episode",
-                detail = "A live counter on the page of a show still airing.",
-                checked = settings.countdowns,
-                onChange = viewModel::setCountdowns,
-            )
-        }
-
-        item(key = "episodeSwipe") {
-            SwitchRow(
-                title = "Swipe an episode to catch up",
-                detail = "Drag a row sideways to mark everything up to it watched.",
-                checked = settings.episodeSwipe,
-                onChange = viewModel::setEpisodeSwipe,
-            )
-        }
-
-        item(key = "confetti") {
-            SwitchRow(
-                title = "Celebrate a perfect ten",
-                detail = "A burst of confetti when you rate something 10 out of 10.",
-                checked = settings.confetti,
-                onChange = viewModel::setConfetti,
-            )
-        }
-
-        item(key = "content") { GroupHeading("Content") }
-
-        item(key = "region") {
-            ChoiceRow(
-                title = "Region",
-                detail = "Decides which streaming services and certificates are shown.",
-                options = REGIONS.map { it.second },
-                selected = REGIONS.firstOrNull { it.first == settings.region }?.second
-                    ?: REGIONS.first().second,
-                onSelect = { label ->
-                    REGIONS.firstOrNull { it.second == label }?.let { viewModel.setRegion(it.first) }
-                },
-            )
-        }
-
-        item(key = "mature") {
-            SwitchRow(
-                title = "Include adult titles",
-                detail = "Off hides them from search, browsing and recommendations.",
-                checked = settings.mature,
-                onChange = viewModel::setMature,
-            )
-        }
-
-        item(key = "matureBlur") {
-            SwitchRow(
-                title = "Blur adult artwork",
-                detail = "Covers the poster until you tap it. Nothing is hidden, " +
-                    "it just does not appear uninvited on a screen somebody else can see.",
-                checked = settings.matureBlur,
-                onChange = viewModel::setMatureBlur,
-                enabled = settings.mature,
-            )
-        }
-
-        item(key = "notify") { GroupHeading("Notifications") }
-
-        item(key = "episodes") {
-            SwitchRow(
-                title = "New episodes",
-                detail = "Tell me when a show I am watching airs a new episode.",
-                checked = settings.notifyNewEpisodes,
-                onChange = viewModel::setNotifyEpisodes,
-            )
-        }
-
-        item(key = "releases") {
-            SwitchRow(
-                title = "Releases",
-                detail = "Tell me when something on my list comes out.",
-                checked = settings.notifyReleases,
-                onChange = viewModel::setNotifyReleases,
-            )
-        }
-
-        // Asked FOR, not asked at launch.
-        //
-        // A permission prompt in the first five seconds of an app, before it has
-        // shown anything worth being notified about, is the prompt people deny
-        // by reflex and never revisit. This one sits under the two toggles it
-        // belongs to, so it is requested by someone who has just said they want
-        // the thing it enables.
-        item(key = "notifyPermission") {
-            val granted = com.cineverse.app.notify.Notifications.canPost(context)
-            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-            ) { allowed ->
-                if (allowed) haptics?.play(Haptic.Success) else haptics?.play(Haptic.Warning)
-            }
-            if (!granted && (settings.notifyNewEpisodes || settings.notifyReleases)) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = ScreenPadding, vertical = 10.dp)
-                        .clip(CvShape.Medium)
-                        .background(Palette.Red2.copy(alpha = 0.12f))
-                        .clickableNoRipple {
-                            haptics?.play(Haptic.Tap)
-                            launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Allow notifications",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = colors.text,
-                        )
-                        Text(
-                            "Android has not been given permission yet, so nothing can be sent.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.text3,
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                        null,
-                        tint = Palette.Red2,
-                        modifier = Modifier.size(15.dp),
-                    )
-                }
-            }
-        }
-
-        item(key = "checkNow") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickableNoRipple {
-                        haptics?.play(Haptic.Tap)
-                        com.cineverse.app.notify.WatchWorker.runNow(context)
-                        viewModel.say("Checking for new episodes and releases…")
-                    }
-                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Rounded.NotificationsActive,
-                    null,
-                    tint = colors.text2,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Check now",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.text,
-                    )
-                    Text(
-                        "Normally once a day, each morning, on Wi-Fi",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.text3,
-                    )
-                }
-            }
         }
 
         item(key = "app") { GroupHeading("App") }
 
         item(key = "update") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickableNoRipple { haptics?.play(Haptic.Tap); onOpenUpdate() }
-                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Rounded.Download, null, tint = colors.text2, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Check for updates", style = MaterialTheme.typography.bodyLarge, color = colors.text)
-                    Text(
-                        when (val value = update) {
-                            is UpdateState.Available -> "Version ${value.release.versionName} is ready"
-                            is UpdateState.Downloading -> "Downloading… ${(value.fraction * 100).toInt()}%"
-                            UpdateState.UpToDate -> "You are on the newest version"
-                            else -> "Version ${viewModel.currentVersion}"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (update is UpdateState.Available) Palette.Red2 else colors.text3,
-                    )
-                }
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    null,
-                    tint = colors.text3,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
+            NavRow(
+                icon = Icons.Rounded.Download,
+                title = "Check for updates",
+                detail = when (val value = update) {
+                    is UpdateState.Available -> "Version ${value.release.versionName} is ready"
+                    is UpdateState.Downloading -> "Downloading ${(value.fraction * 100).toInt()}%"
+                    UpdateState.UpToDate -> "Up to date"
+                    else -> viewModel.currentVersion
+                },
+                tint = if (update is UpdateState.Available) Palette.Red2 else null,
+                onClick = { haptics?.play(Haptic.Tap); onOpenUpdate() },
+            )
         }
 
         item(key = "notes") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickableNoRipple { haptics?.play(Haptic.Tap); onOpenReleaseNotes() }
-                    .padding(horizontal = ScreenPadding, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Rounded.Description,
-                    null,
-                    tint = colors.text2,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Release notes",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.text,
-                    )
-                    Text(
-                        "What changed, in every version",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.text3,
-                    )
-                }
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    null,
-                    tint = colors.text3,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
+            NavRow(
+                icon = Icons.Rounded.Description,
+                title = "Release notes",
+                onClick = { haptics?.play(Haptic.Tap); onOpenReleaseNotes() },
+            )
         }
 
         // Only when there is something to show. A permanent "Crash reports (0)"
@@ -585,13 +199,12 @@ fun ProfileScreen(
             item(key = "crashes") {
                 Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
                     Text(
-                        "CineVerse stopped unexpectedly",
+                        "Crash reports",
                         style = MaterialTheme.typography.bodyLarge,
                         color = colors.text,
                     )
                     Text(
-                        "${crashes.size} report${if (crashes.size == 1) "" else "s"} on this phone. " +
-                            "Nothing has been sent anywhere.",
+                        "${crashes.size} on this phone, none sent",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.text3,
                     )
@@ -624,14 +237,14 @@ fun ProfileScreen(
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Tap to open a report on GitHub",
+                                "Report on GitHub",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Palette.Red2,
                             )
                         }
                     }
                     Text(
-                        "Delete these reports",
+                        "Delete",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.text3,
                         modifier = Modifier
@@ -667,7 +280,7 @@ fun ProfileScreen(
                     color = colors.text3,
                 )
                 Text(
-                    "Data from TMDB. Ratings from IMDb, Rotten Tomatoes and Metacritic.",
+                    "TMDB \u00b7 IMDb \u00b7 Rotten Tomatoes \u00b7 Metacritic",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.text3,
                 )
@@ -682,218 +295,3 @@ fun ProfileScreen(
     }
 }
 
-@Composable
-private fun CountTile(label: String, value: Int, modifier: Modifier = Modifier) {
-    val colors = CvTheme.colors
-    Column(
-        modifier
-            .clip(CvShape.Large)
-            .background(colors.glass)
-            .border(1.dp, colors.hairline, CvShape.Large)
-            .padding(vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("$value", style = MaterialTheme.typography.titleLarge, color = colors.text)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = colors.text3)
-    }
-}
-
-/**
- * A number with two ends.
- *
- * A slider would be wrong here: the useful range is small, the values are whole
- * seconds, and a thumb that has to land on "7" among twenty-six positions is a
- * thumb that lands on 6 or 8. Two buttons and the figure between them is both
- * exact and larger than any slider thumb.
- */
-@Composable
-private fun StepperRow(
-    title: String,
-    detail: String,
-    value: Int,
-    range: IntRange,
-    step: Int,
-    onChange: (Int) -> Unit,
-    enabled: Boolean = true,
-) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-    val alpha = if (enabled) 1f else 0.4f
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenPadding, vertical = 12.dp)
-            .graphicsLayer { this.alpha = alpha },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
-            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
-        }
-        Spacer(Modifier.width(12.dp))
-        Row(
-            Modifier
-                .clip(CvShape.Pill)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.Pill),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            StepButton("\u2212", enabled && value > range.first) {
-                haptics?.play(Haptic.Detent)
-                onChange((value - step).coerceIn(range))
-            }
-            Text(
-                value.toString(),
-                style = MaterialTheme.typography.labelLarge.tabular(),
-                color = colors.text,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.width(34.dp),
-            )
-            StepButton("+", enabled && value < range.last) {
-                haptics?.play(Haptic.Detent)
-                onChange((value + step).coerceIn(range))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val colors = CvTheme.colors
-    Box(
-        Modifier
-            .size(40.dp)
-            .clip(CvShape.Pill)
-            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) colors.text else colors.text3.copy(alpha = 0.4f),
-        )
-    }
-}
-
-/**
- * The regions worth offering.
- *
- * Not every ISO country: a list of two hundred is a list nobody scrolls. These
- * are the ones with meaningfully different streaming catalogues, with India
- * first because that is where this app is used.
- */
-private val REGIONS = listOf(
-    "IN" to "India",
-    "US" to "United States",
-    "GB" to "United Kingdom",
-    "CA" to "Canada",
-    "AU" to "Australia",
-    "DE" to "Germany",
-    "FR" to "France",
-    "ES" to "Spain",
-    "IT" to "Italy",
-    "BR" to "Brazil",
-    "JP" to "Japan",
-    "KR" to "South Korea",
-)
-
-@Composable
-private fun GroupHeading(text: String) {
-    Text(
-        text.uppercase(),
-        style = KickerStyle,
-        color = CvTheme.colors.text3,
-        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 14.dp),
-    )
-}
-
-@Composable
-private fun SwitchRow(
-    title: String,
-    detail: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-    enabled: Boolean = true,
-) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickableNoRipple {
-                if (enabled) { haptics?.play(Haptic.Select); onChange(!checked) }
-            }
-            .padding(horizontal = ScreenPadding, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 14.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (enabled) colors.text else colors.text3,
-            )
-            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = { if (enabled) { haptics?.play(Haptic.Select); onChange(it) } },
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = Palette.Red,
-                checkedThumbColor = Color.White,
-                uncheckedTrackColor = colors.glassStrong,
-                uncheckedBorderColor = colors.hairline,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun ChoiceRow(
-    title: String,
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    detail: String? = null,
-) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-    Column(Modifier.padding(horizontal = ScreenPadding, vertical = 10.dp)) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
-        if (detail != null) {
-            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(CvShape.Pill)
-                .background(colors.glass)
-                .border(1.dp, colors.hairline, CvShape.Pill)
-                .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            for (option in options) {
-                val active = option == selected
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(34.dp)
-                        .clip(CvShape.Pill)
-                        .background(if (active) colors.text.copy(alpha = 0.14f) else Color.Transparent)
-                        .clickableNoRipple {
-                            if (!active) haptics?.play(Haptic.Select)
-                            onSelect(option)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        option,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (active) colors.text else colors.text3,
-                    )
-                }
-            }
-        }
-    }
-}

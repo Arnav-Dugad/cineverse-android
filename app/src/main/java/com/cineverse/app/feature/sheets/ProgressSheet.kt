@@ -101,7 +101,7 @@ fun ProgressSheet(
     )
 
     CvSheet(onDismiss = onDismiss) {
-        Text("PICK UP WHERE YOU LEFT OFF", style = KickerStyle, color = colors.text3)
+        Text("WHERE YOU STOPPED", style = KickerStyle, color = colors.text3)
         Spacer(Modifier.height(6.dp))
         Text(title, style = MaterialTheme.typography.titleLarge, color = colors.text, maxLines = 2)
 

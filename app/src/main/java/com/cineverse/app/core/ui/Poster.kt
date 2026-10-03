@@ -199,11 +199,10 @@ fun PosterCard(
                         .background(colors.green),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        Icons.Rounded.Check,
-                        contentDescription = "Watched",
-                        tint = Color(0xFF04241A),
-                        modifier = Modifier.size(16.dp),
+                    AnimatedCheck(
+                        checked = true,
+                        color = Color(0xFF04241A),
+                        size = 16.dp,
                     )
                 }
             }

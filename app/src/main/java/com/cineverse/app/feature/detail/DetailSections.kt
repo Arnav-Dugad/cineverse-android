@@ -567,9 +567,9 @@ fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
     val groups = remember(detail.providers) {
         val seen = mutableSetOf<Int>()
         listOf(
-            "Included with your subscription" to ProviderKind.Stream,
+            "Streaming" to ProviderKind.Stream,
             "Free" to ProviderKind.Free,
-            "Free with adverts" to ProviderKind.Ads,
+            "With adverts" to ProviderKind.Ads,
             "Rent" to ProviderKind.Rent,
             "Buy" to ProviderKind.Buy,
         ).mapNotNull { (label, kind) ->
@@ -618,7 +618,7 @@ fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(14.dp))
         }
         Text(
-            "Availability from JustWatch, for your region. Tap to open.",
+            "From JustWatch",
             style = MaterialTheme.typography.labelSmall,
             color = colors.text3,
             modifier = Modifier.padding(horizontal = ScreenPadding),

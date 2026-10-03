@@ -55,6 +55,7 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     fun setPosterMeta(value: Boolean) = viewModelScope.launch { app.settings.setPosterMeta(value) }
     fun setPosterCorner(value: String) = viewModelScope.launch { app.settings.setPosterCorner(value) }
     fun setPosterMatch(value: Boolean) = viewModelScope.launch { app.settings.setPosterMatch(value) }
+    fun setTitleLogos(value: Boolean) = viewModelScope.launch { app.settings.setTitleLogos(value) }
     fun setCountdowns(value: Boolean) = viewModelScope.launch { app.settings.setCountdowns(value) }
 
     fun setNotifyEpisodes(value: Boolean) = viewModelScope.launch { app.settings.setNotifyEpisodes(value) }

@@ -56,6 +56,9 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.AnimatedBookmark
+import com.cineverse.app.core.ui.AnimatedCheck
+import com.cineverse.app.core.ui.AnimatedStar
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.CvLogo
 import com.cineverse.app.core.ui.Img
@@ -90,6 +93,8 @@ fun DetailHead(
     watched: Boolean,
     myRating: Int,
     movieMinutes: Int,
+    /** Off shows the typeset name instead of the title's own treatment. */
+    showTitleLogo: Boolean,
     onSave: () -> Unit,
     onWatched: () -> Unit,
     onRate: () -> Unit,
@@ -141,7 +146,7 @@ fun DetailHead(
 
         Spacer(Modifier.height(2.dp))
 
-        if (detail.logoPath != null) {
+        if (detail.logoPath != null && showTitleLogo) {
             CvLogo(
                 detail.logoPath,
                 detail.title,
@@ -254,30 +259,43 @@ fun DetailHead(
                 }
             }
 
+            // Drawn icons rather than glyphs: the bookmark turns out of a plus,
+            // the tick draws itself, the star fills from the middle. Each one
+            // springs from wherever it currently is, so a fast double tap
+            // carries on rather than snapping back to the start.
             ActionCircle(
-                icon = if (saved) Icons.Rounded.Bookmark else Icons.Rounded.Add,
                 active = saved,
                 description = if (saved) "In your list" else "Add to your list",
                 onLongPress = { haptics?.play(Haptic.Peek); onLists() },
-            ) { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() }
+                onClick = { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() },
+            ) { tint -> AnimatedBookmark(saved, tint) }
 
             ActionCircle(
-                icon = Icons.Rounded.Check,
                 active = watched,
                 activeTint = colors.green,
                 description = if (watched) "Watched" else "Mark watched",
-            ) { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() }
+                onClick = { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() },
+            ) { tint -> AnimatedCheck(watched, tint) }
 
             ActionCircle(
-                icon = if (myRating > 0) Icons.Rounded.Star else Icons.Rounded.StarOutline,
                 active = myRating > 0,
                 activeTint = colors.gold,
                 label = if (myRating > 0) myRating.toString() else null,
                 description = "Rate",
-            ) { haptics?.play(Haptic.Tap); onRate() }
+                onClick = { haptics?.play(Haptic.Tap); onRate() },
+            ) { tint -> AnimatedStar(myRating > 0, tint) }
 
-            ActionCircle(icon = Icons.Rounded.Share, active = false, description = "Share") {
-                haptics?.play(Haptic.Tap); onShare()
+            ActionCircle(
+                active = false,
+                description = "Share",
+                onClick = { haptics?.play(Haptic.Tap); onShare() },
+            ) { tint ->
+                Icon(
+                    Icons.Rounded.Share,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(21.dp),
+                )
             }
         }
 
@@ -389,13 +407,13 @@ private fun PlainText(text: String) {
 
 @Composable
 private fun ActionCircle(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     active: Boolean,
     description: String,
+    onClick: () -> Unit,
     activeTint: Color = Color.Unspecified,
     label: String? = null,
     onLongPress: (() -> Unit)? = null,
-    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit,
 ) {
     val colors = CvTheme.colors
     val tint = when {
@@ -435,7 +453,7 @@ private fun ActionCircle(
         if (label != null) {
             Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
         } else {
-            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(22.dp))
+            icon(tint)
         }
     }
 }

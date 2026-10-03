@@ -451,7 +451,7 @@ fun AwardsPanel(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            "From Wikidata. Major programmes only.",
+            "From Wikidata",
             style = MaterialTheme.typography.labelSmall,
             color = colors.text3.copy(alpha = 0.7f),
         )

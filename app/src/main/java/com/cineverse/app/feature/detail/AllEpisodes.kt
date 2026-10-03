@@ -136,7 +136,7 @@ fun AllEpisodesPanel(
                 // show with four seasons and ninety episodes.
                 Text(
                     if (loadedAll) "$watched of $aired aired episodes seen"
-                    else "Every season, in one list",
+                    else "",
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.text3,
                 )
@@ -163,7 +163,7 @@ fun AllEpisodesPanel(
                 }
 
                 rows.isEmpty() -> Text(
-                    "No episodes found for this show.",
+                    "No episodes",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.text3,
                     modifier = Modifier.padding(16.dp),

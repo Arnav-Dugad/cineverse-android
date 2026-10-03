@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +41,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import kotlin.math.abs
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.mutableStateOf
 import com.cineverse.app.feature.trailer.YouTubePlayer
 import androidx.compose.runtime.setValue
@@ -125,7 +134,14 @@ fun HomeScreen(
 
             if (state.continueWatching.isNotEmpty()) {
                 item(key = "continue") {
-                    ContinueSection(state.continueWatching, onContinue, onOpen)
+                    ContinueSection(
+                        rows = state.continueWatching,
+                        onContinue = onContinue,
+                        onOpen = onOpen,
+                        onMark = viewModel::markNext,
+                        onSnooze = viewModel::snooze,
+                        onDismiss = viewModel::dismiss,
+                    )
                 }
             }
 
@@ -569,6 +585,9 @@ private fun ContinueSection(
     rows: List<ContinueRow>,
     onContinue: (ContinueRow) -> Unit,
     onOpen: (MediaItem) -> Unit,
+    onMark: (ContinueRow) -> Unit,
+    onSnooze: (ContinueRow) -> Unit,
+    onDismiss: (ContinueRow) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader("Continue watching", count = rows.size)
@@ -578,7 +597,14 @@ private fun ContinueSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(rows, key = { it.item.key }) { row ->
-                ContinueCard(row, onContinue = onContinue, onOpen = onOpen)
+                ContinueCard(
+                    row = row,
+                    onContinue = onContinue,
+                    onOpen = onOpen,
+                    onMark = onMark,
+                    onSnooze = onSnooze,
+                    onDismiss = onDismiss,
+                )
             }
         }
     }
@@ -589,13 +615,109 @@ private fun ContinueCard(
     row: ContinueRow,
     onContinue: (ContinueRow) -> Unit,
     onOpen: (MediaItem) -> Unit,
+    onMark: (ContinueRow) -> Unit,
+    onSnooze: (ContinueRow) -> Unit,
+    onDismiss: (ContinueRow) -> Unit,
 ) {
     val colors = CvTheme.colors
-    Column(
-        Modifier
-            .width(248.dp)
-            .clickableNoRipple { onOpen(row.item) }
-    ) {
+    val haptics = LocalHaptics.current
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    // Three gestures on one card, which is two more than a card usually earns.
+    // They are here because Continue Watching is the row people touch most and
+    // every one of its actions otherwise costs a trip into the title page:
+    //
+    //   UP    tick the next episode and move on
+    //   DOWN  snooze, out of the row until something is ticked again
+    //   LEFT  dismiss, drop the show from the row entirely
+    //
+    // The axis is decided by whichever way the finger committed first and
+    // LOCKED for the rest of the gesture. A card that changes its mind halfway
+    // because a thumb drifted is a card that performs the wrong action.
+    val offsetX = remember(row.item.key) { Animatable(0f) }
+    val offsetY = remember(row.item.key) { Animatable(0f) }
+    var axis by remember(row.item.key) { mutableStateOf<Int?>(null) }
+    var armed by remember(row.item.key) { mutableStateOf(false) }
+    val trigger = with(density) { 72.dp.toPx() }
+
+    fun reset() {
+        scope.launch {
+            axis = null
+            armed = false
+            launch { offsetX.animateTo(0f, Motion.landing()) }
+            launch { offsetY.animateTo(0f, Motion.landing()) }
+        }
+    }
+
+    Box {
+        // What is underneath, revealed by the drag. Dim until the gesture is
+        // ARMED: a backing that is bright from the first pixel says something
+        // is there, one that brightens at the threshold says let go now, which
+        // is the only thing a thumb needs to know mid-drag.
+        SwipeBacking(axis, armed, Modifier.matchParentSize())
+
+        Column(
+            Modifier
+                .width(248.dp)
+                .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+                .pointerInput(row.item.key) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            when {
+                                axis == AXIS_VERTICAL && offsetY.value <= -trigger -> {
+                                    haptics?.play(Haptic.Success); onMark(row)
+                                }
+                                axis == AXIS_VERTICAL && offsetY.value >= trigger -> {
+                                    haptics?.play(Haptic.Drop); onSnooze(row)
+                                }
+                                axis == AXIS_HORIZONTAL && offsetX.value <= -trigger -> {
+                                    haptics?.play(Haptic.Drop); onDismiss(row)
+                                }
+                            }
+                            reset()
+                        },
+                        onDragCancel = { reset() },
+                    ) { change, delta ->
+                        change.consume()
+                        scope.launch {
+                            if (axis == null) {
+                                val nextX = offsetX.value + delta.x
+                                val nextY = offsetY.value + delta.y
+                                if (abs(nextX) + abs(nextY) > 8f) {
+                                    axis = if (abs(nextX) > abs(nextY)) AXIS_HORIZONTAL
+                                    else AXIS_VERTICAL
+                                }
+                                offsetX.snapTo(nextX)
+                                offsetY.snapTo(nextY)
+                                return@launch
+                            }
+                            // Rubber band past the trigger, so the gesture has
+                            // a floor you can feel rather than one you discover.
+                            fun damp(value: Float): Float {
+                                if (abs(value) <= trigger) return value
+                                val over = abs(value) - trigger
+                                return (trigger + over * 0.3f) * (if (value < 0) -1f else 1f)
+                            }
+                            if (axis == AXIS_HORIZONTAL) {
+                                offsetX.snapTo(damp(offsetX.value + delta.x).coerceAtMost(0f))
+                                offsetY.snapTo(0f)
+                            } else {
+                                offsetY.snapTo(damp(offsetY.value + delta.y))
+                                offsetX.snapTo(0f)
+                            }
+                            val past = if (axis == AXIS_HORIZONTAL) {
+                                abs(offsetX.value) >= trigger
+                            } else abs(offsetY.value) >= trigger
+                            if (past != armed) {
+                                armed = past
+                                haptics?.play(if (past) Haptic.Land else Haptic.Detent)
+                            }
+                        }
+                    }
+                }
+                .clickableNoRipple { onOpen(row.item) }
+        ) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -661,5 +783,35 @@ private fun ContinueCard(
             maxLines = 1,
             modifier = Modifier.padding(top = 2.dp),
         )
+        }
     }
+}
+
+private const val AXIS_HORIZONTAL = 0
+private const val AXIS_VERTICAL = 1
+
+/**
+ * The hint behind a card being dragged.
+ *
+ * Dim until the gesture is ARMED. A backing that is bright from the first pixel
+ * says something is there; one that brightens at the threshold says let go now,
+ * which is the only thing a thumb needs to know mid-drag.
+ */
+@Composable
+private fun SwipeBacking(axis: Int?, armed: Boolean, modifier: Modifier = Modifier) {
+    val colors = CvTheme.colors
+    if (axis == null) return
+    val glow by animateFloatAsState(
+        targetValue = if (armed) 1f else 0.3f,
+        animationSpec = Motion.snappy(),
+        label = "backing",
+    )
+    Box(
+        modifier
+            .clip(CvShape.Large)
+            .background(
+                if (axis == AXIS_HORIZONTAL) Palette.Red2.copy(alpha = 0.18f * glow)
+                else colors.green.copy(alpha = 0.18f * glow)
+            )
+    )
 }

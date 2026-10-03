@@ -207,7 +207,7 @@ fun ListSheet(
             if (lists.isEmpty()) {
                 item(key = "empty") {
                     Text(
-                        "No lists yet. Make one for a rewatch pile, a film club, or the ones you keep meaning to get to.",
+                        "No lists yet",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.text3,
                         modifier = Modifier.padding(vertical = 10.dp),
@@ -281,7 +281,7 @@ private fun ListRow(
             )
             if (sub != null || armed) {
                 Text(
-                    if (armed) "Its titles stay in your watchlist" else sub.orEmpty(),
+                    if (armed) "Titles stay in your watchlist" else sub.orEmpty(),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (armed) colors.pink.copy(alpha = 0.8f) else colors.text3,
                 )

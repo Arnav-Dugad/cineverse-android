@@ -148,6 +148,65 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         }
     }
 
+    /**
+     * Tick the next episode of a show straight from the rail.
+     *
+     * The same repository the title page writes through, so the merge rules,
+     * the log encoding and the offline queue are identical. A film is marked
+     * watched outright, since there is no next episode to advance to.
+     */
+    fun markNext(row: ContinueRow) = viewModelScope.launch {
+        val region = app.settings.settings.value.region
+        val detail = runCatching {
+            app.tmdb.detail(row.item.id, row.item.type, region)
+        }.getOrNull() ?: return@launch
+        if (row.isMovie) {
+            app.library.clearMovieProgress(row.item.id)
+            if (!app.library.library.value.isWatched(row.item.key)) {
+                app.library.toggleWatched(row.item, detail)
+            }
+            app.say("Marked watched")
+        } else {
+            app.episodes.toggleEpisode(detail, row.season, row.episode)
+            app.say("${row.item.title} · ${row.label} watched")
+        }
+    }
+
+    /**
+     * Out of the row for now.
+     *
+     * Local and temporary by design: it is not a statement about the show, it
+     * is "not tonight". It survives until the app is killed, and any new tick
+     * on that show brings it back, which is the behaviour the word implies.
+     * Writing it to Firestore would make a passing mood permanent and would
+     * put a field on the account the website knows nothing about.
+     */
+    fun snooze(row: ContinueRow) {
+        snoozed = snoozed + row.item.key
+        rebuildContinue(app.episodes.progress.value, app.library.library.value)
+        app.say("Snoozed · back when you tick something")
+    }
+
+    /**
+     * Off the row entirely.
+     *
+     * For a show this is DROPPED, which is a real field the website reads, so
+     * the two agree. For a film it is a tombstone on its progress document,
+     * which is exactly what removing it on the website writes.
+     */
+    fun dismiss(row: ContinueRow) = viewModelScope.launch {
+        if (row.isMovie) {
+            app.library.clearMovieProgress(row.item.id)
+        } else {
+            val region = app.settings.settings.value.region
+            val detail = runCatching {
+                app.tmdb.detail(row.item.id, row.item.type, region)
+            }.getOrNull() ?: return@launch
+            app.episodes.setDropped(detail, true)
+        }
+        app.say("Removed from Continue watching")
+    }
+
     fun refresh() {
         _state.value = _state.value.copy(refreshing = true)
         load()
@@ -332,6 +391,9 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
      * lowest unwatched one that has aired — and a show you are caught up on
      * drops off the row entirely rather than sitting there with nothing to tap.
      */
+    /** Keys snoozed this session. Deliberately not persisted — see [snooze]. */
+    private var snoozed: Set<String> = emptySet()
+
     private fun rebuildContinue(shows: Map<Int, ShowProgress>, lib: Library) = viewModelScope.launch {
         val rows = mutableListOf<ContinueRow>()
 
@@ -390,7 +452,10 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         }
 
         _state.value = _state.value.copy(
-            continueWatching = rows.sortedByDescending { it.lastAt }.take(20)
+            continueWatching = rows
+                .filterNot { it.item.key in snoozed }
+                .sortedByDescending { it.lastAt }
+                .take(20)
         )
     }
 }

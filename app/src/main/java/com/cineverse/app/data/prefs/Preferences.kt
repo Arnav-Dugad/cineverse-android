@@ -78,6 +78,8 @@ data class Settings(
     val posterMeta: Boolean = false,
     val posterCorner: String = "Rounded",
     val posterMatch: Boolean = true,
+    /** The title's own logo on its page, rather than the name set in our face. */
+    val titleLogos: Boolean = true,
     val updatedAt: Long = 0L,
 ) {
     val adult: Boolean get() = mature
@@ -129,6 +131,7 @@ class SettingsRepository(
         val posterMeta = booleanPreferencesKey("posterMeta")
         val posterCorner = stringPreferencesKey("posterCorner")
         val posterMatch = booleanPreferencesKey("posterMatch")
+        val titleLogos = booleanPreferencesKey("titleLogos")
         val notifyReleases = booleanPreferencesKey("notifyReleases")
         val updatedAt = longPreferencesKey("updatedAt")
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
@@ -170,6 +173,7 @@ class SettingsRepository(
         posterMeta = this[Keys.posterMeta] ?: false,
         posterCorner = this[Keys.posterCorner] ?: "Rounded",
         posterMatch = this[Keys.posterMatch] ?: true,
+        titleLogos = this[Keys.titleLogos] ?: true,
         notifyReleases = this[Keys.notifyReleases] ?: true,
         updatedAt = this[Keys.updatedAt] ?: 0L,
     )
@@ -210,6 +214,7 @@ class SettingsRepository(
     suspend fun setPosterMeta(value: Boolean) = edit { it[Keys.posterMeta] = value }
     suspend fun setPosterCorner(value: String) = edit { it[Keys.posterCorner] = value }
     suspend fun setPosterMatch(value: Boolean) = edit { it[Keys.posterMatch] = value }
+    suspend fun setTitleLogos(value: Boolean) = edit { it[Keys.titleLogos] = value }
 
     suspend fun setNotifyEpisodes(value: Boolean) = edit { it[Keys.notifyEpisodes] = value }
     suspend fun setNotifyReleases(value: Boolean) = edit { it[Keys.notifyReleases] = value }

@@ -23,6 +23,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,27 +51,60 @@ import com.cineverse.app.core.design.Palette
  * downward scroll to hide, 4dp of upward to show — because reaching for the bar
  * is an intentional act and losing it is not.
  */
+/**
+ * How the bars behave as the page moves under them.
+ *
+ * Not a boolean any more. The bar now has a CONTINUOUS position, driven
+ * directly by the scroll, so it slides with the finger rather than snapping
+ * between two states a moment after the gesture — the difference between a bar
+ * that is attached to the page and one that is reacting to it.
+ *
+ * Three rules, each from watching a bar get this wrong:
+ *
+ *  - it NEVER hides near the top of a page, because hiding navigation on a
+ *    page the user has barely moved reads as a glitch;
+ *  - it settles to fully in or fully out when the finger lifts, so the gesture
+ *    can never leave it stranded half way;
+ *  - it comes back faster than it leaves. Reaching for navigation is urgent;
+ *    getting it out of the way is not.
+ */
 class BarVisibility {
-    var visible by mutableStateOf(true)
+    /** 0 is fully shown, 1 is fully tucked away. Everything reads this. */
+    var hidden by mutableFloatStateOf(0f)
         private set
 
-    private var travelled by mutableFloatStateOf(0f)
+    val visible: Boolean get() = hidden < 0.5f
+
+    private var depth = 0f
 
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             val dy = available.y
-            if (dy < 0) {
-                travelled = (travelled + dy).coerceAtLeast(-120f)
-                if (travelled < -24f) visible = false
-            } else if (dy > 0) {
-                travelled = (travelled + dy).coerceAtMost(120f)
-                if (travelled > 4f) visible = true
+            depth = (depth - dy).coerceAtLeast(0f)
+
+            // The first 140px of a page keep the bar, whatever the gesture.
+            if (depth < 140f) {
+                hidden = 0f
+                return Offset.Zero
             }
+            // Down the page: 90px of travel takes it out, 55px brings it back.
+            val step = if (dy < 0) -dy / 90f else dy / 55f
+            hidden = (if (dy < 0) hidden + step else hidden - step).coerceIn(0f, 1f)
             return Offset.Zero
+        }
+
+        override suspend fun onPreFling(available: Velocity): Velocity {
+            // Never stranded mid-slide. Past half it finishes hiding, otherwise
+            // it comes back.
+            hidden = if (hidden > 0.5f) 1f else 0f
+            return Velocity.Zero
         }
     }
 
-    fun show() { visible = true; travelled = 0f }
+    fun show() {
+        hidden = 0f
+        depth = 0f
+    }
 }
 
 @Composable
@@ -83,11 +117,21 @@ fun CvNavigationBar(
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
-    AnimatedVisibility(
-        visible = bars.visible || CvTheme.reducedMotion,
-        enter = slideInVertically(Motion.lively()) { it },
-        exit = slideOutVertically(Motion.snappy()) { it },
-        modifier = modifier,
+    // Driven by the scroll position rather than by a visibility flag, so the
+    // bar tracks the finger. The spring only does the settling at the end of a
+    // gesture, which is the one moment a spring belongs here.
+    val tuck by animateFloatAsState(
+        targetValue = if (CvTheme.reducedMotion) 0f else bars.hidden,
+        animationSpec = Motion.snappy(),
+        label = "bar",
+    )
+    Box(
+        modifier.graphicsLayer {
+            translationY = tuck * size.height
+            // It fades as it goes, which stops the labels appearing to slide
+            // underneath the page content on a light backdrop.
+            alpha = 1f - tuck * 0.7f
+        }
     ) {
         // The fade goes ABOVE the bar, not behind it.
         //

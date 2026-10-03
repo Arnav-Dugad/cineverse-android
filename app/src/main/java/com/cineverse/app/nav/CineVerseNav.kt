@@ -64,6 +64,7 @@ import com.cineverse.app.feature.list.MyListViewModel
 import com.cineverse.app.feature.person.PersonScreen
 import com.cineverse.app.feature.person.PersonViewModel
 import com.cineverse.app.feature.profile.ProfileScreen
+import com.cineverse.app.feature.profile.SettingsScreen
 import com.cineverse.app.feature.profile.ProfileViewModel
 import com.cineverse.app.feature.search.SearchScreen
 import com.cineverse.app.feature.search.SearchViewModel
@@ -281,7 +282,19 @@ fun CineVerseNav(
                         scope.launch { app.updates.check(force = true) }
                     },
                     onOpenReleaseNotes = { showHistory = true },
+                    onOpenSettings = { navController.navigate(Route.Settings) },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                )
+            }
+
+            cvComposable<Route.Settings> {
+                SettingsScreen(
+                    // The SAME view model instance the profile tab uses, keyed
+                    // by name rather than by back-stack entry: two instances
+                    // would mean two DataStore collectors and a toggle that
+                    // looks stale on whichever screen it was not changed from.
+                    viewModel = cvViewModel("profile") { ProfileViewModel(app) },
+                    onBack = { navController.popBackStack() },
                 )
             }
 

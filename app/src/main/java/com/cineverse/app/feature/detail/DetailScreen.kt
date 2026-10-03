@@ -177,6 +177,7 @@ fun DetailScreen(
                     watched = library.isWatched(detail.key),
                     myRating = library.ratingOf(detail.key),
                     movieMinutes = library.movieProgress[detail.id]?.minutes ?: 0,
+                    showTitleLogo = settings.titleLogos,
                     onSave = viewModel::toggleSaved,
                     onWatched = viewModel::toggleWatched,
                     onRate = { sheet = TitleSheet.Rate },
