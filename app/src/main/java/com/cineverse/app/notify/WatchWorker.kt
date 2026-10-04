@@ -86,6 +86,7 @@ class WatchWorker(
                 .sortedByDescending { it.log.lastOrNull()?.stamp ?: it.updatedAt }
                 .take(30)
 
+            var hooks = 0
             for (show in inFlight) {
                 val detail = runCatching {
                     app.tmdb.detail(show.tmdbId, MediaType.Tv, region, refresh = true)
@@ -101,12 +102,18 @@ class WatchWorker(
                     val key = episodeKey(show.tmdbId, episode.season, episode.number)
                     if (!seen.add(key)) continue
                     val label = if (show.isAbsolute) "Episode ${episode.number}" else "S${episode.season} E${episode.number}"
+                    // Gemini's one-line hook, from the episode you saw last.
+                    // A handful per run at most: the free tier has a daily limit.
+                    val hook = if (settings.geminiOn && hooks < 4) {
+                        hooks++
+                        runCatching { app.episodeHook.line(show, episode) }.getOrNull()
+                    } else null
                     Notifications.post(
                         context = applicationContext,
                         id = Notifications.idFor(key),
                         channel = Notifications.CHANNEL_EPISODES,
                         title = show.title.ifBlank { detail.title },
-                        body = buildString {
+                        body = hook?.let { "$label: $it" } ?: buildString {
                             append(label)
                             if (episode.name.isNotBlank() && !GenericName.matches(episode.name)) append(" · ${episode.name}")
                             append(if (air == today) " is out today" else " is out")

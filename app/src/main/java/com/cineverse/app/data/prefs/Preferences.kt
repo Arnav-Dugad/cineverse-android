@@ -80,6 +80,12 @@ data class Settings(
     val confetti: Boolean = true,
     /** Shake the phone on Discover for Surprise me, or on your list to pick from it. */
     val shakeToPick: Boolean = true,
+    /** Every Gemini feature, and every trace of it in the UI. On by default. */
+    val geminiOn: Boolean = true,
+    /** The navigation bar never tucks away, and shows on every page. */
+    val pinNavBar: Boolean = false,
+    /** The streaming services you pay for, as TMDB provider ids. */
+    val myServices: Set<Int> = emptySet(),
     /** Voice search reads its answer aloud. */
     val spokenAnswers: Boolean = true,
     /** Swipe an episode row to mark everything up to it. */
@@ -145,6 +151,9 @@ class SettingsRepository(
         val confetti = booleanPreferencesKey("confetti")
         val shakeToPick = booleanPreferencesKey("shakeToPick")
         val spokenAnswers = booleanPreferencesKey("spokenAnswers")
+        val geminiOn = booleanPreferencesKey("geminiOn")
+        val pinNavBar = booleanPreferencesKey("pinNavBar")
+        val myServices = stringPreferencesKey("myServices")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
         val countdowns = booleanPreferencesKey("countdowns")
         val posterMeta = booleanPreferencesKey("posterMeta")
@@ -195,6 +204,9 @@ class SettingsRepository(
         confetti = this[Keys.confetti] ?: true,
         shakeToPick = this[Keys.shakeToPick] ?: true,
         spokenAnswers = this[Keys.spokenAnswers] ?: true,
+        geminiOn = this[Keys.geminiOn] ?: true,
+        pinNavBar = this[Keys.pinNavBar] ?: false,
+        myServices = this[Keys.myServices].orEmpty().split(',').mapNotNull { it.trim().toIntOrNull() }.toSet(),
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
         countdowns = this[Keys.countdowns] ?: true,
         posterMeta = this[Keys.posterMeta] ?: false,
@@ -244,6 +256,9 @@ class SettingsRepository(
     suspend fun setConfetti(value: Boolean) = edit { it[Keys.confetti] = value }
     suspend fun setShakeToPick(value: Boolean) = edit { it[Keys.shakeToPick] = value }
     suspend fun setSpokenAnswers(value: Boolean) = edit { it[Keys.spokenAnswers] = value }
+    suspend fun setGeminiOn(value: Boolean) = edit { it[Keys.geminiOn] = value }
+    suspend fun setPinNavBar(value: Boolean) = edit { it[Keys.pinNavBar] = value }
+    suspend fun setMyServices(value: Set<Int>) = edit { it[Keys.myServices] = value.sorted().joinToString(",") }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
     suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }
     suspend fun setPosterMeta(value: Boolean) = edit { it[Keys.posterMeta] = value }

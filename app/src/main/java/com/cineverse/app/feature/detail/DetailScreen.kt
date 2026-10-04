@@ -118,6 +118,7 @@ fun DetailScreen(
     val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val pitch by viewModel.pitch.collectAsStateWithLifecycle()
     val chat by viewModel.chat.collectAsStateWithLifecycle()
+    val trivia by viewModel.trivia.collectAsStateWithLifecycle()
     val watching by viewModel.watchingNow.collectAsStateWithLifecycle()
     var asking by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -224,7 +225,7 @@ fun DetailScreen(
                     },
                     onLists = { sheet = TitleSheet.Lists },
                     onProgress = { sheet = TitleSheet.Progress },
-                    onAsk = { asking = true },
+                    onAsk = if (settings.geminiOn) ({ asking = true }) else null,
                     onWatchingNow = if (!detail.isSeries && detail.runtime > 0) viewModel::toggleWatchingNow else null,
                     watchingNow = watching?.id == detail.id,
                 )
@@ -232,7 +233,7 @@ fun DetailScreen(
             }
 
             // The ending, explained - locked until it is all watched.
-            if (detail.isSeries || detail.releaseDate.take(10) <= java.time.LocalDate.now().toString()) {
+            if (settings.geminiOn && (detail.isSeries || detail.releaseDate.take(10) <= java.time.LocalDate.now().toString())) {
                 item(key = "ending") {
                     val unlocked = androidx.compose.runtime.remember(detail.key, library.watched.size, progress?.watchedCount) {
                         viewModel.endingUnlocked()
@@ -245,6 +246,18 @@ fun DetailScreen(
                         asking = true
                         viewModel.explainEnding()
                     }
+                }
+                item(key = "trivia") {
+                    val unlocked = androidx.compose.runtime.remember(detail.key, library.watched.size, progress?.watchedCount) {
+                        viewModel.endingUnlocked()
+                    }
+                    TriviaCard(
+                        series = detail.isSeries,
+                        unlocked = unlocked,
+                        state = trivia,
+                        onLoad = viewModel::loadTrivia,
+                        modifier = Modifier.padding(horizontal = 18.dp).padding(top = 10.dp),
+                    )
                 }
             }
 
@@ -292,14 +305,14 @@ fun DetailScreen(
                 }
             }
 
-            pitch?.let { forYou ->
+            pitch?.takeIf { settings.geminiOn }?.let { forYou ->
                 item(key = "forYou") {
                     ForYouCard(forYou, Modifier.padding(horizontal = 18.dp).padding(top = 18.dp))
                 }
             }
 
             item(key = "providers") {
-                WhereToWatch(detail, onService = { onService(it.id, it.name, it.logoPath.orEmpty()) })
+                WhereToWatch(detail, onService = { onService(it.id, it.name, it.logoPath.orEmpty()) }, mine = settings.myServices)
             }
 
             collection?.takeIf { it.id == detail.collectionId }?.let { info ->
@@ -339,7 +352,7 @@ fun DetailScreen(
                     onSeasonRecap = { viewModel.openSeasonRecap(it) },
                     onSeriesRecap = { viewModel.openSeriesRecap() },
                     onPreviously = { viewModel.loadPreviously() },
-                    catchUpSeason = viewModel.catchUpSeason(progress),
+                    catchUpSeason = if (settings.geminiOn) viewModel.catchUpSeason(progress) else null,
                     onCatchUp = viewModel::loadCatchUp,
                     onOpenEpisode = { season, episode ->
                         viewModel.selectSeason(season)
@@ -382,7 +395,7 @@ fun DetailScreen(
         // nothing about the episode list underneath it.
         com.cineverse.app.core.ui.ScrollHint(
             listState = listState,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.cineverse.app.core.ui.LocalPinnedBarLift.current),
             avoid = "head",
         )
     }
@@ -405,7 +418,7 @@ fun DetailScreen(
         null -> Unit
     }
 
-    if (asking) {
+    if (asking && settings.geminiOn) {
         state.detail?.let { detail ->
             val line = androidx.compose.runtime.remember(detail, progress, library.watched.size) { viewModel.spoilerLine() }
             if (line != null) {
@@ -415,6 +428,7 @@ fun DetailScreen(
                     suggestions = androidx.compose.runtime.remember(line) { com.cineverse.app.data.ai.TitleChat.suggestions(detail, line) },
                     turns = chat,
                     onAsk = viewModel::ask,
+                    onClear = viewModel::clearChat,
                     onDismiss = { asking = false },
                 )
             }

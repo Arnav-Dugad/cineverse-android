@@ -78,20 +78,14 @@ fun DetailSkeleton(itemKey: String, modifier: Modifier = Modifier) {
         // when the destination changes mid-flight. A skeleton whose job is to
         // reserve the right room has to reserve the right room.
         Box(
-            Modifier.height(POSTER_HEIGHT - POSTER_OVERLAP),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Box(
-                Modifier
-                    .offset(y = -POSTER_OVERLAP)
-                    .requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT)
-                    .sharedPoster(itemKey)
-                    .clip(CvShape.Large)
-                    .shimmer()
-            )
-        }
+            Modifier
+                .risingPoster()
+                .sharedPoster(itemKey)
+                .clip(CvShape.Large)
+                .shimmer()
+        )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(18.dp))
         Bar(220.dp, 44.dp, CvShape.Small)
         Spacer(Modifier.height(12.dp))
         Bar(170.dp, 14.dp)
@@ -131,9 +125,6 @@ fun DetailSkeleton(itemKey: String, modifier: Modifier = Modifier) {
     }
 }
 
-private val POSTER_WIDTH = 172.dp
-private val POSTER_HEIGHT = 258.dp
-private val POSTER_OVERLAP = 104.dp
 
 /** One placeholder. An unspecified width fills the row. */
 @Composable

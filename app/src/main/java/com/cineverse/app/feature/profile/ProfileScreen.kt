@@ -164,6 +164,10 @@ fun ProfileScreen(
             }
         }
 
+        item(key = "services") {
+            MyServicesCard(viewModel, settings.myServices, settings.region)
+        }
+
         // Settings sits alone, because it is the one row here that leads
         // somewhere large. Pairing it with the two app rows beneath would say
         // they are the same kind of thing, and they are not.

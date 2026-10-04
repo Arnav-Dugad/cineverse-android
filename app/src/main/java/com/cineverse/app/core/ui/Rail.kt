@@ -58,6 +58,14 @@ val ScreenPadding = 18.dp
 val BottomBarSpace = 156.dp
 
 /**
+ * With "Keep the navigation bar pinned" on, how tall that bar is over a page
+ * pushed on top of a tab - zero otherwise. Pages scroll under the bar as tabs
+ * do (their bottom space already allows for it); only something floating at
+ * the bottom edge, like a back-to-top button, rises above it by this much.
+ */
+val LocalPinnedBarLift = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+/**
  * A rail's heading.
  *
  * A kicker above it when there is something to say about where the row came from

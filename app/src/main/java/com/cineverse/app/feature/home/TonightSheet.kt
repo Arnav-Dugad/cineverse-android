@@ -64,35 +64,6 @@ import com.cineverse.app.data.ai.TonightPick
 import com.cineverse.app.data.model.MediaItem
 import kotlinx.coroutines.launch
 
-/** The way in, on Home: one line and a moon. */
-@Composable
-fun TonightBanner(onClick: () -> Unit) {
-    val colors = CvTheme.colors
-    Row(
-        Modifier
-            .padding(horizontal = ScreenPadding)
-            .fillMaxWidth()
-            .clip(CvShape.Large)
-            .background(
-                Brush.linearGradient(
-                    listOf(GeminiColors[0].copy(alpha = 0.16f), GeminiColors[1].copy(alpha = 0.12f), GeminiColors[2].copy(alpha = 0.10f))
-                )
-            )
-            .border(1.dp, colors.hairline, CvShape.Large)
-            .clickableNoRipple(onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Nightlight, null, tint = GeminiColors[1], modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text("What should I watch tonight?", style = MaterialTheme.typography.titleSmall, color = colors.text)
-            Text("Pick a mood and the time you have", style = MaterialTheme.typography.labelMedium, color = colors.text3)
-        }
-        Icon(Icons.Rounded.AutoAwesome, null, tint = GeminiColors[2], modifier = Modifier.size(18.dp))
-    }
-}
-
 /**
  * Tonight, in three taps: a mood, a length, a film. The pick is from your own
  * list. "Another" passes over the last one, and Start watching goes straight

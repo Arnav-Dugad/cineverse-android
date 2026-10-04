@@ -80,8 +80,17 @@ class BarVisibility {
 
     private var depth = 0f
 
+    /** "Keep the navigation bar pinned": it never tucks away. */
+    var pinned = false
+        set(value) {
+            val pinning = value && !field
+            field = value
+            if (pinning) show()
+        }
+
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (pinned) return Offset.Zero
             val dy = available.y
             depth = (depth - dy).coerceAtLeast(0f)
 
@@ -97,6 +106,7 @@ class BarVisibility {
         }
 
         override suspend fun onPreFling(available: Velocity): Velocity {
+            if (pinned) return Velocity.Zero
             // Never stranded mid-slide. Past half it finishes hiding, otherwise
             // it comes back.
             hidden = if (hidden > 0.5f) 1f else 0f

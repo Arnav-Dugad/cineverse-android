@@ -73,6 +73,20 @@ sealed interface AskUi {
 
     /** Something done: added, ticked, rated. */
     data class Did(override val heard: String, val outcome: Outcome) : AskUi
+
+    /** "Who's that?": the person meant, best guess first, and why. */
+    data class Found(
+        override val heard: String,
+        val people: List<com.cineverse.app.data.model.PersonDetail>,
+        val why: String?,
+    ) : AskUi
+
+    /** A question, answered in words as Gemini writes them. */
+    data class Answered(
+        override val heard: String,
+        val text: String,
+        val writing: Boolean,
+    ) : AskUi
 }
 
 /** Things search asks the app to do: go somewhere, play something. */
@@ -212,14 +226,35 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
                 is Ask.Watched -> AskUi.Did(heard, assistant.watched(ask.title))
                 is Ask.Rate -> AskUi.Did(heard, assistant.rate(ask.title, ask.score))
                 is Ask.NextEpisode -> AskUi.Did(heard, assistant.nextEpisode(ask.show))
+                is Ask.Person -> {
+                    val people = runCatching { assistant.people(listOf(ask.name) + ask.alternatives) }.getOrDefault(emptyList())
+                    // The right person's own name, or nobody: TMDB's best match
+                    // for a name it half-knows is someone else entirely.
+                    if (people.isEmpty()) null else AskUi.Found(heard, people, ask.why)
+                }
+                is Ask.Answer -> {
+                    if (mine != generation) return@launch
+                    _state.value = _state.value.copy(ask = AskUi.Answered(heard, "", writing = true))
+                    var last = ""
+                    runCatching {
+                        assistant.answer(ask.question).collect { text ->
+                            if (mine != generation) return@collect
+                            last = text
+                            _state.value = _state.value.copy(ask = AskUi.Answered(heard, text, writing = true))
+                        }
+                    }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                    if (last.isBlank()) null else AskUi.Answered(heard, last.trim(), writing = false)
+                }
             }
             if (mine != generation) return@launch
             _state.value = _state.value.copy(ask = ui)
-            if (ui == null) search((ask as Ask.Search).query, page = 1)
+            if (ui == null) search((ask as? Ask.Search)?.query ?: heard, page = 1)
             if (spoken && app.settings.settings.value.spokenAnswers) {
                 app.speaker.say(
                     when (ui) {
                         is AskUi.Did -> ui.outcome.message
+                        is AskUi.Found -> ui.why ?: "That sounds like ${ui.people.first().name}"
+                        is AskUi.Answered -> ui.text
                         is AskUi.Results -> when {
                             ui.items.isEmpty() -> "I couldn't find anything matching all of that."
                             ui.reply != null -> ui.reply

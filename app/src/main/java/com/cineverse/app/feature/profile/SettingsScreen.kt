@@ -86,7 +86,8 @@ fun SettingsScreen(
         CvScreenBar(title = "Settings", onBack = onBack)
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 48.dp),
+            // Room to scroll the last group clear of a pinned navigation bar.
+            contentPadding = PaddingValues(bottom = BottomBarSpace),
         ) {
         item(key = "group_appearance") {
             SettingsGroup("Appearance") {
@@ -220,6 +221,13 @@ fun SettingsScreen(
                     )
                 },
             )
+                Divider()
+            SwitchRow(
+                title = "Keep the navigation bar pinned",
+                detail = "Always on screen, on title pages too",
+                checked = settings.pinNavBar,
+                onChange = viewModel::setPinNavBar,
+            )
             }
         }
 
@@ -328,6 +336,19 @@ fun SettingsScreen(
                     )
                 }
                 var checking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                SwitchRow(
+                    title = "Gemini features",
+                    detail = if (settings.geminiOn) "Answers, picks and explanations across the app" else "Off: nothing of Gemini is shown anywhere",
+                    checked = settings.geminiOn,
+                    onChange = viewModel::setGeminiOn,
+                )
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = settings.geminiOn,
+                    enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+                ) {
+                Column {
+                Divider()
                 NotifyAction(
                     icon = Icons.Rounded.AutoAwesome,
                     title = if (checking) "Checking Gemini…" else "Gemini status",
@@ -342,6 +363,8 @@ fun SettingsScreen(
                         checking = false
                         haptics?.play(if (ok) Haptic.Success else Haptic.Warning)
                     }
+                }
+                }
                 }
             }
         }

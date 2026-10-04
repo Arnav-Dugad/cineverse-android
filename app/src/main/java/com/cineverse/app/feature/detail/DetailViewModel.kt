@@ -55,6 +55,14 @@ sealed interface PreviouslyState {
     data class Ready(val previously: com.cineverse.app.data.recap.Previously) : PreviouslyState
 }
 
+/** The trivia card: three facts, once asked for. */
+sealed interface TriviaState {
+    data object Idle : TriviaState
+    data object Loading : TriviaState
+    data object Failed : TriviaState
+    data class Ready(val facts: List<String>) : TriviaState
+}
+
 /** Which recap is up. */
 sealed interface RecapView {
     data class Season(val recap: com.cineverse.app.data.recap.SeasonRecap) : RecapView
@@ -95,9 +103,9 @@ class DetailViewModel(
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
 
-    private val _chat = MutableStateFlow<List<com.cineverse.app.data.ai.ChatTurn>>(emptyList())
+    private val _chat = MutableStateFlow(app.chatStore.load(key))
 
-    /** The conversation in the "Ask about it" sheet, kept while the page is open. */
+    /** The conversation in the "Ask about it" sheet, kept on the device across visits. */
     val chat: StateFlow<List<com.cineverse.app.data.ai.ChatTurn>> = _chat.asStateFlow()
 
     /** The film being watched now, for the Live Update pill. */
@@ -250,20 +258,72 @@ class DetailViewModel(
 
     fun explainEnding() {
         if (!endingUnlocked()) return
-        if (_chat.value.any { it.question == ENDING }) return
+        // Already explained (or being explained): the sheet shows it again.
+        if (_chat.value.any { it.question == ENDING && (it.byGemini || it.answer == null) }) return
         ask(ENDING, ending = true)
+    }
+
+    private var asking: kotlinx.coroutines.Job? = null
+
+    private val _trivia = MutableStateFlow<TriviaState>(
+        app.trivia.cached(key)?.let { TriviaState.Ready(it) } ?: TriviaState.Idle
+    )
+
+    /** "Did you know": locked until watched, then three facts on a tap. */
+    val trivia: StateFlow<TriviaState> = _trivia.asStateFlow()
+
+    fun loadTrivia() {
+        val detail = _state.value.detail ?: return
+        if (_trivia.value is TriviaState.Loading || _trivia.value is TriviaState.Ready || !endingUnlocked()) return
+        _trivia.value = TriviaState.Loading
+        viewModelScope.launch {
+            val facts = runCatching { app.trivia.facts(detail) }.getOrNull()
+            _trivia.value = facts?.let { TriviaState.Ready(it) } ?: TriviaState.Failed
+        }
     }
 
     fun ask(question: String, ending: Boolean = false) {
         val detail = _state.value.detail ?: return
         val line = spoilerLine() ?: return
+        if (asking?.isActive == true) return
         val history = _chat.value
         _chat.value = history + com.cineverse.app.data.ai.ChatTurn(question)
-        viewModelScope.launch {
-            val turn = runCatching { app.titleChat.answer(detail, line, history, question, ending) }
-                .getOrElse { com.cineverse.app.data.ai.ChatTurn(question, "Something went wrong. Try again in a moment.") }
-            _chat.value = _chat.value.dropLast(1) + turn
+        asking = viewModelScope.launch {
+            val viewer = viewerBrief(detail)
+            runCatching {
+                app.titleChat.answer(detail, line, history, question, ending, viewer).collect { turn ->
+                    _chat.value = _chat.value.dropLast(1) + turn
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _chat.value = _chat.value.dropLast(1) + com.cineverse.app.data.ai.ChatTurn(question, "Something went wrong. Try again in a moment.")
+            }
+            app.chatStore.save(key, _chat.value)
         }
+    }
+
+    /** Start this title's conversation over. */
+    fun clearChat() {
+        asking?.cancel()
+        _chat.value = emptyList()
+        app.chatStore.clear(key)
+    }
+
+    /** The viewer's brief plus where they stand with this very title. */
+    private suspend fun viewerBrief(detail: TitleDetail): String {
+        val brief = runCatching { app.persona.brief() }.getOrDefault("")
+        val library = app.library.library.value
+        val show = app.episodes.progress.value[detail.id]
+        val here = buildList {
+            library.ratings[detail.key]?.let { add("they rated it $it/10") }
+            if (library.isWatched(detail.key)) add("they have watched it")
+            show?.takeIf { it.watchedCount > 0 }?.let { add("they have seen ${it.watchedCount} of ${it.totalEpisodes} episodes") }
+            if (library.saved.containsKey(detail.key) && !library.isWatched(detail.key)) add("it is on their watchlist")
+        }
+        return buildString {
+            append(brief)
+            if (here.isNotEmpty()) append("\n- With this title: ${here.joinToString(", ")}.")
+        }.trim()
     }
 
     /** Start the Live Update from where you are in the film, or stop it, keeping your place. */

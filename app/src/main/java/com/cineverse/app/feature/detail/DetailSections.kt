@@ -1,6 +1,7 @@
 package com.cineverse.app.feature.detail
 
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Lightbulb
 import kotlinx.coroutines.launch
 import com.cineverse.app.core.ui.geminiGlow
 import androidx.compose.ui.semantics.contentDescription
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -43,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Check
@@ -737,6 +740,8 @@ fun WhereToWatch(
     modifier: Modifier = Modifier,
     /** "Everything on Netflix": the whole catalogue of a streaming service here. */
     onService: (com.cineverse.app.data.model.WatchProvider) -> Unit = {},
+    /** The services you pay for, from your profile: they lead and are marked. */
+    mine: Set<Int> = emptySet(),
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -746,7 +751,11 @@ fun WhereToWatch(
     // One pass, in the order a viewer cares about, de-duplicated: TMDB lists a
     // provider under both flatrate and ads often enough that a raw render shows
     // Netflix twice.
-    val groups = remember(detail.providers) {
+    // A service you pay for also covers its own "with Ads" tier.
+    val yourNames = remember(detail.providers, mine) { detail.providers.filter { it.id in mine }.map { it.name }.distinct() }
+    fun isYours(provider: com.cineverse.app.data.model.WatchProvider) =
+        provider.id in mine || yourNames.any { provider.name.startsWith(it) }
+    val groups = remember(detail.providers, mine) {
         val seen = mutableSetOf<Int>()
         listOf(
             "Streaming" to ProviderKind.Stream,
@@ -756,6 +765,7 @@ fun WhereToWatch(
             "Buy" to ProviderKind.Buy,
         ).mapNotNull { (label, kind) ->
             val matching = detail.providers.filter { it.kind == kind && seen.add(it.id) }
+                .sortedByDescending { isYours(it) }
             if (matching.isEmpty()) null else label to matching
         }
     }
@@ -764,6 +774,23 @@ fun WhereToWatch(
     Column(modifier.padding(top = 20.dp)) {
         SectionHeader("Where to watch")
         Spacer(Modifier.height(10.dp))
+        // The answer to "can I watch it tonight", in one line, when it is yes.
+        val yours = groups.firstOrNull { it.first == "Streaming" || it.first == "With adverts" }?.second
+            ?.filter { it.id in mine }.orEmpty()
+        if (yours.isNotEmpty()) {
+            Row(
+                Modifier.padding(horizontal = ScreenPadding).padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.CheckCircle, null, tint = colors.green, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Included with your ${yours.joinToString(" and ") { it.name }}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.green,
+                )
+            }
+        }
         // `group`, not `items`: the destructured name would shadow LazyRow's
         // own `items` and the call below would not resolve.
         for ((label, group) in groups) {
@@ -782,6 +809,7 @@ fun WhereToWatch(
                 items(group, key = { it.id }) { provider ->
                     ProviderTile(
                         provider = provider,
+                        yours = isYours(provider),
                         installed = remember(provider.name) {
                             com.cineverse.app.data.model.Providers.isInstalled(context, provider.name)
                         },
@@ -828,6 +856,7 @@ private fun ProviderTile(
     provider: com.cineverse.app.data.model.WatchProvider,
     installed: Boolean,
     onClick: () -> Unit,
+    yours: Boolean = false,
 ) {
     val colors = CvTheme.colors
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -850,9 +879,9 @@ private fun ProviderTile(
                 Modifier
                     .size(56.dp)
                     .clip(CvShape.Medium)
-                    .border(1.dp, colors.hairline, CvShape.Medium)
+                    .border(if (yours) 2.dp else 1.dp, if (yours) colors.green else colors.hairline, CvShape.Medium)
             ) {
-                CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize())
+                CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize().padding(if (yours) 2.dp else 0.dp).clip(CvShape.Small))
             }
             // A dot, not a badge: it says the app is on this phone without
             // taking a second line to say it.
@@ -1202,6 +1231,7 @@ fun ForYouCard(pitch: com.cineverse.app.data.ai.Pitch, modifier: Modifier = Modi
         }
         Spacer(Modifier.width(14.dp))
         Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+            if (pitch.fit >= 90) MatchSparkle(Modifier.matchParentSize())
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                 val stroke = 5.dp.toPx()
                 val inset = stroke / 2
@@ -1222,6 +1252,84 @@ fun ForYouCard(pitch: com.cineverse.app.data.ai.Pitch, modifier: Modifier = Modi
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("${(fill * 100).toInt()}", style = MaterialTheme.typography.titleMedium, color = colors.text)
                 Text("match", style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)), color = colors.text3)
+            }
+        }
+    }
+}
+
+/**
+ * A 90+ match earns a little celebration: once the ring has filled, a burst
+ * of four-pointed stars flies off it in Gemini's colours and gold, then a
+ * few keep twinkling around it for as long as the card is on screen. Drawn
+ * outside the ring's own box (the card's padding leaves room), never on it.
+ */
+@Composable
+private fun MatchSparkle(modifier: Modifier = Modifier) {
+    val reduced = CvTheme.reducedMotion
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val burst = remember { androidx.compose.animation.core.Animatable(if (reduced) 1f else 0f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (reduced) return@LaunchedEffect
+        // The ring takes 200 + 1100 ms to fill; the stars go as it lands.
+        kotlinx.coroutines.delay(1250)
+        haptics?.play(com.cineverse.app.core.design.Haptic.Success)
+        burst.animateTo(1f, androidx.compose.animation.core.tween(1100, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+    }
+    val loop = androidx.compose.animation.core.rememberInfiniteTransition(label = "sparkle")
+    val twinkle by loop.animateFloat(
+        0f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(2600, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "twinkle",
+    )
+    val tints = remember {
+        listOf(
+            com.cineverse.app.core.ui.GeminiColors[0], com.cineverse.app.core.design.Palette.Gold,
+            com.cineverse.app.core.ui.GeminiColors[1], com.cineverse.app.core.ui.GeminiColors[2],
+        )
+    }
+    androidx.compose.foundation.Canvas(modifier) {
+        val center = this.center
+        val ring = size.minDimension / 2
+        fun star(at: androidx.compose.ui.geometry.Offset, radius: Float, color: androidx.compose.ui.graphics.Color, alpha: Float, turn: Float) {
+            if (alpha <= 0.01f || radius <= 0.1f) return
+            val path = androidx.compose.ui.graphics.Path()
+            for (i in 0 until 8) {
+                val r = if (i % 2 == 0) radius else radius * 0.32f
+                val angle = Math.toRadians((turn + i * 45f).toDouble())
+                val x = at.x + (r * kotlin.math.cos(angle)).toFloat()
+                val y = at.y + (r * kotlin.math.sin(angle)).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            drawPath(path, color.copy(alpha = alpha))
+        }
+        // The burst: ten stars thrown outward, growing then fading.
+        val t = burst.value
+        if (t in 0.001f..0.999f) {
+            for (i in 0 until 10) {
+                val angle = Math.toRadians((i * 36f + 12f * (i % 3)).toDouble() - 90.0)
+                val distance = ring + (6.dp.toPx() + (i % 2) * 5.dp.toPx()) * t + 2.dp.toPx()
+                val at = androidx.compose.ui.geometry.Offset(
+                    center.x + (distance * kotlin.math.cos(angle)).toFloat(),
+                    center.y + (distance * kotlin.math.sin(angle)).toFloat(),
+                )
+                val grow = kotlin.math.sin(Math.PI * t).toFloat()
+                star(at, (3.2f + (i % 3)).dp.toPx() * grow, tints[i % tints.size], 1f - t * t, t * 90f)
+            }
+        }
+        // Afterwards three keep twinkling, each in its own beat.
+        if (t >= 0.6f) {
+            val settle = ((t - 0.6f) / 0.4f).coerceIn(0f, 1f)
+            for (i in 0 until 3) {
+                val phase = (twinkle + i / 3f) % 1f
+                val pulse = if (reduced) 0.8f else kotlin.math.sin(Math.PI * phase).toFloat()
+                val angle = Math.toRadians((-60.0 + i * 125.0))
+                val distance = ring + 7.dp.toPx()
+                val at = androidx.compose.ui.geometry.Offset(
+                    center.x + (distance * kotlin.math.cos(angle)).toFloat(),
+                    center.y + (distance * kotlin.math.sin(angle)).toFloat(),
+                )
+                star(at, 4.4.dp.toPx() * pulse, tints[(i + 1) % tints.size], 0.9f * pulse * settle, phase * 45f)
             }
         }
     }
@@ -1282,6 +1390,106 @@ fun EndingCard(series: Boolean, unlocked: Boolean, modifier: Modifier = Modifier
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.text3,
             )
+        }
+    }
+}
+
+/**
+ * "Did you know?": three behind-the-scenes facts from Gemini, kept back
+ * until the title is watched - a padlock and a shake before then, like the
+ * ending. Once asked for they unfold one after another, each turning in
+ * like a card, and are kept so the next visit shows them at once.
+ */
+@Composable
+fun TriviaCard(
+    series: Boolean,
+    unlocked: Boolean,
+    state: TriviaState,
+    onLoad: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val shake = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val loading = state is TriviaState.Loading
+    Column(
+        modifier
+            .fillMaxWidth()
+            .graphicsLayer { translationX = shake.value }
+            .geminiGlow(unlocked && state !is TriviaState.Failed, corner = 18.dp, width = 1.2.dp, pulse = loading)
+            .clip(CvShape.Large)
+            .background(colors.text.copy(alpha = if (unlocked) 0.05f else 0.03f))
+            .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 380f))
+            .clickableNoRipple {
+                when {
+                    !unlocked -> {
+                        haptics?.play(com.cineverse.app.core.design.Haptic.Warning)
+                        scope.launch {
+                            for (x in listOf(14f, -12f, 9f, -6f, 3f, 0f)) shake.animateTo(x, androidx.compose.animation.core.tween(45))
+                        }
+                    }
+                    state is TriviaState.Idle || state is TriviaState.Failed -> {
+                        haptics?.play(com.cineverse.app.core.design.Haptic.Tap)
+                        onLoad()
+                    }
+                    else -> Unit
+                }
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (unlocked) androidx.compose.material.icons.Icons.Rounded.Lightbulb else androidx.compose.material.icons.Icons.Rounded.Lock,
+                null,
+                tint = if (unlocked) com.cineverse.app.core.design.Palette.Gold else colors.text3,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Did you know?",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (unlocked) colors.text else colors.text2,
+                )
+                Text(
+                    when {
+                        !unlocked && series -> "Three facts, once you've finished the series"
+                        !unlocked -> "Three facts, once you've marked it watched"
+                        state is TriviaState.Loading -> "Gemini is digging through the archives…"
+                        state is TriviaState.Failed -> "Couldn't get them just now. Tap to try again"
+                        state is TriviaState.Ready -> "Behind the scenes, spoiler-free"
+                        else -> "Three behind-the-scenes facts, spoiler-free"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.text3,
+                )
+            }
+        }
+        if (state is TriviaState.Ready && unlocked) {
+            Spacer(Modifier.height(12.dp))
+            state.facts.forEachIndexed { index, fact ->
+                val turn = com.cineverse.app.core.ui.rememberArrival(1f, delayMillis = 140 + index * 220, durationMillis = 560)
+                Row(
+                    Modifier
+                        .padding(top = if (index == 0) 0.dp else 10.dp)
+                        .graphicsLayer {
+                            // Each fact turns in about its top edge, like a card laid down.
+                            rotationX = (1f - turn) * -70f
+                            alpha = turn
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                            cameraDistance = 14f * density
+                        },
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        "${index + 1}",
+                        style = MaterialTheme.typography.titleLarge.copy(brush = com.cineverse.app.core.ui.geminiBrushStatic),
+                        modifier = Modifier.width(26.dp),
+                    )
+                    Text(fact, style = MaterialTheme.typography.bodyMedium, color = colors.text, modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -79,6 +80,7 @@ fun AskPane(
     library: Library,
     onOpen: (MediaItem) -> Unit,
     onDismiss: () -> Unit,
+    onPerson: (Int) -> Unit = {},
 ) {
     AnimatedContent(
         ask,
@@ -90,6 +92,8 @@ fun AskPane(
             is AskUi.Thinking -> Thinking(current.heard)
             is AskUi.Results -> Results(current, library, onOpen, onDismiss)
             is AskUi.Did -> Did(current, onOpen, onDismiss)
+            is AskUi.Found -> Found(current, onPerson, onOpen, onDismiss)
+            is AskUi.Answered -> Answered(current, onDismiss)
         }
     }
 }
@@ -304,6 +308,215 @@ private fun Did(result: AskUi.Did, onOpen: (MediaItem) -> Unit, onDismiss: () ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (item != null) CvButton("Open", { onOpen(item) })
                 CvButton("Search titles", onDismiss, primary = false)
+            }
+        }
+    }
+}
+
+/**
+ * "Who's that?": the person Gemini thinks you mean, large, with the line that
+ * says why, the things they are known for, and the other people it might
+ * have been underneath.
+ */
+@Composable
+private fun Found(
+    result: AskUi.Found,
+    onPerson: (Int) -> Unit,
+    onOpen: (MediaItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    val best = result.people.first()
+    LaunchedEffect(result.heard) { haptics?.play(Haptic.Success) }
+    // What they are actually known for: no talk shows, news or reality, no
+    // playing themselves, no single guest episode - and the title the
+    // description named comes first.
+    val known = androidx.compose.runtime.remember(best.id, result.heard) {
+        val heard = result.heard.lowercase()
+        (best.asCast + best.asCrew)
+            .filter { credit ->
+                val item = credit.item
+                item.hasArt &&
+                    item.genreIds.none { it in setOf(10763, 10764, 10767) } &&
+                    !Regex("""\b(self|himself|herself|themselves)\b""", RegexOption.IGNORE_CASE).containsMatchIn(credit.role) &&
+                    (credit.episodeCount == 0 || credit.episodeCount >= 3)
+            }
+            .map { it.item }
+            .distinctBy { it.key }
+            .sortedWith(
+                compareByDescending<MediaItem> { it.title.length > 2 && heard.contains(it.title.lowercase()) }
+                    .thenByDescending { it.voteCount }
+            )
+            .take(10)
+    }
+    androidx.compose.foundation.lazy.LazyColumn(
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = BottomBarSpace),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item(key = "best") {
+            val shown = rememberArrival(1f, durationMillis = 560)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { alpha = shown; translationY = (1f - shown) * 16f }
+                    .geminiGlow()
+                    .clip(CvShape.Large)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Palette.Purple.copy(alpha = 0.14f), Palette.Red.copy(alpha = 0.07f), colors.text.copy(alpha = 0.03f))
+                        )
+                    )
+                    .border(1.dp, colors.text.copy(alpha = 0.07f), CvShape.Large)
+                    .clickableNoRipple { haptics?.play(Haptic.Tap); onPerson(best.id) }
+                    .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.Purple2, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Who's that?", style = MaterialTheme.typography.labelLarge, color = colors.text2, modifier = Modifier.weight(1f))
+                    Text(
+                        "Search titles",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                        modifier = Modifier
+                            .clip(CvShape.Pill)
+                            .clickableNoRipple(onDismiss)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The face lands with a small settle, ringed in Gemini's colours.
+                    val face = rememberArrival(1f, delayMillis = 120, durationMillis = 620)
+                    Box(
+                        Modifier
+                            .size(86.dp)
+                            .graphicsLayer { scaleX = 0.82f + 0.18f * face; scaleY = scaleX; alpha = face }
+                            .border(2.dp, com.cineverse.app.core.ui.geminiBrushStatic, androidx.compose.foundation.shape.CircleShape)
+                            .padding(4.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(colors.surface2),
+                    ) {
+                        CvImage(Img.profile(best.profilePath), best.name, Modifier.fillMaxSize())
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(best.name, style = MaterialTheme.typography.headlineSmall, color = colors.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (best.knownFor.isNotBlank()) {
+                            Text(best.knownFor, style = MaterialTheme.typography.labelMedium, color = colors.text3)
+                        }
+                    }
+                }
+                result.why?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Open their page ›", style = MaterialTheme.typography.labelLarge, color = colors.text2)
+            }
+        }
+        if (known.isNotEmpty()) {
+            item(key = "known") {
+                Column {
+                    Text("KNOWN FOR", style = com.cineverse.app.core.design.KickerStyle, color = colors.text3)
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        rowItemsIndexed(known, key = { _, item -> item.key }) { index, item ->
+                            val shown = rememberArrival(1f, delayMillis = 200 + index * 45, durationMillis = 480)
+                            Box(Modifier.graphicsLayer { alpha = shown; translationX = (1f - shown) * 24f }) {
+                                PosterCard(item = item, onOpen = onOpen, width = 104.dp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (result.people.size > 1) {
+            item(key = "others") {
+                Column {
+                    Text("OR PERHAPS", style = com.cineverse.app.core.design.KickerStyle, color = colors.text3)
+                    Spacer(Modifier.height(8.dp))
+                    for (other in result.people.drop(1)) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(CvShape.Medium)
+                                .clickableNoRipple { haptics?.play(Haptic.Tap); onPerson(other.id) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.surface2)) {
+                                CvImage(Img.profile(other.profilePath), other.name, Modifier.fillMaxSize())
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(other.name, style = MaterialTheme.typography.titleSmall, color = colors.text)
+                                if (other.knownFor.isNotBlank()) Text(other.knownFor, style = MaterialTheme.typography.labelSmall, color = colors.text3)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A question, answered word by word, in Gemini's light while it writes. */
+@Composable
+private fun Answered(result: AskUi.Answered, onDismiss: () -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    LaunchedEffect(result.writing) { if (!result.writing) haptics?.play(Haptic.Land) }
+    androidx.compose.foundation.lazy.LazyColumn(
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = BottomBarSpace),
+    ) {
+        item(key = "answer") {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .geminiGlow(pulse = result.writing)
+                    .clip(CvShape.Large)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Palette.Purple.copy(alpha = 0.12f), colors.text.copy(alpha = 0.03f))
+                        )
+                    )
+                    .border(1.dp, colors.text.copy(alpha = 0.07f), CvShape.Large)
+                    .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.Purple2, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (result.writing) "Gemini is writing…" else "Answered by Gemini",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.text2,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "Search titles",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text3,
+                        modifier = Modifier
+                            .clip(CvShape.Pill)
+                            .clickableNoRipple(onDismiss)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "“${result.heard}”",
+                    style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic),
+                    color = colors.text2,
+                )
+                Spacer(Modifier.height(12.dp))
+                com.cineverse.app.core.ui.TypewriterText(
+                    result.text,
+                    writing = result.writing,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.text,
+                )
             }
         }
     }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,6 +45,8 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.toRoute
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.graphicsLayer
+import com.cineverse.app.core.ui.LocalPinnedBarLift
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.AppContainer
 import com.cineverse.app.core.design.CvTheme
@@ -111,6 +114,14 @@ private inline fun <reified T : Any> NavGraphBuilder.cvComposable(
     }
 }
 
+private fun androidx.navigation.NavDestination.isTab(): Boolean =
+    hierarchy.any { node -> Tab.entries.any { node.hasRoute(it.route::class) } }
+
+/** Pages that are the whole screen, with or without a pinned bar. */
+private fun androidx.navigation.NavDestination.isFullScreen(): Boolean =
+    hasRoute(Route.Trailer::class) || hasRoute(Route.Auth::class) ||
+        hasRoute(Route.Search::class) || hasRoute(Route.VoiceSearch::class)
+
 @Composable
 fun CineVerseNav(
     app: AppContainer,
@@ -148,9 +159,24 @@ fun CineVerseNav(
         app.messages.collectLatest { message -> snackbars.showSnackbar(message) }
     }
 
+    // The tab whose stack the page on screen sits in. Recorded here, where a
+    // tab is entered, rather than read off the screen: switching to a tab
+    // whose saved stack ends on a pushed page never shows the tab itself.
+    var hostTab by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(
+            when (settings.startTab) {
+                "discover" -> Tab.Discover
+                "list" -> Tab.MyList
+                "stats" -> Tab.Stats
+                else -> Tab.Home
+            }
+        )
+    }
+
     // Switching tab, the one way it is ever done: the bar and a link that
     // names a tab both come through here.
     fun goToTab(tab: Tab) {
+        hostTab = tab
         navController.navigate(tab.route) {
             popUpTo(Route.Home) { saveState = true }
             launchSingleTop = true
@@ -167,7 +193,15 @@ fun CineVerseNav(
     LaunchedEffect(deepLink) {
         val route = deepLink ?: return@LaunchedEffect
         val tab = Tab.entries.firstOrNull { it.route == route }
-        if (tab != null) goToTab(tab) else navController.navigate(route) { launchSingleTop = true }
+        when {
+            tab == null -> navController.navigate(route) { launchSingleTop = true }
+            // Already inside that tab, on a page pushed over it: back to the
+            // tab's own front page. Switching would restore the stack it is
+            // already in and land on the very page the link came from.
+            navController.currentDestination?.isTab() == false && hostTab == tab &&
+                navController.popBackStack(tab.route, inclusive = false) -> Unit
+            else -> goToTab(tab)
+        }
         onDeepLinkHandled()
     }
 
@@ -191,6 +225,14 @@ fun CineVerseNav(
     val currentTab = Tab.entries.firstOrNull { tab ->
         backStack?.destination?.hierarchy?.any { node -> node.hasRoute(tab.route::class) } == true
     }
+
+    // With the bar pinned it stays on pushed pages too, showing the tab they
+    // were opened from; tapping that tab again comes back to its front page.
+    LaunchedEffect(currentTab) { currentTab?.let { hostTab = it } }
+    val barTab = currentTab
+        ?: hostTab.takeIf { settings.pinNavBar && backStack?.destination?.isFullScreen() == false }
+    androidx.compose.runtime.SideEffect { bars.pinned = settings.pinNavBar }
+    var barLift by remember { mutableStateOf(0.dp) }
 
     // Every arrival starts with the bar showing. Scrolling a pushed page (Your
     // Year, a title) tucks it away, and without this you came back to a tab
@@ -222,9 +264,9 @@ fun CineVerseNav(
             }
         },
         bottomBar = {
-            if (currentTab != null) {
+            if (barTab != null) {
                 CvNavigationBar(
-                    current = currentTab,
+                    current = barTab,
                     bars = bars,
                     // Titles saved and not yet watched: the one number worth a tab.
                     savedCount = savedWaiting,
@@ -232,12 +274,18 @@ fun CineVerseNav(
                     onAcknowledgeSaved = { acknowledgedSaved = it },
                     onSelect = { tab ->
                         bars.show()
-                        goToTab(tab)
+                        // The tab this page sits in: back to its front page.
+                        val home = currentTab == null && tab == barTab && navController.popBackStack(tab.route, inclusive = false)
+                        if (!home) goToTab(tab)
                     },
                 )
             }
         },
     ) { padding ->
+        // Remembered rather than read live, so a page does not jump when the
+        // bar steps aside for a trailer.
+        val bottom = padding.calculateBottomPadding()
+        androidx.compose.runtime.SideEffect { if (barTab != null && bottom > 0.dp) barLift = bottom }
         val open: (MediaItem) -> Unit = { item ->
             navController.navigate(Route.Detail(item.id, item.type.wire))
         }
@@ -247,7 +295,10 @@ fun CineVerseNav(
         // different destinations, and a scope that only exists inside one of
         // them can never match them up.
         SharedTransitionLayout {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides this,
+            LocalPinnedBarLift provides if (settings.pinNavBar) barLift else 0.dp,
+        ) {
         NavHost(
             navController = navController,
             // The tab the user chose, not always Home. This read Route.Home
@@ -270,8 +321,22 @@ fun CineVerseNav(
             popExitTransition = { popExit() },
         ) {
             cvComposable<Route.Home> {
-                // Each front page keeps its own scroll and filters while you
-                // switch between them; the switch itself is a quick crossfade.
+                // "Ask CineVerse" floats over Home, folding to its spark while
+                // the page is scrolled down and opening out on the way back up.
+                var askExpanded by remember { mutableStateOf(true) }
+                var tonight by remember { mutableStateOf(false) }
+                val askScroll = remember {
+                    object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+                        override fun onPreScroll(
+                            available: androidx.compose.ui.geometry.Offset,
+                            source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+                        ): androidx.compose.ui.geometry.Offset {
+                            if (available.y < -6f) askExpanded = false else if (available.y > 6f) askExpanded = true
+                            return androidx.compose.ui.geometry.Offset.Zero
+                        }
+                    }
+                }
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().nestedScroll(askScroll)) {
                 androidx.compose.animation.Crossfade(homeSection, label = "frontPage") { section ->
                     when (section) {
                         1, 2 -> {
@@ -298,6 +363,29 @@ fun CineVerseNav(
                             onScrolledPastHero = { homeScrolled = it },
                         )
                     }
+                }
+                if (settings.geminiOn && homeSection == 0) {
+                    com.cineverse.app.feature.home.AskCineVerseFab(
+                        expanded = askExpanded,
+                        onText = { navController.navigate(Route.Search) { launchSingleTop = true } },
+                        onVoice = { navController.navigate(Route.VoiceSearch) { launchSingleTop = true } },
+                        onTonight = { tonight = true },
+                        modifier = Modifier
+                            .align(androidx.compose.ui.Alignment.BottomEnd)
+                            .padding(end = 18.dp, bottom = padding.calculateBottomPadding() + 16.dp)
+                            // Rides down with the bar when it tucks away.
+                            .graphicsLayer { translationY = bars.hidden * (padding.calculateBottomPadding().toPx() - 16.dp.toPx()).coerceAtLeast(0f) },
+                    )
+                }
+                }
+                if (tonight) {
+                    val home = cvViewModel("home") { HomeViewModel(app) }
+                    com.cineverse.app.feature.home.TonightSheet(
+                        pick = home::pickTonight,
+                        onOpen = open,
+                        onStart = home::startWatching,
+                        onDismiss = { tonight = false },
+                    )
                 }
             }
 

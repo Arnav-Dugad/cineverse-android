@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -42,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +58,7 @@ import com.cineverse.app.core.design.Haptic
 import com.cineverse.app.core.design.LocalHaptics
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.CvSheet
+import com.cineverse.app.core.ui.TypewriterText
 import com.cineverse.app.core.ui.GeminiColors
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.geminiGlow
@@ -75,18 +78,29 @@ fun AskTitleSheet(
     suggestions: List<String>,
     turns: List<ChatTurn>,
     onAsk: (String) -> Unit,
+    onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     var draft by remember { mutableStateOf("") }
     val list = rememberLazyListState()
-    LaunchedEffect(turns.size, turns.lastOrNull()?.answer) {
-        if (turns.isNotEmpty()) list.animateScrollToItem(turns.lastIndex)
+    // Follow the answer down as it is written, until you scroll yourself.
+    var follow by remember { mutableStateOf(true) }
+    LaunchedEffect(list) {
+        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) follow = false }
     }
+    LaunchedEffect(turns.size) {
+        follow = true
+        if (turns.isNotEmpty()) list.animateScrollToItem(turns.lastIndex, END)
+        snapshotFlow { list.canScrollForward }.collect { more ->
+            if (more && follow && turns.isNotEmpty()) list.scrollToItem(turns.lastIndex, END)
+        }
+    }
+    val busy = turns.lastOrNull()?.let { it.answer == null || it.writing } == true
     fun send(text: String) {
         val question = text.trim()
-        if (question.isEmpty() || turns.lastOrNull()?.answer == null && turns.isNotEmpty()) return
+        if (question.isEmpty() || busy) return
         haptics?.play(Haptic.Tap)
         onAsk(question)
         draft = ""
@@ -96,7 +110,27 @@ fun AskTitleSheet(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.AutoAwesome, null, tint = GeminiColors[1], modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Ask about $title", style = MaterialTheme.typography.titleLarge, color = colors.text, maxLines = 1)
+            Text(
+                "Ask about $title",
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.text,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (turns.isNotEmpty() && !busy) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "New chat",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.text2,
+                    modifier = Modifier
+                        .clip(CvShape.Pill)
+                        .border(1.dp, colors.hairline, CvShape.Pill)
+                        .clickableNoRipple { haptics?.play(Haptic.Tap); onClear() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -126,7 +160,7 @@ fun AskTitleSheet(
                     )
                 }
             }
-            items(turns, key = { it.question + turns.indexOf(it) }) { turn ->
+            itemsIndexed(turns, key = { index, turn -> "$index:${turn.question}" }) { _, turn ->
                 Column(Modifier.fillMaxWidth()) {
                     // The question, on the right.
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
@@ -148,14 +182,15 @@ fun AskTitleSheet(
                         Thinking()
                     } else {
                         val arrive = rememberArrival(1f, 0, 420)
-                        Text(
+                        TypewriterText(
                             answer,
+                            writing = turn.writing,
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.text,
                             modifier = Modifier
                                 .graphicsLayer { alpha = arrive; translationY = (1f - arrive) * 10f }
                                 .widthIn(max = 320.dp)
-                                .geminiGlow(turn.byGemini, corner = 18.dp, width = 1.2.dp)
+                                .geminiGlow(turn.byGemini, corner = 18.dp, width = 1.2.dp, pulse = turn.writing)
                                 .clip(CvShape.Large)
                                 .background(colors.text.copy(alpha = 0.05f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -227,6 +262,9 @@ fun AskTitleSheet(
         Spacer(Modifier.height(6.dp))
     }
 }
+
+/** Far enough to land on the end of the last answer, however long it is. */
+private const val END = 100_000
 
 /** Three dots that breathe in Gemini's colours while an answer is written. */
 @Composable

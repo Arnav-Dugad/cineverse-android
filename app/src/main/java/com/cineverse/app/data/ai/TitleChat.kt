@@ -1,18 +1,53 @@
 package com.cineverse.app.data.ai
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
+import com.cineverse.app.core.net.Http
 import com.cineverse.app.data.model.ShowProgress
 import com.cineverse.app.data.model.TitleDetail
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /** One turn of a conversation about a title. */
 @Immutable
+@Serializable
 data class ChatTurn(
     val question: String,
     /** Null while it is being answered. */
     val answer: String? = null,
     /** True when Gemini wrote it, false for an answer read off the title's own facts. */
     val byGemini: Boolean = false,
+    /** True while the answer is still arriving. Never saved. */
+    @Transient val writing: Boolean = false,
 )
+
+/**
+ * Every title's conversation, kept on this device: open "Ask about it" on a
+ * title next week and what you asked last time is still there. The newest
+ * forty turns per title, for the hundred most recently asked-about titles.
+ */
+class ChatStore(context: Context) {
+    private val prefs = context.getSharedPreferences("title_chats", Context.MODE_PRIVATE)
+
+    fun load(key: String): List<ChatTurn> = runCatching {
+        prefs.getString(key, null)?.let { Http.json.decodeFromString<List<ChatTurn>>(it) }
+    }.getOrNull().orEmpty().filter { it.answer != null }
+
+    fun save(key: String, turns: List<ChatTurn>) {
+        val done = turns.filter { it.answer != null && !it.writing }.takeLast(40)
+        val editor = prefs.edit().putString(key, Http.json.encodeToString(done))
+        // The oldest conversations go once there are more than a hundred.
+        val order = (prefs.getString(ORDER, "").orEmpty().split(',').filter { it.isNotBlank() } - key) + key
+        order.dropLast(100).forEach { editor.remove(it) }
+        editor.putString(ORDER, order.takeLast(100).joinToString(",")).apply()
+    }
+
+    fun clear(key: String) = prefs.edit().remove(key).apply()
+
+    private companion object { const val ORDER = "_order" }
+}
 
 /** Where a viewer is in a title, which decides what may be said about it. */
 @Immutable
@@ -36,37 +71,51 @@ data class SpoilerLine(
  */
 class TitleChat(private val gemini: Gemini) {
 
-    suspend fun answer(
+    /**
+     * The answer as it is written: a turn with the words so far and
+     * `writing = true`, again and again, then the finished turn. With Gemini
+     * off or unreachable, a single finished turn from the title's own facts.
+     */
+    fun answer(
         detail: TitleDetail,
         line: SpoilerLine,
         history: List<ChatTurn>,
         question: String,
         /** "Explain the ending": a fuller answer, only ever asked by someone who has seen it. */
         ending: Boolean = false,
-    ): ChatTurn {
+        /** Who is asking: the viewer's brief and their own standing with this title. */
+        viewer: String = "",
+    ): Flow<ChatTurn> = flow {
         val prompt = buildString {
-            appendLine("You are CineVerse's film and TV expert, answering a fan's question about one title.")
+            appendLine("You are CineVerse's film and TV expert, talking with one particular fan about one title.")
+            appendLine("Speak to them as \"you\". Start with the answer itself: no greeting, never their name. Make it personal only")
+            appendLine("where it genuinely helps - one title they love that shares something real with this one - never forced.")
             if (ending) {
                 appendLine("The fan has watched all of it and asked you to explain the ending.")
                 appendLine("In at most 190 words and three short paragraphs of plain prose: what actually happens at the end,")
                 appendLine("what it means for the main characters and the story's themes, and any open question or popular reading.")
                 appendLine("Be concrete and accurate; if you are not sure of a detail, say so rather than inventing it. No headings.")
             } else {
-                appendLine("Answer in at most 90 words, warmly and specifically, in plain prose with no markdown headings.")
+                appendLine("Answer in at most 100 words, warmly and specifically, in plain prose with no markdown or headings.")
+                appendLine("If you are not sure of a fact, say so rather than inventing one.")
             }
             appendLine("SPOILER RULE (absolute): ${line.rule}")
             appendLine()
+            if (viewer.isNotBlank()) {
+                appendLine(viewer)
+                appendLine()
+            }
             appendLine("Title: ${detail.title} (${detail.releaseDate.take(4)}), ${if (detail.isSeries) "series" else "film"}")
             if (detail.genres.isNotEmpty()) appendLine("Genres: ${detail.genres.joinToString { it.name }}")
             if (detail.overview.isNotBlank()) appendLine("Premise: ${detail.overview}")
             detail.director?.let { appendLine("Director: ${it.name}") }
-            if (detail.cast.isNotEmpty()) appendLine("Cast: ${detail.cast.take(8).joinToString { p -> listOfNotNull(p.name, p.character?.takeIf { c -> c.isNotBlank() }?.let { c -> "as $c" }).joinToString(" ") }}")
+            if (detail.cast.isNotEmpty()) appendLine("Cast: ${detail.cast.take(10).joinToString { p -> listOfNotNull(p.name, p.character?.takeIf { c -> c.isNotBlank() }?.let { c -> "as $c" }).joinToString(" ") }}")
             if (detail.runtime > 0) appendLine("Runtime: ${detail.runtime} minutes")
             if (detail.isSeries) appendLine("Seasons: ${detail.numberOfSeasons}, episodes: ${detail.numberOfEpisodes}")
             if (history.isNotEmpty()) {
                 appendLine()
                 appendLine("Conversation so far:")
-                history.takeLast(6).forEach { turn ->
+                history.takeLast(8).forEach { turn ->
                     appendLine("Fan: ${turn.question}")
                     turn.answer?.let { appendLine("You: $it") }
                 }
@@ -75,18 +124,29 @@ class TitleChat(private val gemini: Gemini) {
             appendLine("Fan: $question")
             appendLine("You:")
         }
-        gemini.text(prompt, timeoutMs = if (ending) 30_000 else 20_000)?.let { return ChatTurn(question, it.trim(), byGemini = true) }
+        var last = ""
+        gemini.stream(prompt, timeoutMs = if (ending) 60_000 else 45_000).collect { text ->
+            last = text
+            emit(ChatTurn(question, text, byGemini = true, writing = true))
+        }
+        if (last.isNotBlank()) {
+            emit(ChatTurn(question, last.trim(), byGemini = true, writing = false))
+            return@flow
+        }
         if (ending) {
             // Without Gemini a series still has its finale's own synopsis; a
             // film's ending is written nowhere a title page can read.
             val finale = detail.lastEpisode?.takeIf { detail.isSeries && it.overview.isNotBlank() }
-            return ChatTurn(
-                question,
-                finale?.let { "Gemini is off, so here is the finale as the episode guide tells it - S${it.season} E${it.number}, \"${it.name}\": ${it.overview}" }
-                    ?: "Explaining an ending needs Gemini, which isn't working for CineVerse yet. Settings → Gemini status says why.",
+            emit(
+                ChatTurn(
+                    question,
+                    finale?.let { "Here is the finale as the episode guide tells it - S${it.season} E${it.number}, \"${it.name}\": ${it.overview}" }
+                        ?: "Explaining an ending needs Gemini, which didn't answer just now. Settings → Gemini status says why.",
+                )
             )
+            return@flow
         }
-        return ChatTurn(question, facts(detail, question) ?: OFF, byGemini = false)
+        emit(ChatTurn(question, facts(detail, question) ?: OFF, byGemini = false))
     }
 
     companion object {
@@ -156,7 +216,7 @@ class TitleChat(private val gemini: Gemini) {
             }
         }
 
-        const val OFF = "That one needs Gemini, which isn't switched on for CineVerse yet. I can tell you who made it, who's in it, how long it is, where to watch it and what's similar."
+        const val OFF = "That one needs Gemini, which didn't answer just now. I can tell you who made it, who's in it, how long it is, where to watch it and what's similar."
 
         /** Questions worth offering before anyone types, by where the viewer is. */
         fun suggestions(detail: TitleDetail, line: SpoilerLine): List<String> = buildList {

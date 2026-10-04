@@ -27,7 +27,7 @@ data class Pitch(
  * something real, and remembered for the session so a title is asked about
  * once.
  */
-class ForYou(private val gemini: Gemini) {
+class ForYou(private val gemini: Gemini, private val persona: Persona? = null) {
 
     private val cache = LruCache<String, Pitch>(80)
 
@@ -35,8 +35,11 @@ class ForYou(private val gemini: Gemini) {
         val key = "${detail.key}:${library.ratings.size}:${library.watched.size}"
         cache.get(key)?.let { return it }
         val taste = taste(library, exclude = detail.key) ?: return null
+        val brief = runCatching { persona?.brief() }.getOrNull().orEmpty()
         val prompt = """
             You are a friend who knows films and TV well, talking to someone about a title they are looking at.
+            Judge the fit from everything below - genres, people, decades and habits as well as ratings - and be precise:
+            90+ only for a title that hits several of their strongest tastes at once.
             What they have loved: ${taste.loved.joinToString("; ")}.
             ${if (taste.disliked.isNotEmpty()) "What they did not enjoy: ${taste.disliked.joinToString("; ")}." else ""}
             The title: ${detail.title} (${detail.releaseDate.take(4)}), ${if (detail.type.wire == "tv") "a series" else "a film"}.
@@ -48,7 +51,7 @@ class ForYou(private val gemini: Gemini) {
             "why" is two short sentences, under 42 words in all, speaking to them as "you". Name one or two of THEIR titles
             to explain the connection. If it is a poor fit, say honestly what might not work for them. No spoilers beyond
             the synopsis, no plot summary, no preamble, no quotation marks around titles.
-        """.trimIndent()
+        """.trimIndent().let { if (brief.isBlank()) it else "$brief\n\n$it" }
         val raw = gemini.json(prompt) ?: return null
         val pitch = runCatching {
             val obj = Http.json.parseToJsonElement(Gemini.extractJson(raw) ?: return null).jsonObject

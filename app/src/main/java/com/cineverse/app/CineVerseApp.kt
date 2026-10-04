@@ -181,13 +181,27 @@ class AppContainer(val context: Context) {
         com.cineverse.app.data.firebase.ContinuePrefsRepository(Firebase.firestore(context), auth, scope)
     }
 
-    val gemini by lazy { com.cineverse.app.data.ai.Gemini(context) }
+    val gemini by lazy { com.cineverse.app.data.ai.Gemini(context) { settings.settings.value.geminiOn } }
 
     val assistant by lazy { com.cineverse.app.data.ai.Assistant(this) }
 
-    val forYou by lazy { com.cineverse.app.data.ai.ForYou(gemini) }
+    val persona by lazy { com.cineverse.app.data.ai.Persona(this) }
+
+    val forYou by lazy { com.cineverse.app.data.ai.ForYou(gemini, persona) }
 
     val titleChat by lazy { com.cineverse.app.data.ai.TitleChat(gemini) }
+
+    /** The Diary's line for each month. */
+    val monthBlurb by lazy { com.cineverse.app.data.ai.MonthBlurb(context, gemini) }
+
+    /** The one-line hook on a new-episode alert. */
+    val episodeHook by lazy { com.cineverse.app.data.ai.EpisodeHook(this) }
+
+    /** Three facts per title, once it has been watched. */
+    val trivia by lazy { com.cineverse.app.data.ai.Trivia(context, gemini) }
+
+    /** Each title's "Ask about it" conversation, kept across visits. */
+    val chatStore by lazy { com.cineverse.app.data.ai.ChatStore(context) }
 
     val tonight by lazy { com.cineverse.app.data.ai.Tonight(this) }
 

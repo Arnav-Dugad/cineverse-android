@@ -66,7 +66,11 @@ abstract class CineVerseFunctions : AppFunctionService() {
 
     private val container get() = (applicationContext as CineVerseApp).container
 
+    /** "Gemini features" off in Settings covers the assistant reaching in, too. */
+    private val allowed get() = container.settings.settings.value.geminiOn
+
     private suspend fun act(block: suspend () -> Outcome): ActionResult = withContext(Dispatchers.Default) {
+        if (!allowed) return@withContext ActionResult(false, "Gemini features are turned off in CineVerse settings", "")
         container.assistant.ready()
         val outcome = runCatching { block() }.getOrElse { Outcome(false, "CineVerse couldn't do that just now") }
         if (outcome.ok) runCatching { UpNextWidget().updateAllSafe(applicationContext) }
@@ -141,6 +145,7 @@ abstract class CineVerseFunctions : AppFunctionService() {
      */
     @AppFunction(isDescribedByKDoc = true)
     suspend fun getContinueWatching(): List<NextEpisode> = withContext(Dispatchers.Default) {
+        if (!allowed) return@withContext emptyList()
         container.assistant.ready()
         container.episodes.progress.value.values
             .asSequence()
@@ -161,6 +166,7 @@ abstract class CineVerseFunctions : AppFunctionService() {
      */
     @AppFunction(isDescribedByKDoc = true)
     suspend fun findSomethingToWatch(request: String): List<Suggestion> = withContext(Dispatchers.Default) {
+        if (!allowed) return@withContext emptyList()
         val query = Understanding.discover(request)
         runCatching { container.assistant.discover(query) }.getOrDefault(emptyList())
             .take(10)

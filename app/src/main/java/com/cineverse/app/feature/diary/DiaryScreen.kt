@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Replay
@@ -73,7 +74,12 @@ import com.cineverse.app.data.model.MediaItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
 import java.time.Instant
@@ -92,6 +98,8 @@ data class DiaryState(
     val streak: Streak = Streak(0, 0, false, null),
     val onThisDay: List<DiaryEntry> = emptyList(),
     val loaded: Boolean = false,
+    /** Gemini's line for the month shown, once written. */
+    val blurb: String? = null,
 ) {
     val monthDays: List<DiaryDay> get() = days.values.filter { YearMonth.from(it.date) == month }
     val monthMinutes: Int get() = monthDays.sumOf { it.minutes }
@@ -100,13 +108,18 @@ data class DiaryState(
     val busiest: Int get() = monthDays.maxOfOrNull { it.minutes } ?: 0
 }
 
-class DiaryViewModel(app: AppContainer) : ViewModel() {
+class DiaryViewModel(private val app: AppContainer) : ViewModel() {
     private val month = MutableStateFlow(YearMonth.now())
     private val selected = MutableStateFlow(LocalDate.now())
+    private val blurbs = MutableStateFlow<Map<String, String>>(emptyMap())
 
-    val state: StateFlow<DiaryState> = combine(app.library.library, app.episodes.progress, month, selected) { lib, shows, m, s ->
+    val state: StateFlow<DiaryState> = combine(
+        combine(app.library.library, app.episodes.progress, ::Pair),
+        month, selected, blurbs, app.settings.settings,
+    ) { (lib, shows), m, s, written, settings ->
         val entries = Diary.entries(lib, shows)
         val days = Diary.days(entries)
+        val inMonth = days.values.filter { YearMonth.from(it.date) == m }.flatMap { it.entries }
         DiaryState(
             month = m,
             selected = s,
@@ -114,8 +127,25 @@ class DiaryViewModel(app: AppContainer) : ViewModel() {
             streak = Diary.streak(days.keys),
             onThisDay = Diary.onThisDay(entries),
             loaded = lib.loaded,
+            blurb = if (settings.geminiOn) written["$m:${inMonth.size}"] ?: app.monthBlurb.cached(m, inMonth) else null,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DiaryState())
+
+    init {
+        // The month's line, written once its viewings are known, and again if
+        // the month gains one. A month turned past quickly is not asked about.
+        viewModelScope.launch {
+            state
+                .filter { it.loaded && it.blurb == null && app.settings.settings.value.geminiOn }
+                .map { it.month to it.monthDays.flatMap { day -> day.entries } }
+                .distinctUntilChanged { a, b -> a.first == b.first && a.second.size == b.second.size }
+                .collectLatest { (m, entries) ->
+                    kotlinx.coroutines.delay(400)
+                    val line = runCatching { app.monthBlurb.blurb(m, entries) }.getOrNull() ?: return@collectLatest
+                    blurbs.value = blurbs.value + ("$m:${entries.size}" to line)
+                }
+        }
+    }
 
     fun move(by: Long) {
         val next = month.value.plusMonths(by)
@@ -250,6 +280,33 @@ private fun MonthHeader(state: DiaryState, onMove: (Long) -> Unit) {
             style = MaterialTheme.typography.labelMedium,
             color = colors.text3,
         )
+        // Gemini's line for the month, arriving with a soft rise when written.
+        AnimatedContent(
+            state.blurb,
+            transitionSpec = { (fadeIn(tween(420)) + androidx.compose.animation.slideInVertically(tween(420)) { it / 2 }) togetherWith fadeOut(tween(160)) },
+            label = "monthBlurb",
+        ) { blurb ->
+            if (blurb != null) {
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Rounded.AutoAwesome,
+                        null,
+                        tint = com.cineverse.app.core.ui.GeminiColors[1],
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        blurb,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            brush = com.cineverse.app.core.ui.geminiBrushStatic,
+                        ),
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(0.dp))
+            }
+        }
         Spacer(Modifier.height(12.dp))
     }
 }

@@ -141,6 +141,9 @@ fun TonedLogo(
         contentScale = ContentScale.Fit,
         background = Color.Transparent,
         colorFilter = filterFor(tone, dark),
+        // Without this a short logo floated in the middle of its box, which
+        // left "More like" a thumb's width away from the name it introduces.
+        alignment = align,
     )
 }
 

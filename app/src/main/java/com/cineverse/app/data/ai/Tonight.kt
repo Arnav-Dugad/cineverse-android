@@ -88,7 +88,12 @@ class Tonight(private val app: AppContainer) {
         // Gemini chooses among the best few, if it is there.
         val loved = library.ratings.filterValues { it >= 8 }.keys
             .mapNotNull { library.watched[it]?.title ?: library.saved[it]?.title }.take(10)
+        val viewer = runCatching { app.persona.brief() }.getOrDefault("")
         val prompt = buildString {
+            if (viewer.isNotBlank()) {
+                appendLine(viewer)
+                appendLine()
+            }
             appendLine("Pick ONE film for someone tonight. They want ${mood.line}" + (time.minutes?.let { ", and have under $it minutes." } ?: "."))
             if (loved.isNotEmpty()) appendLine("Films they loved: ${loved.joinToString("; ")}.")
             appendLine("Choose from their own watchlist:")

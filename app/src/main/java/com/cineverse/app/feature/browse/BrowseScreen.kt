@@ -237,6 +237,7 @@ fun BrowseScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = com.cineverse.app.core.ui.LocalPinnedBarLift.current)
                 .padding(20.dp),
         ) {
             Box(

@@ -72,6 +72,8 @@ fun CvImage(
      */
     background: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
     colorFilter: androidx.compose.ui.graphics.ColorFilter? = null,
+    /** Where a fitted image sits when it is narrower or shorter than its box. */
+    alignment: androidx.compose.ui.Alignment = androidx.compose.ui.Alignment.Center,
 ) {
     val colors = CvTheme.colors
     val plate = if (background == androidx.compose.ui.graphics.Color.Unspecified) {
@@ -87,6 +89,7 @@ fun CvImage(
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 colorFilter = colorFilter,
+                alignment = alignment,
                 modifier = Modifier.fillMaxSize(),
             )
         }

@@ -36,6 +36,8 @@ fun Modifier.geminiGlow(
     on: Boolean = true,
     corner: Dp = 20.dp,
     width: Dp = 1.5.dp,
+    /** While Gemini is still writing: the bloom swells and breathes. */
+    pulse: Boolean = false,
 ): Modifier = if (!on) this else composed {
     val reduced = CvTheme.reducedMotion
     val loop = rememberInfiniteTransition(label = "geminiGlow")
@@ -44,6 +46,13 @@ fun Modifier.geminiGlow(
         infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Restart),
         label = "geminiAngle",
     )
+    val breath by loop.animateFloat(
+        0f, 1f,
+        infiniteRepeatable(tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "geminiBreath",
+    )
+    // Eases in and out of the pulse rather than snapping when writing ends.
+    val pulsing by androidx.compose.animation.core.animateFloatAsState(if (pulse && !reduced) 1f else 0f, tween(500), label = "geminiPulse")
     val turn = if (reduced) 45f else angle
     drawWithContent {
         drawContent()
@@ -52,7 +61,10 @@ fun Modifier.geminiGlow(
         // The colour stops turn, so the colours travel round the edge.
         val brush = rotatedSweep(turn, size.width, size.height)
         // The bloom: the same line, wider and fainter, twice, outside it.
-        for ((grow, alpha) in listOf(6f to 0.10f, 3f to 0.18f)) {
+        val swell = 1f + pulsing * (0.6f + 1.4f * breath)
+        for ((grow0, alpha0) in listOf(6f to 0.10f, 3f to 0.18f)) {
+            val grow = grow0 * swell
+            val alpha = (alpha0 * (1f + pulsing * breath * 1.2f)).coerceAtMost(0.5f)
             drawRoundRect(
                 brush = brush,
                 topLeft = Offset(-grow / 2, -grow / 2),

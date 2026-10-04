@@ -27,6 +27,10 @@ sealed interface Ask {
     /** "Mark the next Severance episode watched". */
     data class NextEpisode(override val spoken: String, val show: String) : Ask
     data class Navigate(override val spoken: String, val page: String) : Ask
+    /** "The guy from Severance with the beard": who someone is, from a description. */
+    data class Person(override val spoken: String, val name: String, val why: String?, val alternatives: List<String>) : Ask
+    /** A question that wants a written answer, not a list of titles. */
+    data class Answer(override val spoken: String, val question: String) : Ask
 }
 
 /** A discover search, in words, before ids are resolved. */
@@ -251,17 +255,32 @@ object Understanding {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
         if (words.size < 3) return false
         return Regex("""\b(something|anything|movies?|films?|shows?|series|like|with|from|starring|funny|scary|best|good|recommend|under|about|set in|on netflix|on prime|90s|80s|00s|for tonight|to watch)\b""", RegexOption.IGNORE_CASE)
-            .containsMatchIn(text)
+            .containsMatchIn(text) || isQuestion(text)
+    }
+
+    /** "Who's the guy from…", "why does…", "is it worth…": wants an answer, or a person. */
+    fun isQuestion(text: String): Boolean {
+        val t = text.trim().lowercase()
+        if (t.split(Regex("\\s+")).size < 3) return false
+        return t.endsWith("?") ||
+            Regex("""^(who|whos|who's|whose|why|how|explain|tell me|should i|is it worth|what's the|what is the|what happens|what order|when does|when did|when is|where is|which actor|which actress)\b""").containsMatchIn(t) ||
+            Regex("""\b(the (guy|man|woman|girl|lady|kid|actor|actress|one) (from|in|who|that|with)|that (actor|actress|guy|woman))\b""").containsMatchIn(t) ||
+            Regex("""^(is|are) .{2,60} worth\b""").containsMatchIn(t)
     }
 
     // ---------- Gemini ----------
 
-    fun prompt(utterance: String, today: LocalDate = LocalDate.now()): String = """
+    fun prompt(utterance: String, today: LocalDate = LocalDate.now(), viewer: String = ""): String =
+        (if (viewer.isBlank()) "" else "$viewer\n\nUse what you know about this viewer to fill in what they leave unsaid (\"something I'd like\", \"on my services\").\n\n") + """
         You are the voice and search assistant inside CineVerse, a film and TV tracking app.
         Today is $today. Turn the user's sentence into ONE JSON object, nothing else.
 
         Fields:
-        "action": one of "search", "discover", "open", "add", "remove", "watched", "rate", "trailer", "next_episode", "navigate".
+        "action": one of "search", "discover", "open", "add", "remove", "watched", "rate", "trailer", "next_episode", "navigate", "person", "answer".
+          - "person": they describe or ask about a real actor or director rather than naming them ("the guy from Severance with the beard",
+            "who played the Joker in The Dark Knight", "that actress from Fleabag who talks to the camera"). Identify them.
+          - "answer": a question that wants a written answer rather than titles (trivia, explanations, comparisons, viewing order,
+            "is The Bear worth watching", "why is Citizen Kane famous").
           - "discover": the user wants recommendations or a filtered list ("funny 90s movies with Tom Hanks", "something like Dark but shorter", "Korean thrillers on Netflix").
           - "search": they named something to look up.
           - "open": open a specific title. "add"/"remove": their watchlist. "watched": mark a title watched.
@@ -284,6 +303,10 @@ object Understanding {
         "like": a title the user compared to, or null.
         "keywords": up to 3 short theme words the genres cannot express ("time travel", "heist", "small town").
         "sort": "popularity.desc", "vote_average.desc" or "release".
+        "person": for "person", the full name as on TMDB - your single best identification.
+        "why": for "person", one short sentence connecting them to the description ("Adam Scott plays Mark Scout in Severance").
+        "alternatives": for "person", up to 2 other plausible names, or [].
+        "question": for "answer", the question as a clean sentence.
         "reply": one short friendly sentence describing what you understood, under 12 words.
 
         Sentence: "${utterance.replace("\"", "'")}"
@@ -314,6 +337,8 @@ object Understanding {
             "next_episode" -> Ask.NextEpisode(utterance, title ?: return null)
             "navigate" -> Ask.Navigate(utterance, str("page") ?: "home")
             "search" -> Ask.Search(utterance, str("query") ?: title ?: utterance)
+            "person" -> Ask.Person(utterance, str("person") ?: return null, str("why"), list("alternatives").take(2))
+            "answer" -> Ask.Answer(utterance, str("question") ?: utterance)
             else -> {
                 val type = when (str("type")) { "movie" -> MediaType.Movie; "tv" -> MediaType.Tv; else -> null }
                 Ask.Discover(

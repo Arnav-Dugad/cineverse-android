@@ -38,7 +38,8 @@ class Assistant(private val app: AppContainer) {
     suspend fun understand(text: String, natural: Boolean): Pair<Ask, String?> {
         Understanding.command(text)?.let { return it to null }
         if (natural) {
-            app.gemini.json(Understanding.prompt(text))?.let { raw ->
+            val viewer = runCatching { app.persona.brief() }.getOrDefault("")
+            app.gemini.json(Understanding.prompt(text, viewer = viewer))?.let { raw ->
                 Understanding.fromJson(text, raw)?.let { return it }
             }
         }
@@ -184,6 +185,43 @@ class Assistant(private val app: AppContainer) {
      * keywords, a streaming service - and "like X" starts from X's own
      * recommendations, filtered by whatever else was asked.
      */
+    /**
+     * "Who's that?": the people Gemini named, each found on TMDB with a face
+     * and what they are known for. The best guess leads; a name TMDB cannot
+     * find is dropped rather than shown as a blank.
+     */
+    suspend fun people(names: List<String>): List<com.cineverse.app.data.model.PersonDetail> = coroutineScope {
+        names.distinct().take(3).map { name ->
+            async {
+                val id = app.tmdb.findPerson(name) ?: return@async null
+                runCatching { app.tmdb.person(id) }.getOrNull()
+            }
+        }.mapNotNull { it.await() }.distinctBy { it.id }
+    }
+
+    /**
+     * A question, answered as it is written - personal where it helps, from
+     * the viewer's own brief. Empty when Gemini is off or does not answer.
+     */
+    fun answer(question: String): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        val viewer = runCatching { app.persona.brief() }.getOrDefault("")
+        val prompt = buildString {
+            appendLine("You are CineVerse's film and TV expert, answering one particular fan inside the app.")
+            appendLine("Answer in at most 120 words of warm, specific plain prose: no markdown, no headings, no lists of more than three items.")
+            appendLine("Start with the answer itself: no greeting, never their name. At most one personal touch, and only when it")
+            appendLine("genuinely illuminates the answer - a title they love that shares something real with it. Never force one.")
+            appendLine("Never spoil anything they have not seen. If you are not sure of a fact, say so rather than inventing one.")
+            if (viewer.isNotBlank()) {
+                appendLine()
+                appendLine(viewer)
+            }
+            appendLine()
+            appendLine("Question: $question")
+            appendLine("Answer:")
+        }
+        app.gemini.stream(prompt).collect { emit(it) }
+    }
+
     suspend fun discover(query: DiscoverQuery): List<MediaItem> = coroutineScope {
         val region = app.settings.settings.value.region
         val peopleIds = query.people.map { async { app.tmdb.findPerson(it) } }

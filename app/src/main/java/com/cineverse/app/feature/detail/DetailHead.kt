@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -116,7 +117,8 @@ fun DetailHead(
     onLists: () -> Unit,
     onProgress: () -> Unit,
     /** Ask Gemini about it, spoiler-safe. */
-    onAsk: () -> Unit = {},
+    /** Null with Gemini switched off: no pill at all. */
+    onAsk: (() -> Unit)? = null,
     /** Films only: start the "watching now" Live Update. Null hides it. */
     onWatchingNow: (() -> Unit)? = null,
     /** True while that Live Update is running for this film. */
@@ -136,43 +138,29 @@ fun DetailHead(
         // page read as one object rather than a picture with a card underneath
         // it.
         //
-        // The overlap is done by giving the poster a container shorter than
-        // itself and letting it overflow upward. An offset alone would move the
-        // poster and leave its full-height slot behind, so everything below it
-        // would sit 86dp lower than it looks — a gap exactly the size of the
-        // overlap, which is the shape of the bug this replaced.
+        // See [risingPoster]: the poster rises into the artwork and takes up
+        // only the room it shows below it, so whatever follows sits right
+        // under its bottom edge.
         Box(
-            Modifier.height(POSTER_HEIGHT - POSTER_OVERLAP),
-            contentAlignment = Alignment.TopCenter,
+            Modifier
+                .risingPoster()
+                .sharedPoster(detail.key)
+                .clip(CvShape.Large)
+                .border(1.dp, colors.text.copy(alpha = 0.16f), CvShape.Large)
         ) {
-            Box(
-                Modifier
-                    .offset(y = -POSTER_OVERLAP)
-                    // REQUIRED, not plain size. A Box hands its own maximum
-                    // height down as a constraint, so `.height(258.dp)` inside a
-                    // 154dp parent is quietly coerced to 154 and the poster
-                    // comes out with its bottom third missing. `requiredHeight`
-                    // is the one that means what it says.
-                    .requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT)
-                    .sharedPoster(detail.key)
-                    .clip(CvShape.Large)
-                    .border(1.dp, colors.text.copy(alpha = 0.16f), CvShape.Large)
-            ) {
-                CvImage(
-                    Img.posterLarge(detail.posterPath),
-                    detail.title,
-                    Modifier.requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT),
-                )
-            }
+            CvImage(
+                Img.posterLarge(detail.posterPath),
+                detail.title,
+                Modifier.requiredSize(width = POSTER_WIDTH, height = POSTER_HEIGHT),
+            )
         }
-
-        Spacer(Modifier.height(2.dp))
 
         if (hideTitle) {
             // Nothing: the poster above already says what this is. The name is
             // still read out to accessibility services.
-            Spacer(Modifier.height(4.dp).semantics { heading(); contentDescription = detail.title })
+            Spacer(Modifier.height(8.dp).semantics { heading(); contentDescription = detail.title })
         } else if (detail.logoPath != null && showTitleLogo) {
+            Spacer(Modifier.height(18.dp))
             TonedLogo(
                 detail.logoPath,
                 detail.title,
@@ -180,6 +168,7 @@ fun DetailHead(
                 align = Alignment.Center,
             )
         } else {
+            Spacer(Modifier.height(16.dp))
             Text(
                 detail.title,
                 style = MaterialTheme.typography.headlineMedium,
@@ -334,9 +323,9 @@ fun DetailHead(
             )
         }
 
-        Spacer(Modifier.height(14.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeadPill(
+        if (onAsk != null || onWatchingNow != null) Spacer(Modifier.height(14.dp))
+        if (onAsk != null || onWatchingNow != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onAsk != null) HeadPill(
                 text = "Ask about it",
                 icon = Icons.Rounded.AutoAwesome,
                 gemini = true,
@@ -557,11 +546,30 @@ private fun ActionCircle(
     }
 }
 
-private val POSTER_WIDTH = 172.dp
-private val POSTER_HEIGHT = 258.dp
+internal val POSTER_WIDTH = 172.dp
+internal val POSTER_HEIGHT = 258.dp
 
-/** How far the poster reaches up into the artwork. */
-private val POSTER_OVERLAP = 104.dp
+/** How far the poster reaches up into the artwork, above its own slot. */
+private val POSTER_RISE = 156.dp
+
+/**
+ * The title page's poster: full size, drawn [POSTER_RISE] up into the
+ * artwork, while the slot it leaves in the page is only the part below that.
+ *
+ * Two earlier versions each left a gap under it. An offset moves the poster
+ * and leaves its full-height slot behind; a short Box around a
+ * `requiredSize` poster CENTRES the oversized poster in the Box, so half the
+ * overlap came back as empty space beneath it - the gap between the poster
+ * and the tagline once the title stopped filling it. Placing it by hand is
+ * the only version that means exactly what it says.
+ */
+internal fun Modifier.risingPoster(): Modifier = layout { measurable, _ ->
+    val poster = measurable.measure(
+        androidx.compose.ui.unit.Constraints.fixed(POSTER_WIDTH.roundToPx(), POSTER_HEIGHT.roundToPx())
+    )
+    val rise = POSTER_RISE.roundToPx()
+    layout(poster.width, poster.height - rise) { poster.place(0, -rise) }
+}
 
 private fun runtimeLabelFor(detail: TitleDetail): String? = when {
     detail.isSeries && detail.numberOfSeasons > 0 ->

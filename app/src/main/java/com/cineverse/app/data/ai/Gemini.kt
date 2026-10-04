@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.flowOn
 
 /**
  * Gemini, through Firebase AI Logic in the same Firebase project as the rest
@@ -21,7 +22,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * a refusal for half an hour instead of asking again on every keystroke, and
  * tries newer models first, settling on whichever one answers.
  */
-class Gemini(private val context: Context) {
+class Gemini(
+    private val context: Context,
+    /** The Settings switch: false means no request is ever made. */
+    private val enabled: () -> Boolean = { true },
+) {
 
     private val lock = Mutex()
     private var model: String? = null
@@ -64,7 +69,55 @@ class Gemini(private val context: Context) {
     /** A JSON object as text, or null. */
     suspend fun json(prompt: String, timeoutMs: Long = 12_000): String? = call(prompt, json = true, timeoutMs)
 
+    /**
+     * A written answer as it is written: each emission is the whole answer so
+     * far. Nothing is emitted when Gemini is off or unreachable, so a caller
+     * that collects nothing knows to fall back. A model that fails before its
+     * first words hands over to the next; one that fails part way stops there,
+     * since words already on screen should not be replaced.
+     */
+    fun stream(prompt: String, timeoutMs: Long = 45_000): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        if (!enabled() || System.currentTimeMillis() < unavailableUntil) return@flow
+        for (name in SMART) {
+            val sofar = StringBuilder()
+            val outcome = runCatching {
+                kotlinx.coroutines.withTimeout(timeoutMs) {
+                    model(name, json = false).generateContentStream(prompt).collect { chunk ->
+                        val piece = chunk.text ?: return@collect
+                        sofar.append(piece)
+                        emit(plain(sofar.toString()))
+                    }
+                }
+            }
+            if (outcome.isSuccess && sofar.isNotEmpty()) {
+                lock.withLock { model = name }
+                confirmed = true
+                return@flow
+            }
+            if (sofar.isNotEmpty()) return@flow
+            val error = outcome.exceptionOrNull()
+            if (error is kotlinx.coroutines.CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+            val message = error?.let { it.message ?: it.javaClass.simpleName }.orEmpty()
+            lastError = message
+            android.util.Log.w("CineVerseGemini", "$name stream failed: $message", error)
+            if (Off.any { message.contains(it, ignoreCase = true) }) {
+                unavailableUntil = System.currentTimeMillis() + (if (message.contains("config not found", true)) 3 else 30) * 60_000L
+                return@flow
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun model(name: String, json: Boolean) =
+        FirebaseAI.getInstance(Firebase.init(context), GenerativeBackend.googleAI()).generativeModel(
+            modelName = name,
+            generationConfig = generationConfig {
+                temperature = if (json) 0.2f else 0.7f
+                if (json) responseMimeType = "application/json"
+            },
+        )
+
     private suspend fun call(prompt: String, json: Boolean, timeoutMs: Long): String? {
+        if (!enabled()) return null
         if (System.currentTimeMillis() < unavailableUntil) {
             android.util.Log.i("CineVerseGemini", "skipped: unavailable for ${(unavailableUntil - System.currentTimeMillis()) / 1000}s more")
             return null
@@ -79,17 +132,7 @@ class Gemini(private val context: Context) {
         for (name in candidates) {
             val outcome = withTimeoutOrNull(timeoutMs) {
                 withContext(Dispatchers.IO) {
-                    runCatching {
-                        val ai = FirebaseAI.getInstance(Firebase.init(context), GenerativeBackend.googleAI())
-                        val generative = ai.generativeModel(
-                            modelName = name,
-                            generationConfig = generationConfig {
-                                temperature = if (json) 0.2f else 0.7f
-                                if (json) responseMimeType = "application/json"
-                            },
-                        )
-                        generative.generateContent(prompt).text
-                    }
+                    runCatching { model(name, json).generateContent(prompt).text }
                 }
             } ?: run {
                 android.util.Log.w("CineVerseGemini", "$name timed out after ${timeoutMs}ms")

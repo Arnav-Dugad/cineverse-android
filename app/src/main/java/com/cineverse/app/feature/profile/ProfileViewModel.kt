@@ -67,6 +67,11 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     suspend fun checkGemini(): Pair<Boolean, String> = app.gemini.check()
     val geminiConfirmed: Boolean get() = app.gemini.confirmed
 
+    fun setGeminiOn(value: Boolean) = viewModelScope.launch { app.settings.setGeminiOn(value) }
+    fun setPinNavBar(value: Boolean) = viewModelScope.launch { app.settings.setPinNavBar(value) }
+    fun setMyServices(value: Set<Int>) = viewModelScope.launch { app.settings.setMyServices(value) }
+    suspend fun streamingServices() = app.tmdb.streamingServices(app.settings.settings.value.region)
+
     fun setSpokenAnswers(value: Boolean) = viewModelScope.launch { app.settings.setSpokenAnswers(value) }
     fun setNotifyAiring(value: Boolean) = viewModelScope.launch { app.settings.setNotifyAiring(value) }
     fun setNotifySeasons(value: Boolean) = viewModelScope.launch { app.settings.setNotifySeasons(value) }
