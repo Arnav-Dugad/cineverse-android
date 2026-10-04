@@ -484,7 +484,7 @@ private fun Answered(
             haptics?.play(Haptic.Tap)
             scope.launch {
                 val found = resolve(result.text)
-                if (mention.person) found.person(mention)?.let { onPerson(it.id) } else found.title(mention)?.let(onOpen)
+                found.open(mention, onOpen, onPerson)
             }
         }
     }

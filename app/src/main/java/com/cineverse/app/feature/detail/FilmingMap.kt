@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.network.httpHeaders
 import com.cineverse.app.core.design.CvShape
 import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.Haptic
@@ -58,8 +59,9 @@ import kotlin.math.tan
 /**
  * "Where it was filmed": the places on a small map, framed to fit them all,
  * each a pin that drops in one after another, and their names underneath -
- * a tap on a name opens it in your maps app. Map tiles are CARTO's, drawn
- * from OpenStreetMap, dark or light with the theme.
+ * a tap on a name opens it in your maps app. The tiles are OpenStreetMap's
+ * own, asked for with the app's name as their policy requires, and turned
+ * dark on the dark theme by inverting their lightness (hues kept).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -84,7 +86,8 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
             val density = LocalDensity.current
             val width = constraints.maxWidth.toFloat()
             val height = constraints.maxHeight.toFloat()
-            val tile = with(density) { 256.dp.toPx() }
+            // A 256px tile drawn at 170dp: sharp, and its labels still legible.
+            val tile = with(density) { 170.dp.toPx() }
             val frame = remember(places, width, height) { frameFor(places, width, height, tile) }
 
             // The tiles that cover the frame.
@@ -93,14 +96,34 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
             val lastX = floor((frame.left + width) / tile).toInt()
             val firstY = floor(frame.top / tile).toInt().coerceAtLeast(0)
             val lastY = floor((frame.top + height) / tile).toInt().coerceAtMost(count - 1)
-            val style = if (dark) "dark_all" else "light_all"
+            val context = LocalContext.current
+            val night = remember(dark) {
+                if (!dark) null else androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                    androidx.compose.ui.graphics.ColorMatrix(
+                        floatArrayOf(
+                            -0.62f, -0.1f, -0.1f, 0f, 210f,
+                            -0.1f, -0.62f, -0.1f, 0f, 210f,
+                            -0.1f, -0.1f, -0.55f, 0f, 215f,
+                            0f, 0f, 0f, 1f, 0f,
+                        )
+                    )
+                )
+            }
             val tileDp = with(density) { tile.toDp() }
             for (tx in firstX..lastX) for (ty in firstY..lastY) {
                 val wrapped = ((tx % count) + count) % count
                 AsyncImage(
-                    model = "https://basemaps.cartocdn.com/$style/${frame.zoom}/$wrapped/$ty@2x.png",
+                    model = coil3.request.ImageRequest.Builder(context)
+                        .data("https://tile.openstreetmap.org/${frame.zoom}/$wrapped/$ty.png")
+                        .httpHeaders(
+                            coil3.network.NetworkHeaders.Builder()
+                                .set("User-Agent", "CineVerse/1.0 (https://cineverse.pages.dev)")
+                                .build()
+                        )
+                        .build(),
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
+                    colorFilter = night,
                     modifier = Modifier
                         .offset { IntOffset((tx * tile - frame.left).toInt(), (ty * tile - frame.top).toInt()) }
                         .size(tileDp),
@@ -137,7 +160,7 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
                 }
             }
             Text(
-                "© OpenStreetMap © CARTO",
+                "© OpenStreetMap contributors",
                 fontSize = 8.sp,
                 color = colors.text3,
                 modifier = Modifier

@@ -45,6 +45,8 @@ class FilmingLocations(context: Context, private val http: OkHttpClient) {
                     val request = Request.Builder()
                         .url("https://query.wikidata.org/sparql?format=json&query=" + URLEncoder.encode(query, "UTF-8"))
                         .header("Accept", "application/sparql-results+json")
+                        // Wikidata turns away requests that do not say who is asking.
+                        .header("User-Agent", "CineVerse/1.0 (https://cineverse.pages.dev)")
                         .build()
                     http.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) return@use null

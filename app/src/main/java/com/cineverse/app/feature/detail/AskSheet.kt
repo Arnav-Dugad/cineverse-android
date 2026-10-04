@@ -243,8 +243,7 @@ fun AskTitleSheet(
                             haptics?.play(Haptic.Tap)
                             scope.launch {
                                 val found = mentioned.takeUnless { it.isEmpty } ?: resolve(answer)
-                                if (mention.person) found.person(mention)?.let { onPerson(it.id) }
-                                else found.title(mention)?.let(onOpenTitle)
+                                found.open(mention, onOpenTitle, onPerson)
                             }
                         }
                         val linked = remember(answer, colors.text) {

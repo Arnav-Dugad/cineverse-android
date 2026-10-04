@@ -746,7 +746,7 @@ private fun TasteCard(
         com.cineverse.app.data.ai.Mentions.annotated(text, com.cineverse.app.core.ui.GeminiColors[0]) { mention ->
             scope.launch {
                 val found = resolve(text)
-                if (mention.person) found.person(mention)?.let { onPerson(it.id) } else found.title(mention)?.let(onOpen)
+                found.open(mention, onOpen, onPerson)
             }
         }
     }

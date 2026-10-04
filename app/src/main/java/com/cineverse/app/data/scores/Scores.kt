@@ -95,7 +95,8 @@ class ScoresRepository(
 
     private suspend fun get(url: String): String? = withContext(io) {
         runCatching {
-            client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            // Wikidata refuses a request with no User-Agent; it costs the others nothing.
+            client.newCall(Request.Builder().url(url).header("User-Agent", "CineVerse/1.0 (https://cineverse.pages.dev)").build()).execute().use { response ->
                 if (!response.isSuccessful) null else response.body?.string()
             }
         }.getOrNull()

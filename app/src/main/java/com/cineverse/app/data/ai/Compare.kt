@@ -49,14 +49,24 @@ class Compare(private val app: AppContainer) {
                 appendLine()
             }
             appendLine("Compare these two titles for this viewer, without spoilers beyond each premise.")
-            appendLine("A: ${describe(first)}")
-            appendLine("B: ${describe(second)}")
+            val library = app.library.library.value
+            fun seen(detail: TitleDetail): String {
+                val rated = library.ratings[detail.key]
+                return when {
+                    library.isWatched(detail.key) || (app.episodes.progress.value[detail.id]?.watchedCount ?: 0) > 0 ->
+                        " [the viewer HAS watched this${rated?.let { r -> ", rated $r/10" } ?: ""}]"
+                    else -> " [not watched yet]"
+                }
+            }
+            appendLine("A: ${describe(first)}${seen(first)}")
+            appendLine("B: ${describe(second)}${seen(second)}")
             appendLine()
             appendLine("Reply with JSON only:")
             appendLine("{\"rows\": [{\"aspect\": string, \"a\": string, \"b\": string}], \"verdict\": string, \"pick\": 0 | 1 | -1}")
             appendLine("rows: exactly 6, in this order of aspects: Tone, Pace, Commitment (how long it takes to watch), Critics, Best for, Standout.")
             appendLine("Each a and b at most 7 words, concrete, no full sentences needed.")
-            appendLine("verdict: two sentences to the viewer, under 40 words, which to watch and why, using their own taste (name one of their titles).")
+            appendLine("verdict: two sentences to the viewer, under 40 words, which to watch next and why, using their own taste (name one of their titles).")
+            appendLine("If they have already watched one, the question is whether the other is worth it (or which deserves a rewatch); never tell them to watch something they have seen as if it were new.")
             appendLine("pick: 0 for A, 1 for B, -1 only if truly even. No preamble, no markdown.")
         }
         val raw = app.gemini.json(prompt, timeoutMs = 20_000) ?: return null

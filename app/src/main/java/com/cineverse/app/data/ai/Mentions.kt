@@ -25,8 +25,19 @@ data class Mentioned(
     val people: List<Pair<Mention, Person>> = emptyList(),
 ) {
     val isEmpty: Boolean get() = titles.isEmpty() && people.isEmpty()
-    fun title(mention: Mention): MediaItem? = titles.firstOrNull { it.first == mention }?.second
-    fun person(mention: Mention): Person? = people.firstOrNull { it.first == mention }?.second
+    fun title(mention: Mention): MediaItem? = titles.firstOrNull { it.first.name == mention.name }?.second
+    fun person(mention: Mention): Person? = people.firstOrNull { it.first.name == mention.name }?.second
+
+    /** Open whatever a tapped name turned out to be - a title, or a person marked as one. */
+    fun open(mention: Mention, onTitle: (MediaItem) -> Unit, onPerson: (Int) -> Unit) {
+        val asPerson = person(mention)
+        val asTitle = title(mention)
+        when {
+            mention.person && asPerson != null -> onPerson(asPerson.id)
+            asTitle != null -> onTitle(asTitle)
+            asPerson != null -> onPerson(asPerson.id)
+        }
+    }
 }
 
 /**
@@ -43,9 +54,12 @@ object Mentions {
     /** For the prompts: how to mark names. */
     const val INSTRUCTION =
         "Write every film or series you name as [[Title (Year)]] and every real person you name as {{Full Name}} - " +
-            "for example [[Heat (1995)]] or {{Michael Mann}}. Mark each one every time it appears; mark nothing else."
+            "for example [[Heat (1995)]] or {{Michael Mann}}. People (actors, directors, writers) always go in {{ }}, never in [[ ]]; " +
+            "only real film or series titles go in [[ ]], always with their year. Mark each one every time it appears; mark nothing else."
 
-    private val Marked = Regex("""\[\[([^\[\]\n]{1,120}?)]]|\{\{([^{}\n]{1,80}?)}}""")
+    // Every bracket and brace escaped: Android's ICU engine rejects a bare
+    // "}}" that the desktop JVM accepts - and took the whole app with it.
+    private val Marked = Regex("""\[\[([^\[\]\n]{1,120}?)\]\]|\{\{([^\{\}\n]{1,80}?)\}\}""")
 
     fun parse(raw: String): List<Mention> = Marked.findAll(raw).map { match ->
         match.groupValues[1].takeIf { it.isNotBlank() }?.let { title(it) }
@@ -89,8 +103,20 @@ object Mentions {
 
     /** Find what was named: titles (year-checked) and people, a few at a time. */
     suspend fun resolve(app: AppContainer, raw: String): Mentioned {
-        val mentions = parse(raw)
-        if (mentions.isEmpty()) return Mentioned()
+        val parsed = parse(raw)
+        if (parsed.isEmpty()) return Mentioned()
+        // Gemini now and then marks a person as a title ("[[Christopher Nolan]]"):
+        // a yearless "title" that is exactly someone's name is that someone.
+        val mentions = kotlinx.coroutines.coroutineScope {
+            parsed.map { mention ->
+                async {
+                    if (mention.person || mention.year != null) return@async mention
+                    val id = runCatching { app.tmdb.findPerson(mention.name) }.getOrNull() ?: return@async mention
+                    val name = runCatching { app.tmdb.person(id).name }.getOrNull()
+                    if (name != null && name.equals(mention.name, ignoreCase = true)) mention.copy(person = true) else mention
+                }
+            }.map { it.await() }
+        }
         return kotlinx.coroutines.coroutineScope {
             val titles = mentions.filter { !it.person }.take(10).map { mention ->
                 async {
