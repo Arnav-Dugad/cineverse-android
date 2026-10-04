@@ -1,5 +1,6 @@
 package com.cineverse.app.core.ui
 
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,12 +39,21 @@ fun RankNumeral(rank: Int, height: Dp, modifier: Modifier = Modifier) {
         letterSpacing = (-0.09).em,
         lineHeight = size,
     )
+    // Drawn in, the first time the numeral is on screen: the outline traces
+    // itself like a pen stroke, then the faint fill washes in behind it. A
+    // rail composes its cards as they scroll into view, so the numbers write
+    // themselves as you scroll along it.
+    val draw = rememberArrival(1f, 80, 1100)
+    val wash = rememberArrival(1f, 650, 600)
+    val strokePx = with(LocalDensity.current) { 2.2.dp.toPx() }
+    // Longer than any digit's outline, so one dash is the whole contour.
+    val trace = 2600f
     Box(modifier.height(height), contentAlignment = Alignment.BottomStart) {
         // The fill: barely there, so the outline does the drawing.
         Text(
             "$rank",
             style = base.copy(
-                brush = Brush.verticalGradient(listOf(top.copy(alpha = 0.16f), Color.Transparent)),
+                brush = Brush.verticalGradient(listOf(top.copy(alpha = 0.16f * wash), Color.Transparent)),
             ),
             maxLines = 1,
             softWrap = false,
@@ -56,7 +66,11 @@ fun RankNumeral(rank: Int, height: Dp, modifier: Modifier = Modifier) {
                     0.65f to top.copy(alpha = 0.45f),
                     1f to top.copy(alpha = 0.06f),
                 ),
-                drawStyle = Stroke(width = with(LocalDensity.current) { 2.2.dp.toPx() }, join = StrokeJoin.Round),
+                drawStyle = Stroke(
+                    width = strokePx,
+                    join = StrokeJoin.Round,
+                    pathEffect = if (draw >= 1f) null else PathEffect.dashPathEffect(floatArrayOf(trace, trace), trace * (1f - draw)),
+                ),
             ),
             maxLines = 1,
             softWrap = false,

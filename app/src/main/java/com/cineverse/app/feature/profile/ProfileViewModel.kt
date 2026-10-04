@@ -62,6 +62,11 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
 
     fun setNotifyEpisodes(value: Boolean) = viewModelScope.launch { app.settings.setNotifyEpisodes(value) }
     fun setNotifyReleases(value: Boolean) = viewModelScope.launch { app.settings.setNotifyReleases(value) }
+    fun setSpokenAnswers(value: Boolean) = viewModelScope.launch { app.settings.setSpokenAnswers(value) }
+    fun setNotifyAiring(value: Boolean) = viewModelScope.launch { app.settings.setNotifyAiring(value) }
+    fun setNotifySeasons(value: Boolean) = viewModelScope.launch { app.settings.setNotifySeasons(value) }
+    fun setNotifyRecap(value: Boolean) = viewModelScope.launch { app.settings.setNotifyRecap(value) }
+    fun setNotifyUpdates(value: Boolean) = viewModelScope.launch { app.settings.setNotifyUpdates(value) }
 
     fun signOut() = app.auth.signOut()
 }

@@ -63,8 +63,16 @@ encoding and the offline queue cannot disagree with each other.
   ratings. Through Firebase AI Logic; every use has a fallback that needs no model
 - **AppFunctions** — Gemini on Android 16 can mark episodes, edit your list,
   rate, list what you are watching and find something to watch, inside CineVerse
+- **Ask about it** — a spoiler-safe conversation about any title, that knows the
+  last episode you ticked and will not say a word past it
+- **Tonight** — a mood and the time you have, and one film from your own list
+- **Live Updates** — on Android 16, the film you are watching counts down to the
+  credits in the status bar chip, with Finished and Stop
 - **Gemini Nano** — "Previously on" summarised on the phone, from episodes you have already seen
-- **An Up Next widget** whose countdowns tick live, second by second, with the app asleep
+- **An Up Next widget** whose countdowns tick live, second by second, with the app
+  asleep, from a lock-screen sliver to a large layout on the next show's backdrop
+- **Notifications you choose** — new episodes (and the minute one airs), new
+  seasons, releases from your list, your month and app updates, each its own switch
 - **Exact air times** — the broadcaster's own minute, in your time zone
 - **Rich haptics** composed from the hardware's own primitives, not `vibrate(ms)`
 - **Material You** — the whole app can take its accent from your wallpaper

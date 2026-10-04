@@ -36,6 +36,9 @@ object DeepLinks {
             return when (host) {
                 "search" -> Route.Search
                 "voice" -> Route.VoiceSearch
+                // An update notification: You holds "Check for updates".
+                "update" -> Route.Profile
+                "inbox" -> Route.Inbox
                 "list" -> Route.MyList
                 "continue" -> Route.Home
                 "stats" -> Route.Stats

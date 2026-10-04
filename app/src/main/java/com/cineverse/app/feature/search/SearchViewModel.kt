@@ -216,6 +216,20 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
             if (mine != generation) return@launch
             _state.value = _state.value.copy(ask = ui)
             if (ui == null) search((ask as Ask.Search).query, page = 1)
+            if (spoken && app.settings.settings.value.spokenAnswers) {
+                app.speaker.say(
+                    when (ui) {
+                        is AskUi.Did -> ui.outcome.message
+                        is AskUi.Results -> when {
+                            ui.items.isEmpty() -> "I couldn't find anything matching all of that."
+                            ui.reply != null -> ui.reply
+                            else -> "Here are ${ui.items.size} picks" +
+                                (ui.understood.takeIf { it.isNotBlank() }?.let { ": ${it.replace(" · ", ", ")}" } ?: "")
+                        }
+                        else -> "Here's what I found for $heard"
+                    }
+                )
+            }
         }
     }
 

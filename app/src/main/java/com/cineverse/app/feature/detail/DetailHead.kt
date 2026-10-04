@@ -1,5 +1,11 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.draw.drawWithContent
+import com.cineverse.app.core.ui.geminiGlow
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -104,6 +110,12 @@ fun DetailHead(
     onPlayTrailer: () -> Unit,
     onLists: () -> Unit,
     onProgress: () -> Unit,
+    /** Ask Gemini about it, spoiler-safe. */
+    onAsk: () -> Unit = {},
+    /** Films only: start the "watching now" Live Update. Null hides it. */
+    onWatchingNow: (() -> Unit)? = null,
+    /** True while that Live Update is running for this film. */
+    watchingNow: Boolean = false,
 ) {
     val accent = com.cineverse.app.core.ui.LocalTitleAccent.current
     // A sand or yellow accent would make white type unreadable on the button.
@@ -313,10 +325,85 @@ fun DetailHead(
             )
         }
 
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HeadPill(
+                text = "Ask about it",
+                icon = Icons.Rounded.AutoAwesome,
+                gemini = true,
+                modifier = Modifier.weight(1f),
+            ) { haptics?.play(Haptic.Tap); onAsk() }
+            if (onWatchingNow != null) {
+                HeadPill(
+                    text = if (watchingNow) "Watching now" else "Start watching",
+                    icon = if (watchingNow) Icons.Rounded.Stop else Icons.Rounded.PlayCircle,
+                    live = watchingNow,
+                    modifier = Modifier.weight(1f),
+                ) { haptics?.play(if (watchingNow) Haptic.Untick else Haptic.Tick); onWatchingNow() }
+            }
+        }
+
         if (detail.overview.isNotBlank()) {
             Spacer(Modifier.height(20.dp))
             ExpandableText(detail.overview)
         }
+    }
+}
+
+/** A secondary action under the main row: Ask, Watching now. */
+@Composable
+private fun HeadPill(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    gemini: Boolean = false,
+    live: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val pulse = if (live) {
+        val loop = androidx.compose.animation.core.rememberInfiniteTransition(label = "livePulse")
+        loop.animateFloat(
+            0.35f, 1f,
+            androidx.compose.animation.core.infiniteRepeatable(
+                androidx.compose.animation.core.tween(900),
+                androidx.compose.animation.core.RepeatMode.Reverse,
+            ),
+            label = "livePulseValue",
+        ).value
+    } else 1f
+    Row(
+        modifier
+            .height(42.dp)
+            .then(if (gemini) Modifier.geminiGlow(corner = 21.dp, width = 1.2.dp) else Modifier)
+            .clip(CvShape.Pill)
+            .background(if (live) Palette.Red2.copy(alpha = 0.16f) else colors.glass)
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        if (gemini) {
+            Icon(
+                icon, null,
+                modifier = Modifier
+                    .size(17.dp)
+                    .graphicsLayer(compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen)
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(com.cineverse.app.core.ui.geminiBrushStatic, blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop)
+                    },
+            )
+        } else {
+            if (live) {
+                Box(Modifier.size(8.dp).graphicsLayer { alpha = pulse }.clip(CircleShape).background(Palette.Red2))
+                Spacer(Modifier.width(7.dp))
+            } else {
+                Icon(icon, null, tint = colors.text2, modifier = Modifier.size(17.dp))
+            }
+        }
+        Spacer(Modifier.width(7.dp))
+        Text(text, style = MaterialTheme.typography.labelLarge, color = colors.text, maxLines = 1)
     }
 }
 

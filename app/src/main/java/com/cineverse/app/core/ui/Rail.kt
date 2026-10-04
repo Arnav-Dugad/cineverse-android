@@ -1,5 +1,8 @@
 package com.cineverse.app.core.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +81,8 @@ fun SectionHeader(
     titleLogo: String? = null,
     /** What the action on the right says. */
     actionLabel: String = "See all",
+    /** A person's face before the title, for "Starring" and "From" rails. */
+    face: String? = null,
     onSeeAll: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
@@ -92,6 +97,18 @@ fun SectionHeader(
             // rail reads cleaner. A rail derived from a title says so on the
             // SAME line - "More like" before that title's own logo.
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (face != null) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(com.cineverse.app.core.design.CvShape.Circle)
+                            .background(colors.surface2)
+                            .border(1.5.dp, colors.text.copy(alpha = 0.18f), com.cineverse.app.core.design.CvShape.Circle),
+                    ) {
+                        CvImage(Img.profile(face), null, Modifier.fillMaxSize())
+                    }
+                    Spacer(Modifier.width(10.dp))
+                }
                 if (titleLogo != null && kicker != null) {
                     Text(
                         "$kicker ",
@@ -157,10 +174,11 @@ fun PosterRail(
     title: String? = null,
     kicker: String? = null,
     titleLogo: String? = null,
+    face: String? = null,
     /** A Top 10: the position is drawn behind each card. */
     numbered: Boolean = false,
     onSeeAll: (() -> Unit)? = null,
-    cardWidth: Dp = 132.dp,
+    cardWidth: Dp = railCardWidth(),
     showCaption: Boolean = true,
     isWatched: (MediaItem) -> Boolean = { false },
     isSaved: (MediaItem) -> Boolean = { false },
@@ -172,7 +190,7 @@ fun PosterRail(
     if (!loading && items.isEmpty()) return
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, onSeeAll = onSeeAll)
+            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, face = face, onSeeAll = onSeeAll)
             Spacer(Modifier.height(12.dp))
         }
         if (loading) {

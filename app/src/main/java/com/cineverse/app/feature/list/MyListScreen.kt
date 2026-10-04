@@ -53,8 +53,7 @@ import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.core.ui.posterCellWidth
 import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.data.model.MediaItem
-import com.cineverse.app.feature.sheets.FilterBar
-import com.cineverse.app.feature.sheets.FilterSheet
+import com.cineverse.app.feature.sheets.FilterDropdowns
 
 /**
  * Everything you own, in three segments: what you mean to watch, what you are in
@@ -78,7 +77,7 @@ fun MyListScreen(
     var pinTarget by remember { mutableStateOf<Pair<com.cineverse.app.data.model.UserList, PinMode>?>(null) }
     var lockOptions by remember { mutableStateOf<com.cineverse.app.data.model.UserList?>(null) }
     val library by viewModel.library.collectAsStateWithLifecycle()
-    var filters by remember { mutableStateOf(false) }
+    var arrangingLists by remember { mutableStateOf(false) }
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -129,6 +128,14 @@ fun MyListScreen(
                 }
             },
             onDismiss = { pinTarget = null },
+        )
+    }
+
+    if (arrangingLists) {
+        ArrangeListsSheet(
+            lists = library.lists,
+            onSave = viewModel::reorderLists,
+            onDismiss = { arrangingLists = false },
         )
     }
 
@@ -204,19 +211,25 @@ fun MyListScreen(
             }
         }
 
-        FilterBar(
+        FilterDropdowns(
             filter = state.filter,
-            onOpen = { filters = true },
-            trailing = {
-                Text(
-                    when {
-                        lockedNow -> "Locked"
-                        state.filter.isDefault -> "${state.all.size} title${if (state.all.size == 1) "" else "s"}"
-                        else -> "${state.items.size} of ${state.all.size}"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.text3,
-                )
+            genres = state.genres,
+            onChange = viewModel::setFilter,
+            count = when {
+                lockedNow -> "Locked"
+                state.filter.isDefault -> "${state.all.size} title${if (state.all.size == 1) "" else "s"}"
+                else -> "${state.items.size} of ${state.all.size}"
+            },
+            showType = state.segment != ListSegment.Watching,
+            showHideWatched = state.segment == ListSegment.Watchlist,
+            sortActive = state.sort != ListSort.Recent,
+            onReset = { viewModel.setFilter(state.filter.clear()); viewModel.setSort(ListSort.Recent) },
+            sort = {
+                com.cineverse.app.core.ui.CvDropdown(
+                    "Sort",
+                    ListSort.entries.map { it to it.labelFor(state.segment) },
+                    state.sort,
+                ) { viewModel.setSort(it) }
             },
         )
 
@@ -248,6 +261,9 @@ fun MyListScreen(
                     ) {
                         haptics?.play(Haptic.Select); viewModel.selectList(list.id)
                     }
+                }
+                if (library.lists.size >= 2) {
+                    ListChip("Arrange", false) { haptics?.play(Haptic.Tap); arrangingLists = true }
                 }
             }
         }
@@ -283,6 +299,11 @@ fun MyListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+                state.showcase?.takeIf { !lockedNow }?.let { show ->
+                    item(key = "showcase_${show.list.id}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        ListShowcaseCard(show, onShuffle = { viewModel.shuffleCover(show.list.id) })
+                    }
+                }
                 items(items, key = { it.key }) { item ->
                     PosterCard(
                         item = item,
@@ -299,17 +320,6 @@ fun MyListScreen(
         }
     }
 
-    if (filters) {
-        FilterSheet(
-            filter = state.filter,
-            genres = state.genres,
-            resultCount = state.items.size,
-            showHideWatched = state.segment == ListSegment.Watchlist,
-            sorts = ListSorts,
-            onChange = viewModel::setFilter,
-            onDismiss = { filters = false },
-        )
-    }
 }
 
 @Composable

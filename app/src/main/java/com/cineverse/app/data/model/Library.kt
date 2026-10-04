@@ -37,6 +37,10 @@ data class SavedItem(
     )
 }
 
+/** A person named on a watched title: enough to rank them and draw their face. */
+@Immutable
+data class CastRef(val id: Int, val name: String, val profile: String)
+
 /** `users/{uid}/watched/{type_id}` */
 @Immutable
 data class WatchedItem(
@@ -69,6 +73,9 @@ data class WatchedItem(
     /** The dates it was seen, oldest first. Shorter than [plays] on old rows. */
     val playDates: List<Long> = emptyList(),
     val lastPlayedAt: Long = 0L,
+    /** The first billed actors, as the website backfills them: who you watched. */
+    val cast: List<CastRef> = emptyList(),
+    val directorProfile: String = "",
 ) {
     /** The most recent viewing we know of, falling back to the first. */
     val lastPlay: Long
@@ -92,6 +99,8 @@ data class UserList(
     val name: String,
     val icon: String = "",
     val createdAt: Long = 0L,
+    /** Where it sits among your lists: the website's `order`, smallest first. */
+    val order: Int = 0,
     val locked: Boolean = false,
     /**
      * The website's PIN lock, `lock: { salt, hash, ... }` on the list document:

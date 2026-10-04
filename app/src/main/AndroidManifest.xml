@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Voice search. Asked for the first time the microphone is tapped, never before. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Android 16 Live Updates: the film you are watching, in the status bar chip. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- The in-app updater. Android still shows its own confirmation for every
          install; this only allows CineVerse to be the one that asks. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -167,6 +169,10 @@
             generated from agent/CineVerseFunctions.kt; only the system, holding
             BIND_APP_FUNCTION_SERVICE, can bind it.
         -->
+        <receiver
+            android:name=".notify.WatchingNowReceiver"
+            android:exported="false" />
+
         <service
             android:name=".agent.CineVerseFunctionService"
             android:permission="android.permission.BIND_APP_FUNCTION_SERVICE"

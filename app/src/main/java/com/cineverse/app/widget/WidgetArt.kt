@@ -45,6 +45,12 @@ object WidgetArt {
         return load(context, "https://image.tmdb.org/t/p/w300$path", radiusPx)
     }
 
+    /** w780 backdrops, for the large Up Next widget's hero. */
+    suspend fun backdrop(context: Context, path: String?, radiusPx: Float = 0f): Bitmap? {
+        if (path.isNullOrBlank()) return null
+        return load(context, "https://image.tmdb.org/t/p/w780$path", radiusPx)
+    }
+
     private suspend fun load(context: Context, url: String, radiusPx: Float): Bitmap? =
         runCatching {
             val loader = ImageLoader(context)

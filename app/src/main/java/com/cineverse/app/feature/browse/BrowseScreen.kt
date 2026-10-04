@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.browse
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -294,37 +296,36 @@ private fun BrowseHero(title: String, state: BrowseState, lead: MediaItem?) {
 private fun Controls(state: BrowseState, viewModel: BrowseViewModel) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
-    Column(Modifier.padding(top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(BrowseSort.entries.toList(), key = { it.name }) { sort ->
-                    CvChip(sort.label, state.sort == sort, { viewModel.setSort(sort) })
-                }
+    // The website's select boxes: the sort always shows what it is sorting
+    // by, the genre once one is chosen. The layout switch stays a button.
+    Row(Modifier.padding(top = 10.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            com.cineverse.app.core.ui.CvDropdown("Sort", BrowseSort.entries.map { it to it.label }, state.sort, active = true) {
+                viewModel.setSort(it)
             }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .glass(CvShape.Circle)
-                    .clickableNoRipple { haptics?.play(Haptic.Select); viewModel.toggleLayout() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (state.list) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
-                    if (state.list) "Show as a grid" else "Show as a list",
-                    tint = colors.text,
-                    modifier = Modifier.size(19.dp),
-                )
+            com.cineverse.app.core.ui.CvDropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, state.genre) {
+                viewModel.setGenre(it)
             }
+            com.cineverse.app.core.ui.CvTogglePill("Hide watched", state.hideWatched) { viewModel.toggleHideWatched() }
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item(key = "unseen") {
-                CvChip("Hide watched", state.hideWatched, { viewModel.toggleHideWatched() })
-            }
-            item(key = "allgenres") { CvChip("All genres", state.genre == 0, { viewModel.setGenre(0) }) }
-            items(state.genres, key = { it.id }) { genre ->
-                CvChip(genre.name, state.genre == genre.id, { viewModel.setGenre(genre.id) })
-            }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier
+                .size(38.dp)
+                .glass(CvShape.Circle)
+                .clickableNoRipple { haptics?.play(Haptic.Select); viewModel.toggleLayout() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (state.list) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
+                if (state.list) "Show as a grid" else "Show as a list",
+                tint = colors.text,
+                modifier = Modifier.size(19.dp),
+            )
         }
     }
 }

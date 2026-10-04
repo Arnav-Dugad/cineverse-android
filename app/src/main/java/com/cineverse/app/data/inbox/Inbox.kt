@@ -176,13 +176,22 @@ class InboxRepository(
         }
 
         // Last month, on the first of this one, as the website's monthly recap.
-        val last = today.minusMonths(1)
-        val summary = YearModel.summary(lib, shows, last.year)
-        val films = summary.films.count { film -> film.dates.any { YearModel.monthOf(it) == last.monthValue - 1 && YearModel.yearOf(it) == last.year } }
-        val finished = summary.shows.count { YearModel.monthOf(it.finishedAt) == last.monthValue - 1 }
-        if (films + finished > 0) {
+        monthlyRecap(lib, shows, today)?.let { events += it }
+
+        return events.sortedByDescending { it.at }
+    }
+
+    companion object {
+        /** Last month in films and series finished, or null for a month with neither. */
+        fun monthlyRecap(lib: Library, shows: Map<Int, ShowProgress>, today: LocalDate = LocalDate.now()): InboxEvent? {
+            val zone = ZoneId.systemDefault()
+            val last = today.minusMonths(1)
+            val summary = YearModel.summary(lib, shows, last.year)
+            val films = summary.films.count { film -> film.dates.any { YearModel.monthOf(it) == last.monthValue - 1 && YearModel.yearOf(it) == last.year } }
+            val finished = summary.shows.count { YearModel.monthOf(it.finishedAt) == last.monthValue - 1 }
+            if (films + finished == 0) return null
             val month = last.format(DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()))
-            events += InboxEvent(
+            return InboxEvent(
                 id = "recap:${last.year}-${last.monthValue}",
                 kind = InboxKind.Recap,
                 title = "Your $month",
@@ -195,7 +204,5 @@ class InboxRepository(
                 art = null,
             )
         }
-
-        return events.sortedByDescending { it.at }
     }
 }

@@ -24,6 +24,9 @@ data class Seed(
     val score: Double,
 )
 
+@Immutable
+data class PersonSignal(val id: Int, val name: String, val profile: String, val weight: Double)
+
 enum class SeedReason { Rated, Watching, Watched, Saved }
 
 /**
@@ -50,6 +53,9 @@ data class TasteProfile(
     val topGenres: List<Signal> = emptyList(),
     val topKeywords: List<Signal> = emptyList(),
     val seeds: List<Seed> = emptyList(),
+    /** The actors and directors you watch most, rating-weighted, as the website ranks them. */
+    val topActors: List<PersonSignal> = emptyList(),
+    val topDirectors: List<PersonSignal> = emptyList(),
     /** Changes once per launch, so the rails are a different slice each time. */
     val rotation: Int = 0,
     val titlesSeen: Int = 0,
@@ -103,6 +109,12 @@ data class TasteProfile(
 
         fun movieGenresFor(genres: List<Int>): List<Int> = genres.filter { it in MOVIE_GENRES }
 
+        private fun people(weights: Map<Int, Double>, names: Map<Int, Pair<String, String>>) = weights.entries
+            .filter { it.value >= 1.5 && names[it.key]?.first?.isNotBlank() == true }
+            .sortedByDescending { it.value }
+            .take(6)
+            .map { PersonSignal(it.key, names.getValue(it.key).first, names.getValue(it.key).second, it.value) }
+
         fun build(
             library: Library,
             shows: Map<Int, ShowProgress>,
@@ -113,6 +125,9 @@ data class TasteProfile(
             val decades = mutableMapOf<Int, Double>()
             val languages = mutableMapOf<String, Double>()
             val seeds = mutableListOf<Seed>()
+            val actors = mutableMapOf<Int, Double>()
+            val directors = mutableMapOf<Int, Double>()
+            val names = mutableMapOf<Int, Pair<String, String>>()
 
             fun bump(map: MutableMap<Int, Double>, key: Int, w: Double) {
                 if (key == 0) return
@@ -155,6 +170,17 @@ data class TasteProfile(
                         item.genres, SeedReason.Rated, rating.toDouble(),
                     )
                 }
+                // People, exactly as the website weighs them: one for each
+                // title, plus half a point for every point of rating above 5.
+                val personWeight = 1 + 0.5 * ratingWeight(rating)
+                if (item.directorId > 0) {
+                    bump(directors, item.directorId, personWeight)
+                    if (item.director.isNotBlank()) names[item.directorId] = item.director to item.directorProfile
+                }
+                for (person in item.cast.take(5)) {
+                    bump(actors, person.id, personWeight)
+                    names[person.id] = person.name to person.profile
+                }
             }
 
             // A show you are IN THE MIDDLE OF is the loudest signal in the whole
@@ -196,6 +222,8 @@ data class TasteProfile(
                     .sortedByDescending { it.value }
                     .map { Signal(it.key, "", it.value) },
                 seeds = seeds.sortedByDescending { it.score },
+                topActors = people(actors, names),
+                topDirectors = people(directors, names),
                 rotation = rotation,
                 titlesSeen = library.saved.size + library.watched.size + shows.size,
             )

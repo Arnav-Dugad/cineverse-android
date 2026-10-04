@@ -187,6 +187,14 @@ class AppContainer(val context: Context) {
 
     val forYou by lazy { com.cineverse.app.data.ai.ForYou(gemini) }
 
+    val titleChat by lazy { com.cineverse.app.data.ai.TitleChat(gemini) }
+
+    val tonight by lazy { com.cineverse.app.data.ai.Tonight(this) }
+
+    val speaker by lazy { com.cineverse.app.data.ai.Speaker(context) }
+
+    val watchingNow by lazy { com.cineverse.app.notify.WatchingNowRepository(context) }
+
     val previouslyOn by lazy { com.cineverse.app.data.recap.PreviouslyOn(context, gemini) }
 
     val inbox by lazy {

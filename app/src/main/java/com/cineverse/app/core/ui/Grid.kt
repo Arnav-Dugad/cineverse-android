@@ -8,31 +8,43 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * How wide a poster should be, for the screen it is on.
+ * How many posters across, and so how wide each one is.
  *
- * `GridCells.Adaptive` with one fixed minimum is right on a phone and wrong
- * everywhere else: on a tablet it packs eight tiny posters across a 1200dp
- * window, and in landscape it does the same to a phone. The minimum grows with
- * the window so the COLUMN COUNT stays in a sensible range rather than the card
- * size staying constant.
+ * This used to be `GridCells.Adaptive` with a minimum cell width per setting,
+ * and on a phone that made the setting do nothing: 118dp and 150dp minimums
+ * both come out at two columns on a 411dp screen. A COLUMN COUNT is what the
+ * setting actually means, so that is what it sets - four, three or two on a
+ * phone - and wider windows add columns rather than blowing posters up.
  */
 @Composable
 @ReadOnlyComposable
-fun posterCellWidth(): Dp {
+fun posterColumns(): Int {
     val width = LocalConfiguration.current.screenWidthDp
-    // The user's own preference is the base, and the window scales it. Letting
-    // the preference set an absolute size would make "More per row" mean eight
-    // columns on a tablet and three on a phone; letting the window decide alone
-    // ignores the setting entirely.
-    val base = LocalGridDensity.current.cellDp
-    val scale = when {
-        width >= 1000 -> 1.5f
-        width >= 700 -> 1.35f
-        width >= 600 -> 1.18f
-        else -> 1f
+    val base = LocalGridDensity.current.columns
+    return when {
+        width >= 1000 -> base + 3
+        width >= 700 -> base + 2
+        width >= 600 -> base + 1
+        else -> base
     }
-    return (base * scale).dp
 }
+
+/** The exact width of one cell, so a card fills its column with no gap left over. */
+@Composable
+@ReadOnlyComposable
+fun posterCellWidth(): Dp {
+    val width = LocalConfiguration.current.screenWidthDp.dp
+    val columns = posterColumns()
+    return (width - ScreenPadding * 2 - GridGap * (columns - 1)) / columns
+}
+
+/** The gap between grid cells, matching every grid's spacedBy(12.dp). */
+val GridGap = 12.dp
+
+/** A rail card's width, following the same setting. */
+@Composable
+@ReadOnlyComposable
+fun railCardWidth(): Dp = LocalGridDensity.current.railDp.dp
 
 /**
  * How tightly posters are packed, from Settings.
@@ -47,4 +59,4 @@ val LocalGridDensity = androidx.compose.runtime.staticCompositionLocalOf {
 
 @Composable
 @ReadOnlyComposable
-fun posterGridCells(): GridCells = GridCells.Adaptive(posterCellWidth())
+fun posterGridCells(): GridCells = GridCells.Fixed(posterColumns())

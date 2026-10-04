@@ -93,6 +93,14 @@ class DetailViewModel(
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
 
+    private val _chat = MutableStateFlow<List<com.cineverse.app.data.ai.ChatTurn>>(emptyList())
+
+    /** The conversation in the "Ask about it" sheet, kept while the page is open. */
+    val chat: StateFlow<List<com.cineverse.app.data.ai.ChatTurn>> = _chat.asStateFlow()
+
+    /** The film being watched now, for the Live Update pill. */
+    val watchingNow: StateFlow<com.cineverse.app.notify.Watching?> = app.watchingNow.current
+
     private val _pitch = MutableStateFlow<com.cineverse.app.data.ai.Pitch?>(null)
 
     /** Gemini on how this sits with your taste; null until (and unless) it answers. */
@@ -216,6 +224,41 @@ class DetailViewModel(
                     }
                 }
             }
+        }
+    }
+
+    fun spoilerLine(): com.cineverse.app.data.ai.SpoilerLine? {
+        val detail = _state.value.detail ?: return null
+        return com.cineverse.app.data.ai.TitleChat.spoilerLine(
+            detail,
+            app.episodes.progress.value[detail.id],
+            app.library.library.value.isWatched(detail.key),
+        )
+    }
+
+    fun ask(question: String) {
+        val detail = _state.value.detail ?: return
+        val line = spoilerLine() ?: return
+        val history = _chat.value
+        _chat.value = history + com.cineverse.app.data.ai.ChatTurn(question)
+        viewModelScope.launch {
+            val turn = runCatching { app.titleChat.answer(detail, line, history, question) }
+                .getOrElse { com.cineverse.app.data.ai.ChatTurn(question, "Something went wrong. Try again in a moment.") }
+            _chat.value = _chat.value.dropLast(1) + turn
+        }
+    }
+
+    /** Start the Live Update from where you are in the film, or stop it, keeping your place. */
+    fun toggleWatchingNow() {
+        val detail = _state.value.detail ?: return
+        val current = app.watchingNow.current.value
+        if (current?.id == detail.id) {
+            val was = app.watchingNow.stop()
+            val at = was?.elapsed() ?: 0
+            if (at > 0) viewModelScope.launch { runCatching { app.library.setMovieProgress(detail.id, at, detail.runtime, detail) } }
+        } else {
+            val from = app.library.library.value.movieProgress[detail.id]?.minutes ?: 0
+            app.watchingNow.start(detail.id, detail.title, detail.runtime, from, detail.posterPath.orEmpty())
         }
     }
 

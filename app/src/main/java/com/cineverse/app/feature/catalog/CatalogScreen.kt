@@ -58,6 +58,7 @@ import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
+import com.cineverse.app.core.ui.CvDropdown
 import com.cineverse.app.core.ui.dealIn
 import com.cineverse.app.core.ui.bleed
 import androidx.compose.foundation.lazy.grid.items
@@ -211,42 +212,42 @@ private fun FilterRow(state: CatalogState, viewModel: CatalogViewModel) {
         Spacer(Modifier.height(8.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
-                Dropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, state.filters.genre) {
+                CvDropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, state.filters.genre) {
                     viewModel.setFilters(state.filters.copy(genre = it))
                 }
             }
             item {
-                Dropdown("Year", years, state.filters.year) { viewModel.setFilters(state.filters.copy(year = it)) }
+                CvDropdown("Year", years, state.filters.year) { viewModel.setFilters(state.filters.copy(year = it)) }
             }
             item {
-                Dropdown("Sort", CatalogSort.entries.map { it to it.label }, state.filters.sort) {
+                CvDropdown("Sort", CatalogSort.entries.map { it to it.label }, state.filters.sort) {
                     viewModel.setFilters(state.filters.copy(sort = it))
                 }
             }
             item {
-                Dropdown("Rating", listOf(0 to "Any rating", 6 to "6+", 7 to "7+", 8 to "8+", 9 to "9+"), state.filters.rating) {
+                CvDropdown("Rating", listOf(0 to "Any rating", 6 to "6+", 7 to "7+", 8 to "8+", 9 to "9+"), state.filters.rating) {
                     viewModel.setFilters(state.filters.copy(rating = it))
                 }
             }
             item {
-                Dropdown("Language", Languages, state.filters.language) {
+                CvDropdown("Language", Languages, state.filters.language) {
                     viewModel.setFilters(state.filters.copy(language = it))
                 }
             }
             if (tv) {
                 item {
-                    Dropdown("Status", listOf("" to "Any status", "0" to "Returning", "3" to "Ended", "2" to "In production"), state.filters.status) {
+                    CvDropdown("Status", listOf("" to "Any status", "0" to "Returning", "3" to "Ended", "2" to "In production"), state.filters.status) {
                         viewModel.setFilters(state.filters.copy(status = it))
                     }
                 }
                 item {
-                    Dropdown("Format", listOf("" to "Any format", "4" to "Scripted", "2" to "Miniseries", "3" to "Reality", "0" to "Documentary", "6" to "Animation & video"), state.filters.format) {
+                    CvDropdown("Format", listOf("" to "Any format", "4" to "Scripted", "2" to "Miniseries", "3" to "Reality", "0" to "Documentary", "6" to "Animation & video"), state.filters.format) {
                         viewModel.setFilters(state.filters.copy(format = it))
                     }
                 }
             } else {
                 item {
-                    Dropdown("Runtime", listOf("" to "Any length", "short" to "Under 90 min", "medium" to "90 to 150 min", "long" to "Over 150 min"), state.filters.runtime) {
+                    CvDropdown("Runtime", listOf("" to "Any length", "short" to "Under 90 min", "medium" to "90 to 150 min", "long" to "Over 150 min"), state.filters.runtime) {
                         viewModel.setFilters(state.filters.copy(runtime = it))
                     }
                 }
@@ -259,62 +260,6 @@ private fun FilterRow(state: CatalogState, viewModel: CatalogViewModel) {
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.text3,
             )
-        }
-    }
-}
-
-/**
- * The website's select boxes, as pills: the label until something is
- * chosen, then the choice itself, filled, so what is narrowing the grid is
- * readable at a glance.
- */
-@Composable
-private fun <T> Dropdown(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-    var open by remember { mutableStateOf(false) }
-    val active = selected != options.first().first
-    val fill by animateColorAsState(if (active) colors.text else colors.glass, label = "dd")
-    val ink = if (active) colors.ink else colors.text2
-    Box {
-        Row(
-            Modifier
-                .height(36.dp)
-                .clip(CvShape.Pill)
-                .background(fill)
-                .border(1.dp, if (active) Color.Transparent else colors.hairline, CvShape.Pill)
-                .clickableNoRipple { haptics?.play(Haptic.Tap); open = true }
-                .padding(start = 14.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                if (active) options.firstOrNull { it.first == selected }?.second ?: label else label,
-                style = MaterialTheme.typography.labelMedium,
-                color = ink,
-                maxLines = 1,
-            )
-            Icon(Icons.Rounded.KeyboardArrowDown, null, tint = ink, modifier = Modifier.size(18.dp))
-        }
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            containerColor = colors.surface1,
-            shape = CvShape.Large,
-            modifier = Modifier.heightIn(max = 360.dp),
-        ) {
-            for ((value, text) in options) {
-                DropdownMenuItem(
-                    text = { Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.text) },
-                    trailingIcon = if (value == selected) {
-                        { Icon(Icons.Rounded.Check, null, tint = colors.text) }
-                    } else null,
-                    onClick = {
-                        haptics?.play(Haptic.Select)
-                        open = false
-                        onSelect(value)
-                    },
-                )
-            }
         }
     }
 }

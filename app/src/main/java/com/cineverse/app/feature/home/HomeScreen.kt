@@ -114,6 +114,15 @@ fun HomeScreen(
     val library by viewModel.library.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var arranging by remember { mutableStateOf(false) }
+    var tonight by remember { mutableStateOf(false) }
+    if (tonight) {
+        TonightSheet(
+            pick = viewModel::pickTonight,
+            onOpen = onOpen,
+            onStart = viewModel::startWatching,
+            onDismiss = { tonight = false },
+        )
+    }
     if (arranging) {
         ArrangeSheet(
             rows = state.continueWatching,
@@ -182,6 +191,10 @@ fun HomeScreen(
                 }
             }
 
+            item(key = "tonight") {
+                TonightBanner(onClick = { tonight = true })
+            }
+
             if (state.returning.isNotEmpty()) {
                 item(key = "returning") {
                     ReturningSection(state.returning, onOpen)
@@ -194,6 +207,7 @@ fun HomeScreen(
                     title = rail.title,
                     kicker = rail.kicker,
                     titleLogo = rail.kickerLogo,
+                    face = rail.face,
                     numbered = rail.numbered,
                     onOpen = onOpen,
                     onSeeAll = rail.seeAll?.let { route -> { onBrowse(route) } },

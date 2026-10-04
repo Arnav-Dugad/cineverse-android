@@ -116,6 +116,9 @@ fun DetailScreen(
     val exactAir by viewModel.exactAir.collectAsStateWithLifecycle()
     val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val pitch by viewModel.pitch.collectAsStateWithLifecycle()
+    val chat by viewModel.chat.collectAsStateWithLifecycle()
+    val watching by viewModel.watchingNow.collectAsStateWithLifecycle()
+    var asking by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -219,6 +222,9 @@ fun DetailScreen(
                     },
                     onLists = { sheet = TitleSheet.Lists },
                     onProgress = { sheet = TitleSheet.Progress },
+                    onAsk = { asking = true },
+                    onWatchingNow = if (!detail.isSeries && detail.runtime > 0) viewModel::toggleWatchingNow else null,
+                    watchingNow = watching?.id == detail.id,
                 )
                 }
             }
@@ -358,6 +364,22 @@ fun DetailScreen(
             onDismiss = viewModel::closeRecap,
         )
         null -> Unit
+    }
+
+    if (asking) {
+        state.detail?.let { detail ->
+            val line = androidx.compose.runtime.remember(detail, progress, library.watched.size) { viewModel.spoilerLine() }
+            if (line != null) {
+                AskTitleSheet(
+                    title = detail.title,
+                    line = line,
+                    suggestions = androidx.compose.runtime.remember(line) { com.cineverse.app.data.ai.TitleChat.suggestions(detail, line) },
+                    turns = chat,
+                    onAsk = viewModel::ask,
+                    onDismiss = { asking = false },
+                )
+            }
+        }
     }
 
     when (sheet) {

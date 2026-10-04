@@ -1,5 +1,9 @@
 package com.cineverse.app.feature.detail
 
+import com.cineverse.app.core.ui.geminiGlow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -357,6 +361,7 @@ private fun PreviouslyCard(title: String, state: PreviouslyState, onLoad: () -> 
         Modifier
             .padding(horizontal = ScreenPadding, vertical = 6.dp)
             .fillMaxWidth()
+            .geminiGlow(on = state is PreviouslyState.Ready && state.previously.cloud)
             .clip(CvShape.Large)
             .background(colors.text.copy(alpha = 0.05f))
             .clickableNoRipple {
@@ -760,12 +765,6 @@ fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.height(14.dp))
         }
-        Text(
-            "From JustWatch",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.text3,
-            modifier = Modifier.padding(horizontal = ScreenPadding),
-        )
     }
 }
 
@@ -849,14 +848,7 @@ private fun CastRow(
                         .clickableNoRipple { onPerson(person) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Box(
-                        Modifier
-                            .size(78.dp)
-                            .clip(CircleShape)
-                            .background(colors.surface2)
-                    ) {
-                        CvImage(Img.profile(person.profilePath), person.name, Modifier.fillMaxSize())
-                    }
+                    CastFace(person, hours[person.id])
                     Spacer(Modifier.height(7.dp))
                     Text(
                         person.name,
@@ -876,22 +868,68 @@ private fun CastRow(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
-                    // Your time with them across everything you have watched,
-                    // arriving as each person's credits are read.
-                    hours[person.id]?.let { time ->
-                        val arrive = com.cineverse.app.core.ui.rememberArrival(1f, 0, 500)
-                        Text(
-                            "≈ ${time.label} with you",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.gold,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .padding(top = 2.dp)
-                                .graphicsLayer { alpha = arrive; translationY = (1f - arrive) * 8f },
-                        )
-                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * A cast member's face, and your time with them as the website draws it: a
+ * ring in their hours club's colour - bronze at ten hours, then silver, gold,
+ * cyan, violet, rose and orchid at a thousand - filling towards the next
+ * club, and a chip with the hours under the chin. The ring sweeps in as each
+ * person's credits are read.
+ */
+@Composable
+private fun CastFace(person: Person, time: com.cineverse.app.data.cast.ActorHours?) {
+    val colors = CvTheme.colors
+    val dark = colors.ink.luminance() < 0.5f
+    val tone = time?.let { androidx.compose.ui.graphics.Color(com.cineverse.app.data.cast.ActorHours.clubColor(it.club, dark)) }
+    val fill = com.cineverse.app.core.ui.rememberArrival(time?.toNext ?: 0f, 120, 1000)
+    val chip = com.cineverse.app.core.ui.rememberArrival(if (time != null) 1f else 0f, 700, 420)
+    Box(Modifier.size(width = 84.dp, height = 90.dp), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.size(84.dp), contentAlignment = Alignment.Center) {
+            if (tone != null) {
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    val stroke = 3.2.dp.toPx()
+                    val inset = stroke / 2
+                    val arc = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+                    val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+                    drawArc(
+                        color = tone.copy(alpha = 0.22f), startAngle = 0f, sweepAngle = 360f, useCenter = false,
+                        topLeft = topLeft, size = arc, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                    )
+                    drawArc(
+                        color = tone, startAngle = -90f, sweepAngle = 360f * fill, useCenter = false,
+                        topLeft = topLeft, size = arc,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .size(if (tone != null) 72.dp else 78.dp)
+                    .clip(CircleShape)
+                    .background(colors.surface2)
+            ) {
+                CvImage(Img.profile(person.profilePath), person.name, Modifier.fillMaxSize())
+            }
+        }
+        if (time != null && tone != null) {
+            Text(
+                time.label,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Black),
+                color = androidx.compose.ui.graphics.Color(0xFF0B0B10),
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer { alpha = chip; scaleX = 0.6f + 0.4f * chip; scaleY = scaleX }
+                    .clip(CircleShape)
+                    .background(tone)
+                    .padding(horizontal = 7.dp, vertical = 1.dp)
+                    .semantics { contentDescription = "About ${time.label} watched with ${person.name}" },
+            )
         }
     }
 }
@@ -1066,10 +1104,18 @@ fun ForYouCard(pitch: com.cineverse.app.data.ai.Pitch, modifier: Modifier = Modi
         pitch.fit >= 50 -> com.cineverse.app.core.design.Palette.Gold
         else -> com.cineverse.app.core.design.Palette.Red2
     }
+    // A tick under the thumb at every tenth of the ring as it fills: the
+    // score is felt as well as read.
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val tenths = (fill * 10).toInt()
+    androidx.compose.runtime.LaunchedEffect(tenths) {
+        if (tenths > 0) haptics?.play(com.cineverse.app.core.design.Haptic.Tick)
+    }
     Row(
         modifier
             .graphicsLayer { alpha = shown; translationY = (1f - shown) * 18f }
             .fillMaxWidth()
+            .geminiGlow()
             .clip(CvShape.Large)
             .background(
                 androidx.compose.ui.graphics.Brush.linearGradient(

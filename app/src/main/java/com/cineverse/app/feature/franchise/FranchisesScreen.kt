@@ -160,18 +160,13 @@ fun FranchisesScreen(
                 }
 
                 item(key = "filters") {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = ScreenPadding),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(FranchiseFilter.entries.toList(), key = { it.name }) { filter ->
-                            CvChip(
-                                label = filter.label,
-                                active = state.filter == filter,
-                                count = state.counts[filter] ?: 0,
-                                onClick = { viewModel.setFilter(filter) },
-                            )
-                        }
+                    Row(Modifier.padding(horizontal = ScreenPadding)) {
+                        com.cineverse.app.core.ui.CvDropdown(
+                            "Show",
+                            FranchiseFilter.entries.map { it to "${it.label} (${state.counts[it] ?: 0})" },
+                            state.filter,
+                            active = true,
+                        ) { viewModel.setFilter(it) }
                     }
                 }
 

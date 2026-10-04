@@ -60,6 +60,14 @@ data class Settings(
     val detailOrder: List<String> = emptyList(),
     val notifyNewEpisodes: Boolean = true,
     val notifyReleases: Boolean = true,
+    /** The minute an episode airs, where the broadcaster's time is known. */
+    val notifyAiring: Boolean = true,
+    /** A new season of a show you have watched. */
+    val notifySeasons: Boolean = true,
+    /** Your month in films and series, on the first. */
+    val notifyRecap: Boolean = true,
+    /** A new version of the app. */
+    val notifyUpdates: Boolean = true,
     /** The hero advances by itself. Off leaves it on one title until swiped. */
     val heroAutoAdvance: Boolean = true,
     /** How long each hero slide is held, in seconds, when nothing is playing. */
@@ -72,6 +80,8 @@ data class Settings(
     val confetti: Boolean = true,
     /** Shake the phone on Discover for Surprise me, or on your list to pick from it. */
     val shakeToPick: Boolean = true,
+    /** Voice search reads its answer aloud. */
+    val spokenAnswers: Boolean = true,
     /** Swipe an episode row to mark everything up to it. */
     val episodeSwipe: Boolean = true,
     /** The live countdown to the next episode on a title page. */
@@ -92,14 +102,15 @@ data class Settings(
 /**
  * How tightly posters are packed.
  *
- * Not a pixel size: the minimum CELL width, which `GridCells.Adaptive` turns
- * into a column count for whatever window it is given. Choosing a count
- * directly would be wrong on a tablet and wrong again in landscape.
+ * A column count for a phone - four, three or two - which wider windows add
+ * to (see posterColumns), and a matching card width for rails. It was a
+ * minimum cell width once, and two of its three choices gave the same two
+ * columns on a phone, so the setting appeared to do nothing.
  */
-enum class GridDensity(val label: String, val cellDp: Int) {
-    Dense("More per row", 100),
-    Comfortable("Comfortable", 118),
-    Large("Larger posters", 150),
+enum class GridDensity(val label: String, val columns: Int, val railDp: Int) {
+    Dense("More per row", 4, 112),
+    Comfortable("Comfortable", 3, 132),
+    Large("Larger posters", 2, 156),
 }
 
 class SettingsRepository(
@@ -131,6 +142,7 @@ class SettingsRepository(
         val startTab = stringPreferencesKey("startTab")
         val confetti = booleanPreferencesKey("confetti")
         val shakeToPick = booleanPreferencesKey("shakeToPick")
+        val spokenAnswers = booleanPreferencesKey("spokenAnswers")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
         val countdowns = booleanPreferencesKey("countdowns")
         val posterMeta = booleanPreferencesKey("posterMeta")
@@ -139,6 +151,10 @@ class SettingsRepository(
         val titleLogos = booleanPreferencesKey("titleLogos")
         val titleColour = booleanPreferencesKey("titleColour")
         val notifyReleases = booleanPreferencesKey("notifyReleases")
+        val notifyAiring = booleanPreferencesKey("notifyAiring")
+        val notifySeasons = booleanPreferencesKey("notifySeasons")
+        val notifyRecap = booleanPreferencesKey("notifyRecap")
+        val notifyUpdates = booleanPreferencesKey("notifyUpdates")
         val updatedAt = longPreferencesKey("updatedAt")
         val lastUpdateCheck = longPreferencesKey("lastUpdateCheck")
         val skippedVersion = intPreferencesKey("skippedVersion")
@@ -175,6 +191,7 @@ class SettingsRepository(
         startTab = this[Keys.startTab] ?: "home",
         confetti = this[Keys.confetti] ?: true,
         shakeToPick = this[Keys.shakeToPick] ?: true,
+        spokenAnswers = this[Keys.spokenAnswers] ?: true,
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
         countdowns = this[Keys.countdowns] ?: true,
         posterMeta = this[Keys.posterMeta] ?: false,
@@ -183,6 +200,10 @@ class SettingsRepository(
         titleLogos = this[Keys.titleLogos] ?: true,
         titleColour = this[Keys.titleColour] ?: true,
         notifyReleases = this[Keys.notifyReleases] ?: true,
+        notifyAiring = this[Keys.notifyAiring] ?: true,
+        notifySeasons = this[Keys.notifySeasons] ?: true,
+        notifyRecap = this[Keys.notifyRecap] ?: true,
+        notifyUpdates = this[Keys.notifyUpdates] ?: true,
         updatedAt = this[Keys.updatedAt] ?: 0L,
     )
 
@@ -218,6 +239,7 @@ class SettingsRepository(
     suspend fun setStartTab(value: String) = edit { it[Keys.startTab] = value }
     suspend fun setConfetti(value: Boolean) = edit { it[Keys.confetti] = value }
     suspend fun setShakeToPick(value: Boolean) = edit { it[Keys.shakeToPick] = value }
+    suspend fun setSpokenAnswers(value: Boolean) = edit { it[Keys.spokenAnswers] = value }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
     suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }
     suspend fun setPosterMeta(value: Boolean) = edit { it[Keys.posterMeta] = value }
@@ -228,6 +250,10 @@ class SettingsRepository(
 
     suspend fun setNotifyEpisodes(value: Boolean) = edit { it[Keys.notifyEpisodes] = value }
     suspend fun setNotifyReleases(value: Boolean) = edit { it[Keys.notifyReleases] = value }
+    suspend fun setNotifyAiring(value: Boolean) = edit { it[Keys.notifyAiring] = value }
+    suspend fun setNotifySeasons(value: Boolean) = edit { it[Keys.notifySeasons] = value }
+    suspend fun setNotifyRecap(value: Boolean) = edit { it[Keys.notifyRecap] = value }
+    suspend fun setNotifyUpdates(value: Boolean) = edit { it[Keys.notifyUpdates] = value }
     suspend fun setDetailOrder(value: List<String>) = edit { it[Keys.detailOrder] = value.joinToString(",") }
 
     /** Not synced: when this device last asked GitHub about an update. */

@@ -142,28 +142,22 @@ fun BoxOfficeScreen(
 
             when (state.view) {
                 BoxView.Films -> {
-                    item(key = "decades") {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = ScreenPadding),
+                    item(key = "filters") {
+                        Row(
+                            Modifier.padding(horizontal = ScreenPadding),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(Decades, key = { it }) { decade ->
-                                CvChip(
-                                    if (decade == 0) "All decades" else "${decade}s",
-                                    state.decade == decade,
-                                    { viewModel.setDecade(decade) },
-                                )
-                            }
-                        }
-                    }
-                    item(key = "sorts") {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = ScreenPadding),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(BoxSort.entries.toList(), key = { it.name }) { sort ->
-                                CvChip(sort.label, state.sort == sort, { viewModel.setSort(sort) })
-                            }
+                            com.cineverse.app.core.ui.CvDropdown(
+                                "Decade",
+                                Decades.map { it to if (it == 0) "All decades" else "${it}s" },
+                                state.decade,
+                            ) { viewModel.setDecade(it) }
+                            com.cineverse.app.core.ui.CvDropdown(
+                                "Sort",
+                                BoxSort.entries.map { it to it.label },
+                                state.sort,
+                                active = true,
+                            ) { viewModel.setSort(it) }
                         }
                     }
                     val rows = state.visibleFilms

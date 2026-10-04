@@ -38,8 +38,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import com.cineverse.app.feature.sheets.FilterSheet
-import com.cineverse.app.feature.sheets.FilterBar
+import com.cineverse.app.feature.sheets.FilterDropdowns
+import com.cineverse.app.feature.sheets.SortDropdown
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -92,7 +92,6 @@ fun SearchScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
-    var filters by remember { mutableStateOf(false) }
     val colors = CvTheme.colors
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -104,7 +103,7 @@ fun SearchScreen(
         keyboard?.hide()
         listening = true
         voice.start { heard ->
-            listening = false
+            // The overlay stays for the answer: the orb turns into it.
             viewModel.ask(heard, spoken = true)
         }
     }
@@ -315,16 +314,13 @@ fun SearchScreen(
             }
 
             else -> Column {
-                FilterBar(
+                FilterDropdowns(
                     filter = state.filter,
-                    onOpen = { filters = true },
-                    trailing = {
-                        Text(
-                            "${state.shown.size} of ${state.results.size}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.text3,
-                        )
-                    },
+                    genres = state.genres,
+                    onChange = viewModel::setFilter,
+                    count = if (state.filter.isDefault) "${state.results.size} results" else "${state.shown.size} of ${state.results.size}",
+                    showHideWatched = true,
+                    sort = { SortDropdown(SearchSorts, state.filter, viewModel::setFilter) },
                 )
                 if (state.filteredOut) {
                     // A filter that hides everything has to say so, and has to
@@ -393,18 +389,11 @@ fun SearchScreen(
 
     if (listening) {
         androidx.activity.compose.BackHandler { voice.cancel(); listening = false }
-        VoiceOverlay(voice = voice, onRetry = ::listen, onClose = { listening = false })
-    }
-
-    if (filters) {
-        FilterSheet(
-            filter = state.filter,
-            genres = state.genres,
-            resultCount = state.shown.size,
-            showHideWatched = true,
-            sorts = SearchSorts,
-            onChange = viewModel::setFilter,
-            onDismiss = { filters = false },
+        VoiceOverlay(
+            voice = voice,
+            answer = state.ask,
+            onRetry = ::listen,
+            onClose = { listening = false },
         )
     }
 }

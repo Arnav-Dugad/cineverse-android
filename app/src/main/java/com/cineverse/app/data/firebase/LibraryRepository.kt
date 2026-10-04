@@ -81,7 +81,9 @@ class LibraryRepository(
                             ?: return@mapNotNull null
                         doc.id to score
                     }.toMap(),
-                    lists = lists.map { it.toList() }.sortedBy { it.createdAt },
+                    // The website's order: its `order` field, then the name,
+                    // so the lists read the same on both.
+                    lists = lists.map { it.toList() }.sortedWith(compareBy<UserList> { it.order }.thenBy { it.name.lowercase() }),
                     // Tombstones are dropped here rather than at every call
                     // site, so nothing downstream can forget to check.
                     movieProgress = progress.mapNotNull { it.toMovieProgress() }
@@ -202,9 +204,29 @@ class LibraryRepository(
         val uid = auth.uid.value ?: return null
         val id = "l" + System.currentTimeMillis().toString(36)
         user(uid).collection("lists").document(id).set(
-            mapOf("name" to name.take(60), "icon" to icon, "createdAt" to System.currentTimeMillis())
+            mapOf(
+                "name" to name.take(60),
+                "icon" to icon,
+                "createdAt" to System.currentTimeMillis(),
+                // At the end, as the website places a new list.
+                "order" to (library.value.lists.maxOfOrNull { it.order } ?: 0) + 1,
+            )
         ).await()
         return id
+    }
+
+    /** Your lists in a new order, written as the website's `order` numbers in one batch. */
+    suspend fun reorderLists(ids: List<String>) {
+        val uid = auth.uid.value ?: return
+        val batch = store.batch()
+        ids.forEachIndexed { index, id ->
+            batch.set(
+                user(uid).collection("lists").document(id),
+                mapOf("order" to index),
+                com.google.firebase.firestore.SetOptions.merge(),
+            )
+        }
+        batch.commit().await()
     }
 
     suspend fun renameList(id: String, name: String) {
@@ -412,6 +434,13 @@ internal fun DocumentSnapshot.toWatched(): WatchedItem? {
             .filter { it > 0 }
             .sorted(),
         lastPlayedAt = millis("lastPlayedAt"),
+        cast = (get("cast") as? List<*>).orEmpty().mapNotNull { raw ->
+            val person = raw as? Map<*, *> ?: return@mapNotNull null
+            val personId = (person["id"] as? Number)?.toInt() ?: return@mapNotNull null
+            val name = person["name"] as? String ?: return@mapNotNull null
+            com.cineverse.app.data.model.CastRef(personId, name, person["profile"] as? String ?: "")
+        },
+        directorProfile = str("directorProfile"),
     )
 }
 
@@ -420,6 +449,7 @@ internal fun DocumentSnapshot.toList(): UserList = UserList(
     name = str("name").ifBlank { "Untitled list" },
     icon = str("icon"),
     createdAt = millis("createdAt"),
+    order = (get("order") as? Number)?.toInt() ?: 0,
     locked = getBoolean("locked") == true,
     // The lock is an OBJECT on the website's documents. This used to read a
     // boolean that nothing writes, so a list locked on the laptop showed every

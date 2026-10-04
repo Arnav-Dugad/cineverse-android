@@ -61,6 +61,8 @@ import com.cineverse.app.core.ui.PosterCard
 import com.cineverse.app.core.ui.PosterSkeleton
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
+import com.cineverse.app.core.ui.geminiGlow
+import com.cineverse.app.core.ui.sharedPoster
 import com.cineverse.app.core.ui.posterCellWidth
 import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.rememberArrival
@@ -160,6 +162,7 @@ private fun Results(
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .geminiGlow(result.byGemini)
                     .clip(CvShape.Large)
                     .background(
                         Brush.linearGradient(
@@ -275,6 +278,8 @@ private fun Did(result: AskUi.Did, onOpen: (MediaItem) -> Unit, onDismiss: () ->
                         .graphicsLayer { scaleX = 0.9f + 0.1f * shown; scaleY = scaleX; alpha = shown }
                         .width(110.dp)
                         .height(165.dp)
+                        // The same poster on the title page: it flies there.
+                        .sharedPoster(item.key)
                         .clip(CvShape.Medium)
                         .background(colors.surface2)
                         .clickableNoRipple { onOpen(item) },

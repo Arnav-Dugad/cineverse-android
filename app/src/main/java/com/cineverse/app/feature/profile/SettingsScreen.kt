@@ -1,5 +1,9 @@
 package com.cineverse.app.feature.profile
 
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -153,9 +157,10 @@ fun SettingsScreen(
             )
                 Divider()
             SwitchRow(
-                title = "Title artwork",
-                checked = settings.titleLogos,
-                onChange = viewModel::setTitleLogos,
+                title = "Hide title logos on title pages",
+                detail = "Show the name in plain type instead",
+                checked = !settings.titleLogos,
+                onChange = { hide -> viewModel.setTitleLogos(!hide) },
             )
                 Divider()
             SwitchRow(
@@ -212,6 +217,13 @@ fun SettingsScreen(
 
         item(key = "group_watching") {
             SettingsGroup("Watching") {
+            SwitchRow(
+                title = "Voice search answers aloud",
+                detail = "After you speak, it says what it found or did",
+                checked = settings.spokenAnswers,
+                onChange = viewModel::setSpokenAnswers,
+            )
+                Divider()
             SwitchRow(
                 title = "Hide episode spoilers",
                 checked = settings.spoilerShield,
@@ -302,14 +314,45 @@ fun SettingsScreen(
             SettingsGroup("Notify") {
             SwitchRow(
                 title = "New episodes",
+                detail = "Shows you are watching, morning and evening",
                 checked = settings.notifyNewEpisodes,
                 onChange = viewModel::setNotifyEpisodes,
             )
                 Divider()
             SwitchRow(
-                title = "Releases",
+                title = "The minute it airs",
+                detail = "Where the broadcaster publishes a time",
+                checked = settings.notifyAiring,
+                onChange = viewModel::setNotifyAiring,
+                enabled = settings.notifyNewEpisodes,
+            )
+                Divider()
+            SwitchRow(
+                title = "New seasons",
+                detail = "A show you have watched comes back",
+                checked = settings.notifySeasons,
+                onChange = viewModel::setNotifySeasons,
+            )
+                Divider()
+            SwitchRow(
+                title = "From your list",
+                detail = "A film or series you saved is out",
                 checked = settings.notifyReleases,
                 onChange = viewModel::setNotifyReleases,
+            )
+                Divider()
+            SwitchRow(
+                title = "Your month",
+                detail = "Last month in films and series, on the first",
+                checked = settings.notifyRecap,
+                onChange = viewModel::setNotifyRecap,
+            )
+                Divider()
+            SwitchRow(
+                title = "App updates",
+                detail = "When a new version is ready",
+                checked = settings.notifyUpdates,
+                onChange = viewModel::setNotifyUpdates,
             )
                 Divider()
             val granted = com.cineverse.app.notify.Notifications.canPost(context)
@@ -318,7 +361,7 @@ fun SettingsScreen(
             ) { allowed ->
                 if (allowed) haptics?.play(Haptic.Success) else haptics?.play(Haptic.Warning)
             }
-            if (!granted && (settings.notifyNewEpisodes || settings.notifyReleases)) {
+            if (!granted) {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -378,9 +421,35 @@ fun SettingsScreen(
                         color = colors.text,
                     )
                     Text(
-                        "Once a day, on Wi-Fi",
+                        "It also runs by itself, morning and evening",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.text3,
+                    )
+                }
+            }
+                Divider()
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            NotifyAction(
+                icon = Icons.Rounded.NotificationsActive,
+                title = "Send a test notification",
+                detail = if (granted) "See how one looks on this phone" else "Allow notifications first",
+            ) {
+                haptics?.play(Haptic.Tap)
+                if (!granted) launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                else scope.launch { com.cineverse.app.notify.Notifications.postTest(context) }
+            }
+                Divider()
+            NotifyAction(
+                icon = Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                title = "Sound and style",
+                detail = "Each kind has its own channel in Android's settings",
+            ) {
+                haptics?.play(Haptic.Tap)
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
                 }
             }
@@ -490,7 +559,7 @@ internal fun CountTile(label: String, value: Int, modifier: Modifier = Modifier)
             .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("$value", style = MaterialTheme.typography.titleLarge, color = colors.text)
+        com.cineverse.app.core.ui.OdometerText(value, MaterialTheme.typography.titleLarge, colors.text)
         Text(label, style = MaterialTheme.typography.labelSmall, color = colors.text3)
     }
 }
@@ -581,6 +650,14 @@ internal fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
  */
 private val REGIONS = listOf(
     "IN" to "India",
+    "SA" to "Saudi Arabia",
+    "AE" to "United Arab Emirates",
+    "QA" to "Qatar",
+    "BH" to "Bahrain",
+    "KW" to "Kuwait",
+    "OM" to "Oman",
+    "LK" to "Sri Lanka",
+    "NP" to "Nepal",
     "US" to "United States",
     "GB" to "United Kingdom",
     "CA" to "Canada",
@@ -636,6 +713,9 @@ private fun RegionRow(selected: String, onSelect: (String) -> Unit) {
         com.cineverse.app.core.ui.CvSheet(onDismiss = { open = false }) {
             Text("Region", style = MaterialTheme.typography.titleLarge, color = colors.text)
             Spacer(Modifier.size(12.dp))
+            // Twenty regions are taller than a phone: the list scrolls under
+            // the heading rather than pushing the sheet off the screen.
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             for ((code, name) in REGIONS) {
                 val active = code == current.first
                 Row(
@@ -667,6 +747,7 @@ private fun RegionRow(selected: String, onSelect: (String) -> Unit) {
                         )
                     }
                 }
+            }
             }
         }
     }
@@ -776,6 +857,30 @@ internal fun ChoiceRow(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NotifyAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    detail: String,
+    onClick: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = colors.text2, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = colors.text3)
         }
     }
 }

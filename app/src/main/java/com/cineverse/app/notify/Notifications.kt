@@ -44,6 +44,9 @@ object Notifications {
 
     const val CHANNEL_EPISODES = "episodes"
     const val CHANNEL_RELEASES = "releases"
+    const val CHANNEL_SEASONS = "seasons"
+    const val CHANNEL_RECAP = "recap"
+    const val CHANNEL_UPDATES = "updates"
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -66,6 +69,27 @@ object Notifications {
             ).apply {
                 description = "Something on your list is out."
             }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_SEASONS,
+                "New seasons",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "A show you have watched is back with a new season." }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_RECAP,
+                "Your month",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply { description = "Last month in films and series, on the first." }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_UPDATES,
+                "App updates",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply { description = "A new version of CineVerse is ready to install." }
         )
     }
 
@@ -167,11 +191,25 @@ object Notifications {
         }
     }
 
+    /** A sample, so someone can see the notifications work and how they look. */
+    suspend fun postTest(context: Context) {
+        post(
+            context = context,
+            id = idFor("test"),
+            channel = CHANNEL_EPISODES,
+            title = "CineVerse",
+            body = "Notifications are working. New episodes, seasons and releases will look like this.",
+            deepLink = "cineverse://inbox",
+            imageUrl = null,
+        )
+    }
+
     /** The one summary that holds a group together. */
     fun postSummary(context: Context, channel: String, count: Int) {
         if (!canPost(context) || count < 2) return
         val text = when (channel) {
             CHANNEL_EPISODES -> "$count new episodes"
+            CHANNEL_SEASONS -> "$count shows are back"
             else -> "$count titles out now"
         }
         val builder = NotificationCompat.Builder(context, channel)

@@ -36,6 +36,8 @@ data class Rail(
     val numbered: Boolean = false,
     /** The logo of the title this rail was derived from, for the kicker. */
     val kickerLogo: String? = null,
+    /** A person's face beside the title: "Starring" and "From" rails. */
+    val face: String? = null,
 )
 
 @Immutable
@@ -161,6 +163,12 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             _state.value = _state.value.copy(upNext = upNext.await(), returning = returning.await())
             // The home-screen widget shows the same countdowns; keep it in step.
             com.cineverse.app.widget.UpNextWidget().updateAllSafe(app.context)
+            // And the "it's out" alarms, from the same answer, so they are set
+            // the moment the app knows a time rather than at the next sweep.
+            val settings = app.settings.settings.value
+            if (settings.notifyNewEpisodes && settings.notifyAiring) {
+                com.cineverse.app.notify.AiringAlertWorker.schedule(app.context, _state.value.upNext)
+            }
         }
     }
 
@@ -473,6 +481,39 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             }
         }
 
+        // The website's people rails: the actor you watch most, and the
+        // director. What you have already seen goes to the back of the row
+        // rather than off it, so the row still reads as their work.
+        val seenKeys = library.watched.keys
+        profile.topActors.firstOrNull()?.let { actor ->
+            val films = app.tmdb.discover(
+                MediaType.Movie,
+                mapOf("with_cast" to actor.id.toString(), "sort_by" to "popularity.desc", "vote_count.gte" to "40"),
+            ).filter { it.hasArt }.sortedBy { it.key in seenKeys }
+            if (films.size >= 6) extra += Rail(
+                id = "actor_${actor.id}",
+                title = "Starring ${actor.name}",
+                items = films,
+                face = actor.profile.ifBlank { null },
+                seeAll = com.cineverse.app.nav.Route.Person(actor.id),
+            )
+        }
+        profile.topDirectors.firstOrNull { it.id != profile.topActors.firstOrNull()?.id }?.let { director ->
+            val films = runCatching { app.tmdb.person(director.id) }.getOrNull()
+                ?.asCrew.orEmpty()
+                .filter { it.role == "Director" && it.item.type == MediaType.Movie && it.item.hasArt }
+                .map { it.item }
+                .distinctBy { it.key }
+                .sortedWith(compareBy<MediaItem> { it.key in seenKeys }.thenByDescending { it.popularity })
+            if (films.size >= 4) extra += Rail(
+                id = "director_${director.id}",
+                title = "From ${director.name}",
+                items = films,
+                face = director.profile.ifBlank { null },
+                seeAll = com.cineverse.app.nav.Route.Person(director.id),
+            )
+        }
+
         // Top picks leads; the catalogue follows. A personalised row below six
         // generic ones is a personalised row nobody sees.
         _state.value = _state.value.copy(personal = extra)
@@ -555,6 +596,17 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
     }
 
     /** Save the row in the order it was arranged. */
+    suspend fun pickTonight(
+        mood: com.cineverse.app.data.ai.Mood,
+        time: com.cineverse.app.data.ai.TimeBox,
+        exclude: Set<String>,
+    ) = runCatching { app.tonight.pick(mood, time, exclude) }.getOrNull()
+
+    fun startWatching(pick: com.cineverse.app.data.ai.TonightPick) {
+        if (pick.runtime <= 0) return
+        app.watchingNow.start(pick.item.id, pick.item.title, pick.runtime, 0, pick.item.posterPath.orEmpty())
+    }
+
     fun arrange(keys: List<String>) = app.continueOrder.setOrder(keys)
 
     /** Forget the hand-made order. */

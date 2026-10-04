@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.person
 
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.width
 import com.cineverse.app.core.ui.glass
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.ui.graphics.graphicsLayer
@@ -71,6 +73,7 @@ fun PersonScreen(
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.shows.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
+    var timeline by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
 
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     // Content scrolled under the clock gets a scrim, as every other page has.
@@ -159,22 +162,44 @@ fun PersonScreen(
                             )
                         }
                         Spacer(Modifier.height(22.dp))
-                        Text(
-                            "${credits.size} TITLES",
-                            style = KickerStyle,
-                            color = colors.text3,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${credits.size} TITLES",
+                                style = KickerStyle,
+                                color = colors.text3,
+                                modifier = Modifier.weight(1f),
+                            )
+                            com.cineverse.app.core.ui.CvChip("Timeline", timeline, { timeline = true })
+                            Spacer(Modifier.width(6.dp))
+                            com.cineverse.app.core.ui.CvChip("Grid", !timeline, { timeline = false })
+                        }
                     }
                 }
-                items(credits, key = { it.item.key + it.role }) { credit ->
-                    PosterCard(
-                        item = credit.item,
-                        onOpen = onOpen,
-                        width = posterCellWidth(),
-                        watched = library.isWatched(credit.item.key),
-                        saved = library.isSaved(credit.item.key),
-                    )
+                if (timeline) {
+                    val decades = Timeline.byDecade(credits)
+                    decades.forEachIndexed { index, (decade, entries) ->
+                        item(key = "decade_$decade", span = { GridItemSpanFull() }) {
+                            DecadeBlock(
+                                decade = decade,
+                                credits = entries,
+                                last = index == decades.lastIndex,
+                                index = index,
+                                isWatched = { library.isWatched(it.key) || (it.type == com.cineverse.app.data.model.MediaType.Tv && (shows[it.id]?.watchedCount ?: 0) > 0) },
+                                isSaved = { library.isSaved(it.key) },
+                                onOpen = onOpen,
+                            )
+                        }
+                    }
+                } else {
+                    items(credits, key = { it.item.key + it.role }) { credit ->
+                        PosterCard(
+                            item = credit.item,
+                            onOpen = onOpen,
+                            width = posterCellWidth(),
+                            watched = library.isWatched(credit.item.key),
+                            saved = library.isSaved(credit.item.key),
+                        )
+                    }
                 }
             }
         }

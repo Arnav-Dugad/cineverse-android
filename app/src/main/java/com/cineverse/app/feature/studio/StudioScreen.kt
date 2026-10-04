@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.studio
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -121,10 +122,20 @@ fun StudioScreen(
                             }
                         }
                     }
-                    ChipRow(StudioSort.entries.filter { it != StudioSort.Revenue || state.type == MediaType.Movie }.map { it.label to it }, state.sort) { viewModel.setSort(it) }
-                    ChipRow(Eras.map { it.second to it.first }, state.era) { viewModel.setEra(it) }
-                    ChipRow(listOf("Any rating" to 0, "6+" to 6, "7+" to 7, "8+" to 8), state.rating) { viewModel.setRating(it) }
-                    ChipRow(listOf("All genres" to 0) + state.genres.map { it.name to it.id }, state.genre) { viewModel.setGenre(it) }
+                    Row(
+                        Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        com.cineverse.app.core.ui.CvDropdown(
+                            "Sort",
+                            StudioSort.entries.filter { it != StudioSort.Revenue || state.type == MediaType.Movie }.map { it to it.label },
+                            state.sort,
+                            active = true,
+                        ) { viewModel.setSort(it) }
+                        com.cineverse.app.core.ui.CvDropdown("Era", Eras.map { it.first to it.second }, state.era) { viewModel.setEra(it) }
+                        com.cineverse.app.core.ui.CvDropdown("Rating", listOf(0 to "Any rating", 6 to "6+", 7 to "7+", 8 to "8+"), state.rating) { viewModel.setRating(it) }
+                        com.cineverse.app.core.ui.CvDropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, state.genre) { viewModel.setGenre(it) }
+                    }
                 }
             }
 
@@ -157,18 +168,6 @@ fun StudioScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun <T> ChipRow(options: List<Pair<String, T>>, selected: T, onPick: (T) -> Unit) {
-    LazyRow(
-        modifier = Modifier.padding(horizontal = 0.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(options, key = { it.first }) { (label, value) ->
-            CvChip(label, value == selected, { onPick(value) })
         }
     }
 }

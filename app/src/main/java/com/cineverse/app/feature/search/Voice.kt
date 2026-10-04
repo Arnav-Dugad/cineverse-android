@@ -234,7 +234,13 @@ private val Examples = listOf(
  * Tapping the orb ends the sentence; the cross throws it away.
  */
 @Composable
-fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
+fun VoiceOverlay(
+    voice: VoiceInput,
+    /** What became of the sentence, once one was heard; the orb becomes it. */
+    answer: AskUi? = null,
+    onRetry: () -> Unit,
+    onClose: () -> Unit,
+) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     val reduced = CvTheme.reducedMotion
@@ -247,6 +253,28 @@ fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
     val loop = rememberInfiniteTransition(label = "voiceLoop")
     val breath by loop.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart), label = "breath")
     val spin by loop.animateFloat(0f, 360f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "spin")
+
+    // The morph. Once something has been heard and the answer is in, the orb
+    // folds away and the answer's chips burst out of where it was; a beat
+    // later the overlay lifts off the results, which carry the same chips.
+    val heardSomething = voice.heard.isNotBlank() && voice.phase == VoiceInput.Phase.Idle
+    val resolved = heardSomething && answer != null && answer !is AskUi.Thinking
+    val understanding = heardSomething && !resolved
+    val fold by animateFloatAsState(if (resolved) 0f else 1f, tween(360), label = "orbFold")
+    LaunchedEffect(resolved) {
+        if (resolved) {
+            haptics?.play(Haptic.Select)
+            delay(1250)
+            onClose()
+        }
+    }
+    LaunchedEffect(heardSomething, answer) {
+        // Heard, then the answer turned out to be a plain search: nothing to morph into.
+        if (heardSomething && answer == null) {
+            delay(400)
+            onClose()
+        }
+    }
 
     var example by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -282,7 +310,12 @@ fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
                 when (voice.phase) {
                     VoiceInput.Phase.Error -> "Hmm"
                     VoiceInput.Phase.Starting -> "One moment"
-                    else -> if (voice.heard.isBlank()) "Listening" else "Got it so far"
+                    else -> when {
+                        resolved -> "Here you go"
+                        understanding -> "Understanding"
+                        voice.heard.isBlank() -> "Listening"
+                        else -> "Got it so far"
+                    }
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.text3,
@@ -291,6 +324,7 @@ fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
             Box(
                 Modifier
                     .size(220.dp)
+                    .graphicsLayer { scaleX = 0.15f + 0.85f * fold; scaleY = scaleX; alpha = fold }
                     .clip(CvShape.Circle)
                     .clickableNoRipple {
                         if (listening) { haptics?.play(Haptic.Tap); voice.stop() }
@@ -299,10 +333,10 @@ fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Orb(
-                    level = if (listening) level else 0f,
+                    level = if (listening) level else if (understanding) 0.35f + 0.25f * breath else 0f,
                     breath = if (reduced) 0f else breath,
                     spin = if (reduced) 0f else spin,
-                    active = listening,
+                    active = listening || understanding,
                     error = voice.phase == VoiceInput.Phase.Error,
                 )
                 Icon(Icons.Rounded.Mic, if (listening) "Finish" else "Listen again", tint = Color.White, modifier = Modifier.size(34.dp))
@@ -310,6 +344,7 @@ fun VoiceOverlay(voice: VoiceInput, onRetry: () -> Unit, onClose: () -> Unit) {
             Spacer(Modifier.height(34.dp))
             Box(Modifier.fillMaxWidth().heightIn(min = 96.dp), contentAlignment = Alignment.TopCenter) {
                 when {
+                    resolved -> MorphChips(answer)
                     voice.phase == VoiceInput.Phase.Error -> Text(
                         voice.error,
                         style = MaterialTheme.typography.titleMedium,
@@ -399,5 +434,55 @@ private fun Orb(level: Float, breath: Float, spin: Float, active: Boolean, error
             radius = radius,
             center = center,
         )
+    }
+}
+
+/**
+ * The answer's chips, bursting out of where the orb was: each starts small,
+ * up at the orb's centre, and springs down into its place, a beat after the
+ * one before it.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun MorphChips(answer: AskUi?) {
+    val colors = CvTheme.colors
+    val chips = when (answer) {
+        is AskUi.Results -> answer.understood.split(" · ").filter { it.isNotBlank() }
+            .ifEmpty { listOf("${answer.items.size} matches") }
+        is AskUi.Did -> listOf(answer.outcome.message)
+        else -> emptyList()
+    }
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        chips.forEachIndexed { index, chip ->
+            val out = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                delay(60L * index)
+                out.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = 260f))
+            }
+            Text(
+                chip,
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.text,
+                modifier = Modifier
+                    .graphicsLayer {
+                        val p = out.value
+                        translationY = (1f - p) * -260f
+                        scaleX = 0.3f + 0.7f * p
+                        scaleY = scaleX
+                        alpha = p.coerceIn(0f, 1f)
+                    }
+                    .clip(CvShape.Pill)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Palette.Purple.copy(alpha = 0.35f), Palette.Red2.copy(alpha = 0.25f))
+                        )
+                    )
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
     }
 }
