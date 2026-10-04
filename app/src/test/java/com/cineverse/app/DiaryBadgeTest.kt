@@ -90,4 +90,16 @@ class DiaryBadgeTest {
         )
         assertEquals("Ted arrives in London.", com.cineverse.app.data.recap.PreviouslyOn.firstSentence("Ted arrives in London. Rebecca has a plan."))
     }
+
+    @Test fun `gemini prose loses its markdown`() {
+        val raw = listOf(
+            "## The end",
+            "The funeral rites (*shraadh*) free him. **Bhoothnath** ascends.",
+            "* Banku waves",
+        ).joinToString("\n")
+        assertEquals(
+            listOf("The end", "The funeral rites (shraadh) free him. Bhoothnath ascends.", "- Banku waves").joinToString("\n"),
+            com.cineverse.app.data.ai.Gemini.plain(raw),
+        )
+    }
 }

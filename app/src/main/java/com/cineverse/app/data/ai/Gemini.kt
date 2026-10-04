@@ -59,14 +59,23 @@ class Gemini(private val context: Context) {
     }
 
     /** Plain text, or null when Gemini cannot be reached. */
-    suspend fun text(prompt: String, timeoutMs: Long = 12_000): String? = call(prompt, json = false, timeoutMs)
+    suspend fun text(prompt: String, timeoutMs: Long = 20_000): String? = call(prompt, json = false, timeoutMs)
 
     /** A JSON object as text, or null. */
     suspend fun json(prompt: String, timeoutMs: Long = 12_000): String? = call(prompt, json = true, timeoutMs)
 
     private suspend fun call(prompt: String, json: Boolean, timeoutMs: Long): String? {
-        if (System.currentTimeMillis() < unavailableUntil) return null
-        val candidates = lock.withLock { model?.let { listOf(it) } ?: MODELS }
+        if (System.currentTimeMillis() < unavailableUntil) {
+            android.util.Log.i("CineVerseGemini", "skipped: unavailable for ${(unavailableUntil - System.currentTimeMillis()) / 1000}s more")
+            return null
+        }
+        // Quick, structured jobs - reading a request, picking a film, a match
+        // score - go to Flash-Lite, which answers in two or three seconds;
+        // written answers go to Flash, which thinks first and writes better.
+        // Each list is tried in order, and a model that fails or is too slow
+        // hands over to the other.
+        val candidates = if (json) FAST else SMART
+        var failures = 0
         for (name in candidates) {
             val outcome = withTimeoutOrNull(timeoutMs) {
                 withContext(Dispatchers.IO) {
@@ -82,40 +91,62 @@ class Gemini(private val context: Context) {
                         generative.generateContent(prompt).text
                     }
                 }
-            } ?: return null
+            } ?: run {
+                android.util.Log.w("CineVerseGemini", "$name timed out after ${timeoutMs}ms")
+                lastError = "Gemini took too long to answer"
+                failures++
+                null
+            } ?: continue
             outcome.onSuccess { text ->
                 lock.withLock { model = name }
                 confirmed = true
-                return text?.trim()?.takeIf { it.isNotEmpty() }
+                return text?.trim()?.let { if (json) it else plain(it) }?.takeIf { it.isNotEmpty() }
             }
             val message = outcome.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }.orEmpty()
             lastError = message
+            android.util.Log.w("CineVerseGemini", "$name failed: $message", outcome.exceptionOrNull())
             // Gemini is not there at all - switched off for the project, a bad
             // key, no network: the same for every model, so stop and stay quiet
             // for a while. Anything else - a retired model, one the free tier
             // does not include, its quota spent - is that model's problem, and
             // the next one may well answer.
             if (Off.any { message.contains(it, ignoreCase = true) }) {
-                unavailableUntil = System.currentTimeMillis() + 30 * 60_000L
+                // A setup that has only just been fixed reaches some servers
+                // before others: "config not found" waits minutes, not half an hour.
+                val pause = if (message.contains("config not found", true)) 3 else 30
+                unavailableUntil = System.currentTimeMillis() + pause * 60_000L
                 return null
             }
-            // The kept model failing - its quota for the day, say - sends the
-            // next call back through the whole list.
-            lock.withLock { if (model == name) model = null }
+            failures++
         }
-        unavailableUntil = System.currentTimeMillis() + 10 * 60_000L
+        // Every model was slow or refused, but Gemini is there: a short pause,
+        // so a busy minute does not switch the features off for long.
+        if (failures > 0) unavailableUntil = System.currentTimeMillis() + 2 * 60_000L
         return null
     }
 
     companion object {
         /** Newest first; the first one that answers is kept. */
         val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
+        private val SMART = MODELS
+        private val FAST = MODELS.reversed()
 
         /** Errors that mean Gemini itself is unreachable, not just one model. */
         private val Off = listOf(
             "SERVICE_DISABLED", "has not been used", "is disabled", "is not enabled", "API key not valid", "genai config not found",
             "API_KEY_INVALID", "Unable to resolve host", "UnknownHost", "failed to connect",
         )
+
+        /**
+         * Gemini's prose with the markdown taken out - bold and italic marks,
+         * headings, bullets made of asterisks - because the app sets its own type.
+         */
+        fun plain(text: String): String = text
+            .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
+            .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+            .replace(Regex("""(?m)^#{1,6}\s+"""), "")
+            .replace(Regex("""(?m)^\s*\*\s+"""), "- ")
+            .trim()
 
         /** The JSON object inside a reply, tolerating a fenced code block around it. */
         fun extractJson(text: String): String? {
