@@ -129,8 +129,15 @@ class PreviouslyOn(private val context: Context, private val gemini: com.cinever
         /** The first sentence, which in an episode synopsis is the setup and never the twist. */
         fun firstSentence(text: String): String {
             val trimmed = text.trim()
-            val end = Regex("""[.!?](\s|$)""").find(trimmed)?.range?.first
+            // A full stop after "Sr", "Dr", "Mr" or an initial is not the end
+            // of a sentence: "When George Sr. learns..." was cut at "Sr."
+            val end = Regex("""[.!?](\s|$)""").findAll(trimmed).map { it.range.first }.firstOrNull { at ->
+                val word = trimmed.substring(0, at).substringAfterLast(' ')
+                trimmed[at] != '.' || (word.lowercase() !in Abbreviations && !(word.length == 1 && word[0].isUpperCase()))
+            }
             return if (end != null && end < 220) trimmed.substring(0, end + 1) else trimmed.take(180).trimEnd() + "…"
         }
+
+        private val Abbreviations = setOf("mr", "mrs", "ms", "dr", "sr", "jr", "st", "vs", "prof", "lt", "col", "gen", "sgt", "capt", "no", "mt")
     }
 }

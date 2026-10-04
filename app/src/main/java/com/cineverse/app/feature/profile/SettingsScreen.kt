@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.profile
 
+import androidx.compose.material.icons.rounded.AutoAwesome
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -315,6 +316,33 @@ fun SettingsScreen(
                 onChange = viewModel::setMatureBlur,
                 enabled = settings.mature,
             )
+            }
+        }
+
+        item(key = "group_gemini") {
+            SettingsGroup("Gemini") {
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                var status by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(
+                        if (viewModel.geminiConfirmed) "Connected" else "Tap to check whether Gemini answers"
+                    )
+                }
+                var checking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                NotifyAction(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = if (checking) "Checking Gemini…" else "Gemini status",
+                    detail = status,
+                ) {
+                    if (checking) return@NotifyAction
+                    haptics?.play(Haptic.Tap)
+                    checking = true
+                    scope.launch {
+                        val (ok, text) = viewModel.checkGemini()
+                        status = text
+                        checking = false
+                        haptics?.play(if (ok) Haptic.Success else Haptic.Warning)
+                    }
+                }
             }
         }
 

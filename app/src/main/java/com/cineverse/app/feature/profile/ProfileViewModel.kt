@@ -63,6 +63,10 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
 
     fun setNotifyEpisodes(value: Boolean) = viewModelScope.launch { app.settings.setNotifyEpisodes(value) }
     fun setNotifyReleases(value: Boolean) = viewModelScope.launch { app.settings.setNotifyReleases(value) }
+    /** Whether Gemini answers, and if not, why - for the Settings row. */
+    suspend fun checkGemini(): Pair<Boolean, String> = app.gemini.check()
+    val geminiConfirmed: Boolean get() = app.gemini.confirmed
+
     fun setSpokenAnswers(value: Boolean) = viewModelScope.launch { app.settings.setSpokenAnswers(value) }
     fun setNotifyAiring(value: Boolean) = viewModelScope.launch { app.settings.setNotifyAiring(value) }
     fun setNotifySeasons(value: Boolean) = viewModelScope.launch { app.settings.setNotifySeasons(value) }

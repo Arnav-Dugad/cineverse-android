@@ -238,13 +238,29 @@ class DetailViewModel(
         )
     }
 
-    fun ask(question: String) {
+    /**
+     * Unlocked once it is all watched: a film marked watched, or a series
+     * finished. Before then the ending stays where it belongs.
+     */
+    fun endingUnlocked(): Boolean {
+        val detail = _state.value.detail ?: return false
+        return if (detail.isSeries) app.episodes.progress.value[detail.id]?.complete == true
+        else app.library.library.value.isWatched(detail.key)
+    }
+
+    fun explainEnding() {
+        if (!endingUnlocked()) return
+        if (_chat.value.any { it.question == ENDING }) return
+        ask(ENDING, ending = true)
+    }
+
+    fun ask(question: String, ending: Boolean = false) {
         val detail = _state.value.detail ?: return
         val line = spoilerLine() ?: return
         val history = _chat.value
         _chat.value = history + com.cineverse.app.data.ai.ChatTurn(question)
         viewModelScope.launch {
-            val turn = runCatching { app.titleChat.answer(detail, line, history, question) }
+            val turn = runCatching { app.titleChat.answer(detail, line, history, question, ending) }
                 .getOrElse { com.cineverse.app.data.ai.ChatTurn(question, "Something went wrong. Try again in a moment.") }
             _chat.value = _chat.value.dropLast(1) + turn
         }
@@ -578,3 +594,6 @@ class DetailViewModel(
         }
     }
 }
+
+/** The question the ending card asks. */
+const val ENDING = "Explain the ending"

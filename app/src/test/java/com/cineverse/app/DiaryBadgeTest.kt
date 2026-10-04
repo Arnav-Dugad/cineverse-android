@@ -82,4 +82,12 @@ class DiaryBadgeTest {
         assertTrue("hours_100" !in earned || context.hours >= 250)
         assertEquals(200, context.hours)
     }
+
+    @Test fun `abbreviations do not end a synopsis's first sentence`() {
+        assertEquals(
+            "When George Sr. learns the truth, Sheldon panics.",
+            com.cineverse.app.data.recap.PreviouslyOn.firstSentence("When George Sr. learns the truth, Sheldon panics. Missy laughs."),
+        )
+        assertEquals("Ted arrives in London.", com.cineverse.app.data.recap.PreviouslyOn.firstSentence("Ted arrives in London. Rebecca has a plan."))
+    }
 }

@@ -41,10 +41,19 @@ class TitleChat(private val gemini: Gemini) {
         line: SpoilerLine,
         history: List<ChatTurn>,
         question: String,
+        /** "Explain the ending": a fuller answer, only ever asked by someone who has seen it. */
+        ending: Boolean = false,
     ): ChatTurn {
         val prompt = buildString {
             appendLine("You are CineVerse's film and TV expert, answering a fan's question about one title.")
-            appendLine("Answer in at most 90 words, warmly and specifically, in plain prose with no markdown headings.")
+            if (ending) {
+                appendLine("The fan has watched all of it and asked you to explain the ending.")
+                appendLine("In at most 190 words and three short paragraphs of plain prose: what actually happens at the end,")
+                appendLine("what it means for the main characters and the story's themes, and any open question or popular reading.")
+                appendLine("Be concrete and accurate; if you are not sure of a detail, say so rather than inventing it. No headings.")
+            } else {
+                appendLine("Answer in at most 90 words, warmly and specifically, in plain prose with no markdown headings.")
+            }
             appendLine("SPOILER RULE (absolute): ${line.rule}")
             appendLine()
             appendLine("Title: ${detail.title} (${detail.releaseDate.take(4)}), ${if (detail.isSeries) "series" else "film"}")
@@ -66,7 +75,17 @@ class TitleChat(private val gemini: Gemini) {
             appendLine("Fan: $question")
             appendLine("You:")
         }
-        gemini.text(prompt, timeoutMs = 20_000)?.let { return ChatTurn(question, it.trim(), byGemini = true) }
+        gemini.text(prompt, timeoutMs = if (ending) 30_000 else 20_000)?.let { return ChatTurn(question, it.trim(), byGemini = true) }
+        if (ending) {
+            // Without Gemini a series still has its finale's own synopsis; a
+            // film's ending is written nowhere a title page can read.
+            val finale = detail.lastEpisode?.takeIf { detail.isSeries && it.overview.isNotBlank() }
+            return ChatTurn(
+                question,
+                finale?.let { "Gemini is off, so here is the finale as the episode guide tells it - S${it.season} E${it.number}, \"${it.name}\": ${it.overview}" }
+                    ?: "Explaining an ending needs Gemini, which isn't working for CineVerse yet. Settings → Gemini status says why.",
+            )
+        }
         return ChatTurn(question, facts(detail, question) ?: OFF, byGemini = false)
     }
 

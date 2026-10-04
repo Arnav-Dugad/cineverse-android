@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.material.icons.rounded.Lock
+import kotlinx.coroutines.launch
 import com.cineverse.app.core.ui.geminiGlow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1221,6 +1223,65 @@ fun ForYouCard(pitch: com.cineverse.app.data.ai.Pitch, modifier: Modifier = Modi
                 Text("${(fill * 100).toInt()}", style = MaterialTheme.typography.titleMedium, color = colors.text)
                 Text("match", style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)), color = colors.text3)
             }
+        }
+    }
+}
+
+/**
+ * "Explain the ending", Gemini's. Locked - a padlock and a line saying what
+ * opens it - until the film is marked watched or the series finished, so the
+ * one place on the page that talks about the ending cannot be read early.
+ * A locked tap gives a little shake rather than an error.
+ */
+@Composable
+fun EndingCard(series: Boolean, unlocked: Boolean, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val shake = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    Row(
+        modifier
+            .fillMaxWidth()
+            .graphicsLayer { translationX = shake.value }
+            .geminiGlow(unlocked, corner = 18.dp, width = 1.2.dp)
+            .clip(CvShape.Large)
+            .background(colors.text.copy(alpha = if (unlocked) 0.05f else 0.03f))
+            .clickableNoRipple {
+                if (unlocked) {
+                    haptics?.play(com.cineverse.app.core.design.Haptic.Tap)
+                    onOpen()
+                } else {
+                    haptics?.play(com.cineverse.app.core.design.Haptic.Warning)
+                    scope.launch {
+                        for (x in listOf(14f, -12f, 9f, -6f, 3f, 0f)) shake.animateTo(x, androidx.compose.animation.core.tween(45))
+                    }
+                }
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (unlocked) androidx.compose.material.icons.Icons.Rounded.AutoAwesome else androidx.compose.material.icons.Icons.Rounded.Lock,
+            null,
+            tint = if (unlocked) com.cineverse.app.core.ui.GeminiColors[1] else colors.text3,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Explain the ending",
+                style = MaterialTheme.typography.titleSmall,
+                color = if (unlocked) colors.text else colors.text2,
+            )
+            Text(
+                when {
+                    unlocked -> "What happened, what it means, and the open questions"
+                    series -> "Unlocks once you've finished the series"
+                    else -> "Unlocks once you've marked it watched"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+            )
         }
     }
 }

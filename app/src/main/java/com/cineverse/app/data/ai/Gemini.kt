@@ -31,6 +31,33 @@ class Gemini(private val context: Context) {
     @Volatile var confirmed: Boolean = false
         private set
 
+    /** What the last attempt said, for the status row in Settings. */
+    @Volatile var lastError: String = ""
+        private set
+
+    /**
+     * Asked from Settings: forget any earlier refusal, try once, and say in
+     * plain words whether Gemini is there - and if not, why.
+     */
+    suspend fun check(): Pair<Boolean, String> {
+        unavailableUntil = 0L
+        lock.withLock { model = null }
+        val answer = text("Reply with the single word: ready", timeoutMs = 20_000)
+        if (answer != null) return true to "Connected · ${lock.withLock { model }.orEmpty()}"
+        val reason = lastError
+        return false to when {
+            reason.contains("Developer API is not enabled", true) || reason.contains("genai config not found", true) ->
+                "Not switched on yet: Firebase console → AI Logic → Settings → Gemini Developer API → Enable"
+            reason.contains("has not been used", true) || reason.contains("SERVICE_DISABLED", true) ->
+                "Firebase AI Logic is switched off for this project"
+            reason.contains("quota", true) || reason.contains("429") || reason.contains("RESOURCE_EXHAUSTED", true) ->
+                "Today's free Gemini allowance is used up; it resets daily"
+            reason.contains("resolve host", true) || reason.contains("failed to connect", true) -> "No connection"
+            reason.isBlank() -> "No answer from Gemini"
+            else -> reason.take(160)
+        }
+    }
+
     /** Plain text, or null when Gemini cannot be reached. */
     suspend fun text(prompt: String, timeoutMs: Long = 12_000): String? = call(prompt, json = false, timeoutMs)
 
@@ -61,7 +88,8 @@ class Gemini(private val context: Context) {
                 confirmed = true
                 return text?.trim()?.takeIf { it.isNotEmpty() }
             }
-            val message = outcome.exceptionOrNull()?.message.orEmpty()
+            val message = outcome.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }.orEmpty()
+            lastError = message
             // Gemini is not there at all - switched off for the project, a bad
             // key, no network: the same for every model, so stop and stay quiet
             // for a while. Anything else - a retired model, one the free tier
@@ -85,7 +113,7 @@ class Gemini(private val context: Context) {
 
         /** Errors that mean Gemini itself is unreachable, not just one model. */
         private val Off = listOf(
-            "SERVICE_DISABLED", "has not been used", "is disabled", "API key not valid",
+            "SERVICE_DISABLED", "has not been used", "is disabled", "is not enabled", "API key not valid", "genai config not found",
             "API_KEY_INVALID", "Unable to resolve host", "UnknownHost", "failed to connect",
         )
 

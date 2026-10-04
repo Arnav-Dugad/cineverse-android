@@ -12,4 +12,5 @@
     android:widgetCategory="home_screen|keyguard"
     android:description="@string/widget_upnext_description"
     android:initialLayout="@layout/widget_loading"
+    android:previewLayout="@layout/widget_upnext_preview"
     android:updatePeriodMillis="1800000" />

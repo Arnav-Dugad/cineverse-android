@@ -231,6 +231,23 @@ fun DetailScreen(
                 }
             }
 
+            // The ending, explained - locked until it is all watched.
+            if (detail.isSeries || detail.releaseDate.take(10) <= java.time.LocalDate.now().toString()) {
+                item(key = "ending") {
+                    val unlocked = androidx.compose.runtime.remember(detail.key, library.watched.size, progress?.watchedCount) {
+                        viewModel.endingUnlocked()
+                    }
+                    EndingCard(
+                        series = detail.isSeries,
+                        unlocked = unlocked,
+                        modifier = Modifier.padding(horizontal = 18.dp).padding(top = 16.dp),
+                    ) {
+                        asking = true
+                        viewModel.explainEnding()
+                    }
+                }
+            }
+
             // Directly under the actions and above the tabs, so it is on screen
             // whichever tab is selected. It used to live inside About, which is
             // two taps and a scroll from the question it answers.
