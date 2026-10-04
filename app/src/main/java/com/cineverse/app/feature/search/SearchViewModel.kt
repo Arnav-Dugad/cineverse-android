@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
@@ -114,6 +115,11 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
     val state: StateFlow<SearchState> = _state.asStateFlow()
 
     val library: StateFlow<Library> = app.library.library
+
+    /** Whether Gemini is on, for the controls that only Gemini can serve. */
+    val geminiOn: StateFlow<Boolean> = app.settings.settings
+        .map { it.geminiOn }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, app.settings.settings.value.geminiOn)
 
     // Kept on the device, the eight most recent. It lived only in memory, so
     // leaving Search and coming back found the list empty every time.
@@ -288,6 +294,32 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
 
     suspend fun resolveMentions(answer: String): com.cineverse.app.data.ai.Mentioned =
         com.cineverse.app.data.ai.Mentions.resolve(app, answer)
+
+    /** A picture to identify: shrunk to a sensible size, then read by Gemini. */
+    fun identify(uri: android.net.Uri) {
+        val mine = ++generation
+        val heard = "Your picture"
+        _state.value = _state.value.copy(query = "", ask = AskUi.Thinking("Looking at your picture\u2026"), loading = false)
+        viewModelScope.launch {
+            val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val source = android.graphics.ImageDecoder.createSource(app.context.contentResolver, uri)
+                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        val longest = maxOf(info.size.width, info.size.height)
+                        if (longest > 1280) {
+                            val scale = 1280f / longest
+                            decoder.setTargetSize((info.size.width * scale).toInt(), (info.size.height * scale).toInt())
+                        }
+                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                }.getOrNull()
+            }
+            val outcome = if (bitmap == null) Outcome(false, "That picture couldn't be opened.")
+            else runCatching { app.assistant.identify(bitmap) }.getOrDefault(Outcome(false, "Something went wrong reading that picture."))
+            if (mine != generation) return@launch
+            _state.value = _state.value.copy(ask = AskUi.Did(heard, outcome))
+        }
+    }
 
     /** Back to plain search, keeping the words. */
     fun dismissAsk() {

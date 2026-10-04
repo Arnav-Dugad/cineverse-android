@@ -10,8 +10,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.YearMonth
 
 /**
- * A line for a month in the Diary, from Gemini: "A month of comfort
- * rewatches", "Korean thrillers, mostly after midnight". Written from what
+ * A line for a month in the Diary, from Gemini: "A month of cosy
+ * comedies", "Korean thrillers, mostly after midnight". Written from what
  * was actually watched that month, and kept until the month changes.
  */
 class MonthBlurb(context: Context, private val gemini: Gemini) {
@@ -34,7 +34,6 @@ class MonthBlurb(context: Context, private val gemini: Gemini) {
                 append("- ${entry.item.title}")
                 if (entry.episode.isNotBlank()) append(" ${entry.episode}")
                 entry.item.genreIds.mapNotNull { GenreNames[it] }.take(2).takeIf { it.isNotEmpty() }?.let { append(" [${it.joinToString()}]") }
-                if (entry.rewatch) append(" (rewatch)")
                 append(" on ${time.dayOfWeek.name.lowercase()} at ${time.hour}:00")
             }
         }
@@ -43,9 +42,9 @@ class MonthBlurb(context: Context, private val gemini: Gemini) {
             $lines
 
             Sum the month up as a short, warm, slightly witty caption of 3 to 8 words, the way a friend would.
-            The kind of thing meant (write your own, never one of these): "A month of comfort rewatches",
+            The kind of thing meant (write your own, never one of these): "A month of cosy comedies",
             "Thrillers, mostly after midnight", "One show, many late nights".
-            Notice what stands out: rewatches, a genre or language, one show taking over, late nights, weekends -
+            Notice what stands out: a genre or language, one show taking over, late nights, weekends -
             and name the show or film when one dominates.
             Reply with JSON only: {"blurb": string}. No quotation marks inside it, no emoji.
         """.trimIndent()

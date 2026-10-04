@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,6 +46,8 @@ fun CvScreenBar(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: @Composable (() -> Unit)? = null,
+    /** 0..1: how far a large title below has collapsed into this bar. */
+    titleAlpha: () -> Float = { 1f },
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -78,7 +81,11 @@ fun CvScreenBar(
             color = colors.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).graphicsLayer {
+                val shown = titleAlpha()
+                alpha = shown
+                translationY = (1f - shown) * 10.dp.toPx()
+            },
         )
         if (trailing != null) {
             Spacer(Modifier.width(8.dp))
@@ -86,3 +93,39 @@ fun CvScreenBar(
         }
     }
 }
+
+/**
+ * A large title at the top of a list - the M3 large app bar's shape - that
+ * shrinks and fades as it scrolls up, while the same title fades into the
+ * bar above. [collapse] reads how far that has gone, 0 open to 1 folded.
+ */
+@Composable
+fun LargeTitle(title: String, state: androidx.compose.foundation.lazy.LazyListState, modifier: Modifier = Modifier, subtitle: String? = null) {
+    val colors = CvTheme.colors
+    androidx.compose.foundation.layout.Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenPadding)
+            .padding(top = 6.dp, bottom = 14.dp)
+            .graphicsLayer {
+                val c = state.collapse(80.dp.toPx())
+                alpha = 1f - c
+                val s = 1f - 0.12f * c
+                scaleX = s; scaleY = s
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+            },
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+            color = colors.text,
+        )
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.text3)
+        }
+    }
+}
+
+/** How far the first item of a list has scrolled away, over [distance] pixels: 0..1. */
+fun androidx.compose.foundation.lazy.LazyListState.collapse(distance: Float): Float =
+    if (firstVisibleItemIndex > 0) 1f else (firstVisibleItemScrollOffset / distance).coerceIn(0f, 1f)

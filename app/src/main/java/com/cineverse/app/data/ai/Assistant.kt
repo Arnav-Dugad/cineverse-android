@@ -269,6 +269,37 @@ class Assistant(private val app: AppContainer) {
         return Outcome(true, "Made \"$name\" with ${found.size} titles. It's in My List.", found.first()) to found
     }
 
+    /**
+     * "What is this?": a screenshot, a poster photo or a picture of a screen,
+     * read by Gemini, then found on TMDB. A low-confidence guess says so.
+     */
+    suspend fun identify(image: android.graphics.Bitmap): Outcome {
+        val prompt = buildString {
+            appendLine("This picture shows something from a film or TV series: a screenshot, a still, a poster, a photo of a TV or")
+            appendLine("cinema screen, a DVD or Blu-ray case, or a streaming app. Identify the title. Use every clue: faces you")
+            appendLine("recognise, text, logos, the setting, costumes.")
+            appendLine("Reply with JSON only: {\"title\": string, \"year\": integer, \"type\": \"movie\" or \"tv\", \"confidence\": integer 0-100,")
+            appendLine("\"why\": one short sentence on what gave it away}. If you cannot tell at all, {\"title\": null}.")
+        }
+        val raw = app.gemini.vision(image, prompt)
+            ?: return Outcome(false, "Reading pictures needs Gemini, which didn't answer just now.")
+        val obj = runCatching {
+            com.cineverse.app.core.net.Http.json.parseToJsonElement(Gemini.extractJson(raw) ?: "{}").jsonObject
+        }.getOrNull() ?: return Outcome(false, "Gemini couldn't make out a title in that picture.")
+        val title = obj["title"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
+            ?: return Outcome(false, "Gemini couldn't make out a title in that picture.")
+        val year = obj["year"]?.jsonPrimitive?.intOrNull
+        val media = when (obj["type"]?.jsonPrimitive?.contentOrNull) { "tv" -> MediaType.Tv; "movie" -> MediaType.Movie; else -> null }
+        val confidence = obj["confidence"]?.jsonPrimitive?.intOrNull ?: 50
+        val why = obj["why"]?.jsonPrimitive?.contentOrNull?.let(Gemini::plain).orEmpty()
+        val found = runCatching { app.tmdb.searchPage(title, 1, false).items }.getOrDefault(emptyList())
+            .filter { media == null || it.type == media }
+            .firstOrNull { year == null || it.year.toIntOrNull()?.let { y -> kotlin.math.abs(y - year) <= 1 } != false }
+            ?: return Outcome(false, "Gemini thinks it's $title, but it isn't on TMDB.")
+        val sure = if (confidence >= 70) "It's ${found.title}" else "Probably ${found.title}"
+        return Outcome(true, if (why.isNotBlank()) "$sure. $why" else "$sure.", found)
+    }
+
     suspend fun discover(query: DiscoverQuery): List<MediaItem> = coroutineScope {
         val region = app.settings.settings.value.region
         val peopleIds = query.people.map { async { app.tmdb.findPerson(it) } }

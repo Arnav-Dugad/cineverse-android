@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
@@ -214,6 +215,29 @@ fun SearchScreen(
                     )
                 }
                 Spacer(Modifier.size(4.dp))
+                // Identify a title from a picture: a screenshot, a poster photo.
+                val geminiOn = viewModel.geminiOn.collectAsStateWithLifecycle().value
+                if (geminiOn) {
+                    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+                    ) { uri -> uri?.let { keyboard?.hide(); viewModel.identify(it) } }
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(CvShape.Circle)
+                            .clickableNoRipple {
+                                pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Rounded.ImageSearch,
+                            "Find a title from a picture",
+                            tint = colors.text2,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
+                }
                 Box(
                     Modifier
                         .size(34.dp)
@@ -362,20 +386,29 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
+                        // Grouped, People / Films / Series, each heading staying
+                        // pinned under the search box while its group scrolls.
                         if (state.people.isNotEmpty() && state.filter.isDefault) {
+                            stickyHeader(key = "h_people") { GroupHeader("People", state.people.size) }
                             item(key = "people", span = { GridItemSpan(maxLineSpan) }) {
-                                PeopleRow(state.people, onPerson)
+                                PeopleRow(state.people, onPerson, showTitle = false)
                             }
                         }
-                        items(state.shown, key = { it.key }) { item ->
-                            PosterCard(
-                                item = item,
-                                onOpen = onOpen,
-                                width = posterCellWidth(),
-                                watched = library.isWatched(item.key),
-                                saved = library.isSaved(item.key),
-                                rating = library.ratingOf(item.key),
-                            )
+                        val films = state.shown.filter { it.type == com.cineverse.app.data.model.MediaType.Movie }
+                        val series = state.shown.filter { it.type == com.cineverse.app.data.model.MediaType.Tv }
+                        for ((label, group) in listOf("Films" to films, "Series" to series)) {
+                            if (group.isEmpty()) continue
+                            stickyHeader(key = "h_$label") { GroupHeader(label, group.size) }
+                            items(group, key = { it.key }) { item ->
+                                PosterCard(
+                                    item = item,
+                                    onOpen = onOpen,
+                                    width = posterCellWidth(),
+                                    watched = library.isWatched(item.key),
+                                    saved = library.isSaved(item.key),
+                                    rating = library.ratingOf(item.key),
+                                )
+                            }
                         }
                         if (state.hasMore) {
                             item {
@@ -458,12 +491,14 @@ private fun RecentSearches(
  * typed into a search box is usually a person, and the person is the answer.
  */
 @Composable
-private fun PeopleRow(people: List<com.cineverse.app.data.model.Person>, onPerson: (Int) -> Unit) {
+private fun PeopleRow(people: List<com.cineverse.app.data.model.Person>, onPerson: (Int) -> Unit, showTitle: Boolean = true) {
     val colors = CvTheme.colors
     val haptics = com.cineverse.app.core.design.LocalHaptics.current
     Column {
-        Text("PEOPLE", style = KickerStyle, color = colors.text3)
-        Spacer(Modifier.height(10.dp))
+        if (showTitle) {
+            Text("PEOPLE", style = KickerStyle, color = colors.text3)
+            Spacer(Modifier.height(10.dp))
+        }
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -514,5 +549,30 @@ private fun PeopleRow(people: List<com.cineverse.app.data.model.Person>, onPerso
             }
         }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/** A group's heading in search results: pinned while its group scrolls under it. */
+@Composable
+private fun GroupHeader(label: String, count: Int) {
+    val colors = CvTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(colors.ink.copy(alpha = 0.96f))
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label.uppercase(), style = KickerStyle, color = colors.text2)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$count",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.text3,
+            modifier = Modifier
+                .clip(CvShape.Pill)
+                .background(colors.text.copy(alpha = 0.07f))
+                .padding(horizontal = 7.dp, vertical = 1.dp),
+        )
     }
 }

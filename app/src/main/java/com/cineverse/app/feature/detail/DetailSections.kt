@@ -1,6 +1,8 @@
 package com.cineverse.app.feature.detail
 
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Lightbulb
 import kotlinx.coroutines.launch
 import com.cineverse.app.core.ui.geminiGlow
@@ -262,6 +264,7 @@ fun LazyListScope.episodesSection(
     onOpenEpisode: (Int, Int) -> Unit,
     seasonScores: com.cineverse.app.data.scores.SeasonScores = com.cineverse.app.data.scores.SeasonScores(),
     onRateEpisode: (Int, Int, Int) -> Unit = { _, _, _ -> },
+    adviseSkip: (suspend (com.cineverse.app.data.model.Episode) -> com.cineverse.app.data.ai.Skip?)? = null,
     onSeasonRecap: (Int) -> Unit = {},
     onSeriesRecap: () -> Unit = {},
     onPreviously: () -> Unit = {},
@@ -354,6 +357,7 @@ fun LazyListScope.episodesSection(
         EpisodeBox(
             scores = seasonScores,
             onRateEpisode = onRateEpisode,
+            adviseSkip = adviseSkip,
             loading = state.loadingEpisodes,
             episodes = state.episodes,
             progress = progress,
@@ -370,6 +374,7 @@ fun LazyListScope.episodesSection(
 private fun EpisodeBox(
     scores: com.cineverse.app.data.scores.SeasonScores,
     onRateEpisode: (Int, Int, Int) -> Unit,
+    adviseSkip: (suspend (com.cineverse.app.data.model.Episode) -> com.cineverse.app.data.ai.Skip?)?,
     loading: Boolean,
     episodes: List<com.cineverse.app.data.model.Episode>,
     progress: ShowProgress?,
@@ -395,6 +400,9 @@ private fun EpisodeBox(
             source = scores.source,
             onRate = { onRateEpisode(episode.season, episode.number, it) },
             onDismiss = { rating = null },
+            canRate = progress != null,
+            // Only worth asking about an episode you have not seen.
+            skip = adviseSkip?.takeIf { progress?.isWatched(episode.season, episode.number) != true }?.let { advise -> { advise(episode) } },
         )
     }
     Box(
@@ -441,7 +449,7 @@ private fun EpisodeBox(
                         score = scores.byEpisode[episode.number],
                         scoreSource = scores.source,
                         myRating = progress?.episodeRating(episode.season, episode.number) ?: 0,
-                        onRate = if (episode.hasAired && progress != null) ({ rating = episode }) else null,
+                        onRate = if (episode.hasAired && (progress != null || adviseSkip != null)) ({ rating = episode }) else null,
                     )
                 }
             }
@@ -726,7 +734,11 @@ fun LazyListScope.aboutSection(
     onBrand: (Brand) -> Unit = {},
     castHours: Map<Int, com.cineverse.app.data.cast.ActorHours> = emptyMap(),
     places: List<com.cineverse.app.data.places.Place> = emptyList(),
+    wiki: com.cineverse.app.data.wiki.WikiFacts = com.cineverse.app.data.wiki.WikiFacts(),
 ) {
+    if (wiki.basedOn.isNotEmpty()) {
+        item(key = "basedOn") { BasedOnCard(wiki.basedOn, Modifier.padding(horizontal = ScreenPadding).padding(bottom = 18.dp)) }
+    }
     if (detail.cast.isNotEmpty()) {
         item(key = "cast") { CastRow(detail.cast, onPerson, castHours) }
     }
@@ -738,6 +750,9 @@ fun LazyListScope.aboutSection(
     }
     if (detail.brands.isNotEmpty()) {
         item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp), onBrand) }
+    }
+    if (!detail.isSeries && wiki.takings.any) {
+        item(key = "takings") { TakingsPanel(wiki.takings, detail.budget) }
     }
     if (places.isNotEmpty()) {
         item(key = "places") { FilmingMap(places) }
@@ -1537,7 +1552,7 @@ fun TriviaCard(
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
+            if (loading) com.cineverse.app.core.ui.GeminiLoader(size = 20.dp) else Icon(
                 if (unlocked) androidx.compose.material.icons.Icons.Rounded.Lightbulb else androidx.compose.material.icons.Icons.Rounded.Lock,
                 null,
                 tint = if (unlocked) com.cineverse.app.core.design.Palette.Gold else colors.text3,
@@ -1590,5 +1605,87 @@ fun TriviaCard(
                 }
             }
         }
+    }
+}
+
+/** "Based on the novel Forrest Gump by Winston Groom", from Wikidata. */
+@Composable
+private fun BasedOnCard(sources: List<com.cineverse.app.data.wiki.Source>, modifier: Modifier = Modifier) {
+    val colors = CvTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(CvShape.Large)
+            .background(colors.text.copy(alpha = 0.04f))
+            .border(1.dp, colors.hairline, CvShape.Large)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (sources.first().kind == "true story") androidx.compose.material.icons.Icons.Rounded.Public else androidx.compose.material.icons.Icons.Rounded.MenuBook,
+            null,
+            tint = com.cineverse.app.core.design.Palette.Gold,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("BASED ON", style = KickerStyle, color = colors.text3)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                sources.joinToString("; ") { it.sentence }.replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.text,
+            )
+        }
+    }
+}
+
+/**
+ * Box office, Wikidata's statements: worldwide, US, where it ranks all
+ * time, and the opening weekend on the occasions one is recorded - with the
+ * worldwide figure shown against the budget as a bar.
+ */
+@Composable
+private fun TakingsPanel(takings: com.cineverse.app.data.wiki.Takings, budget: Long) {
+    val colors = CvTheme.colors
+    Column(Modifier.padding(horizontal = ScreenPadding).padding(top = 20.dp)) {
+        Text("BOX OFFICE", style = KickerStyle, color = colors.text3)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (takings.worldwide > 0) TakingTile("Worldwide", money(takings.worldwide), takings.rank.takeIf { it > 0 }?.let { "#$it all time" }, Modifier.weight(1f))
+            if (takings.domestic > 0) TakingTile("United States", money(takings.domestic), null, Modifier.weight(1f))
+            if (takings.opening > 0) TakingTile("Opening weekend", money(takings.opening), null, Modifier.weight(1f))
+        }
+        if (budget > 0 && takings.worldwide > 0) {
+            Spacer(Modifier.height(10.dp))
+            val ratio = takings.worldwide.toFloat() / budget
+            val grow = com.cineverse.app.core.ui.rememberArrival((ratio / maxOf(ratio, 1f)).coerceIn(0f, 1f), delayMillis = 200, durationMillis = 900)
+            Text(
+                "${"%.1f".format(ratio)}x its ${money(budget)} budget",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (ratio >= 2.5f) colors.green else if (ratio >= 1f) colors.text2 else com.cineverse.app.core.design.Palette.Red2,
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(CvShape.Pill).background(colors.text.copy(alpha = 0.08f))) {
+                Box(Modifier.fillMaxWidth(grow).height(6.dp).clip(CvShape.Pill).background(if (ratio >= 1f) colors.green else com.cineverse.app.core.design.Palette.Red2))
+            }
+            Text("From Wikidata", style = MaterialTheme.typography.labelSmall, color = colors.text3, modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun TakingTile(label: String, value: String, note: String?, modifier: Modifier) {
+    val colors = CvTheme.colors
+    Column(
+        modifier
+            .clip(CvShape.Large)
+            .background(colors.text.copy(alpha = 0.04f))
+            .border(1.dp, colors.hairline, CvShape.Large)
+            .padding(12.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = colors.text3)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = colors.text)
+        if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = colors.gold)
     }
 }

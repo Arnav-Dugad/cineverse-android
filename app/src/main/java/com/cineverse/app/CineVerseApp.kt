@@ -199,11 +199,26 @@ class AppContainer(val context: Context) {
     /** Home's row for this time of day, by Gemini. */
     val momentRail by lazy { com.cineverse.app.data.ai.MomentRail(this) }
 
+    /** A lighter suggestion after a run of heavy viewing. */
+    val palate by lazy { com.cineverse.app.data.ai.PalateCleanser(this) }
+
+    /** "Why did I like it?" across your top scores. */
+    val tenPattern by lazy { com.cineverse.app.data.ai.TenPattern(this) }
+
+    /** Gemini's spotlight on people and studios. */
+    val spotlight by lazy { com.cineverse.app.data.ai.Spotlight(this) }
+
+    /** "Should I skip this?" per episode, by Gemini. */
+    val skipAdvice by lazy { com.cineverse.app.data.ai.SkipAdvice(this) }
+
     /** Two titles side by side, by Gemini. */
     val compare by lazy { com.cineverse.app.data.ai.Compare(this) }
 
     /** "Your taste in one paragraph", monthly. */
     val tasteParagraph by lazy { com.cineverse.app.data.ai.TasteParagraph(this) }
+
+    /** "Based on" and box office, from Wikidata. */
+    val wikiFacts by lazy { com.cineverse.app.data.wiki.WikiFactsRepository(context, http) }
 
     /** Where titles were filmed, from Wikidata. */
     val filmingLocations by lazy { com.cineverse.app.data.places.FilmingLocations(context, http) }

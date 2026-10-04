@@ -70,8 +70,6 @@ data class TasteMap(
     val countries: List<Slice> = emptyList(),
 )
 
-@Immutable
-data class Rewatch(val id: Int, val title: String, val poster: String, val plays: Int, val minutes: Int)
 
 @Immutable
 data class TasteShift(val month: String, val genre: String, val language: String)
@@ -106,7 +104,6 @@ data class DeepStats(
     val library: LibraryIntel = LibraryIntel(),
     val tv: TvIntel = TvIntel(),
     val taste: TasteMap = TasteMap(),
-    val rewatches: List<Rewatch> = emptyList(),
     val shifts: List<TasteShift> = emptyList(),
     val health: List<HealthLine> = emptyList(),
     val directors: List<PersonCount> = emptyList(),
@@ -131,7 +128,6 @@ internal fun buildDeepStats(
         library = libraryIntel(lib, watched),
         tv = tvIntel(shows),
         taste = tasteMap(watched),
-        rewatches = rewatches(shows),
         shifts = tasteShifts(watched),
         health = health(watched),
         directors = directors(watched),
@@ -280,29 +276,6 @@ private fun tasteMap(watched: List<WatchedItem>): TasteMap {
     )
 }
 
-/**
- * What you keep going back to.
- *
- * `seasonPlays` counts how many times a season has been completed, so a value
- * above one is a genuine rewatch rather than a long first run. Shows with no
- * repeat at all are left out entirely: a "rewatches" panel listing things you
- * watched once is just the library again.
- */
-private fun rewatches(shows: Map<Int, ShowProgress>): List<Rewatch> =
-    shows.values.mapNotNull { show ->
-        val extra = show.seasonPlays.values.sumOf { (it - 1).coerceAtLeast(0) }
-        if (extra <= 0) return@mapNotNull null
-        val perSeason = if (show.structure.isNotEmpty()) {
-            show.totalEpisodes / show.structure.size.coerceAtLeast(1)
-        } else show.watchedCount
-        Rewatch(
-            id = show.tmdbId,
-            title = show.title,
-            poster = show.poster,
-            plays = show.seasonPlays.values.maxOrNull() ?: 1,
-            minutes = extra * perSeason * (show.episodeRuntime.takeIf { it > 0 } ?: 42),
-        )
-    }.sortedByDescending { it.minutes }.take(6)
 
 /**
  * The leading genre and language, month by month.

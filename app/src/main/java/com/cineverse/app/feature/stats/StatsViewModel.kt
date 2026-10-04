@@ -75,6 +75,29 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
 
     suspend fun resolveMentions(text: String) = com.cineverse.app.data.ai.Mentions.resolve(app, text)
 
+    private val _pattern = kotlinx.coroutines.flow.MutableStateFlow(app.tenPattern.cached())
+    private val _patternBusy = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    /** What your 10/10s have in common, once asked. */
+    val pattern: StateFlow<com.cineverse.app.data.ai.Pattern?> = _pattern
+    val patternBusy: StateFlow<Boolean> = _patternBusy
+
+    /** Whether there are enough top scores to ask about. */
+    fun canExplainTens(): Boolean = app.settings.settings.value.geminiOn && app.tenPattern.favourites().size >= 3
+
+    fun explainTens() {
+        if (_patternBusy.value) return
+        _patternBusy.value = true
+        viewModelScope.launch {
+            _pattern.value = runCatching { app.tenPattern.explain() }.getOrNull()
+            _patternBusy.value = false
+        }
+    }
+
+    fun favourite(key: String) = app.tenPattern.item(key)
+
+    val libraryFlow: StateFlow<com.cineverse.app.data.firebase.Library> = app.library.library
+
     init {
         // This month's paragraph: read back if written already (here or on
         // another phone), written now - as you watch - if not.

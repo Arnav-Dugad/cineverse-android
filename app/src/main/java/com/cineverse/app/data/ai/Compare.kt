@@ -66,7 +66,7 @@ class Compare(private val app: AppContainer) {
             appendLine("rows: exactly 6, in this order of aspects: Tone, Pace, Commitment (how long it takes to watch), Critics, Best for, Standout.")
             appendLine("Each a and b at most 7 words, concrete, no full sentences needed.")
             appendLine("verdict: two sentences to the viewer, under 40 words, which to watch next and why, using their own taste (name one of their titles).")
-            appendLine("If they have already watched one, the question is whether the other is worth it (or which deserves a rewatch); never tell them to watch something they have seen as if it were new.")
+            appendLine("If they have already watched one, the question is whether the other is worth it; never tell them to watch something they have seen as if it were new.")
             appendLine("pick: 0 for A, 1 for B, -1 only if truly even. No preamble, no markdown.")
         }
         val raw = app.gemini.json(prompt, timeoutMs = 20_000) ?: return null

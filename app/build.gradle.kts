@@ -180,6 +180,7 @@ dependencies {
     implementation(libs.compose.graphics)
     implementation(libs.compose.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.androidx.graphics.shapes)
     implementation(libs.compose.material.icons)
     implementation(libs.compose.animation)
     implementation(libs.compose.foundation)

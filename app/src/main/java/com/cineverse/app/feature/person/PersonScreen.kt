@@ -72,6 +72,8 @@ fun PersonScreen(
     val person by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
     val shows by viewModel.shows.collectAsStateWithLifecycle()
+    val spot by viewModel.spot.collectAsStateWithLifecycle()
+    val spotLoading by viewModel.spotLoading.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     var timeline by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
 
@@ -137,6 +139,10 @@ fun PersonScreen(
                         if (detail.biography.isNotBlank()) {
                             Spacer(Modifier.height(16.dp))
                             ExpandableText(detail.biography, collapsedLines = 4)
+                        }
+                        if (spot != null || spotLoading) {
+                            Spacer(Modifier.height(22.dp))
+                            com.cineverse.app.core.ui.SpotlightCard(spot, spotLoading, onOpen)
                         }
                         // How long you have spent watching them.
                         val hours = androidx.compose.runtime.remember(detail, library, shows) {
@@ -246,9 +252,24 @@ class PersonViewModel(private val app: AppContainer, private val id: Int) : View
     val library: StateFlow<Library> = app.library.library
     val shows = app.episodes.progress
 
+    private val _spot = MutableStateFlow<com.cineverse.app.data.ai.Spot?>(null)
+    val spot: StateFlow<com.cineverse.app.data.ai.Spot?> = _spot.asStateFlow()
+    private val _spotLoading = MutableStateFlow(false)
+    val spotLoading: StateFlow<Boolean> = _spotLoading.asStateFlow()
+
     init {
         viewModelScope.launch {
-            _state.value = runCatching { app.tmdb.person(id) }.getOrNull()
+            val person = runCatching { app.tmdb.person(id) }.getOrNull()
+            _state.value = person
+            // Gemini's take on them, for you, once their work is known.
+            if (person != null && app.settings.settings.value.geminiOn) {
+                val work = (person.asCast + person.asCrew).map { it.item }.filter { it.hasArt }
+                if (work.size >= 3) {
+                    _spotLoading.value = true
+                    _spot.value = runCatching { app.spotlight.person(person.id, person.name, person.knownFor, work) }.getOrNull()
+                    _spotLoading.value = false
+                }
+            }
         }
     }
 }

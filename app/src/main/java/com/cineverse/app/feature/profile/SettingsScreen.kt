@@ -58,6 +58,7 @@ import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.CvScreenBar
+import com.cineverse.app.core.ui.collapse
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
 import com.cineverse.app.update.UpdateState
@@ -81,14 +82,18 @@ fun SettingsScreen(
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     val context = LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
 
     Column(modifier.fillMaxSize().background(colors.ink)) {
-        CvScreenBar(title = "Settings", onBack = onBack)
+        val list = androidx.compose.foundation.lazy.rememberLazyListState()
+        CvScreenBar(title = "Settings", onBack = onBack, titleAlpha = { list.collapse(80.dp.value * density) })
         LazyColumn(
             Modifier.fillMaxSize(),
+            state = list,
             // Room to scroll the last group clear of a pinned navigation bar.
             contentPadding = PaddingValues(bottom = BottomBarSpace),
         ) {
+        item(key = "large") { com.cineverse.app.core.ui.LargeTitle("Settings", list) }
         item(key = "group_appearance") {
             SettingsGroup("Appearance") {
             ChoiceRow(

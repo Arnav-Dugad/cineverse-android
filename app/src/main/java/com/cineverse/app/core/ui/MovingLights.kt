@@ -60,6 +60,11 @@ fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else 
     var settle: Job? = remember { null }
     var unlean: Job? = remember { null }
     val drift = spring<Float>(dampingRatio = 1f, stiffness = 18f)
+    // A third, smaller light that follows the finger closely.
+    val fx = remember { Animatable(0.5f) }
+    val fy = remember { Animatable(0.5f) }
+    val glow = remember { Animatable(0f) }
+    val follow = spring<Float>(dampingRatio = 0.9f, stiffness = 120f)
 
     val scroll = remember {
         object : NestedScrollConnection {
@@ -67,7 +72,7 @@ fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else 
                 if (reduced || consumed.y == 0f) return Offset.Zero
                 unlean?.cancel()
                 unlean = scope.launch {
-                    lean.snapTo((lean.value + consumed.y * 0.0016f).coerceIn(-1f, 1f))
+                    lean.snapTo((lean.value + consumed.y * 0.004f).coerceIn(-1f, 1f))
                     delay(90)
                     lean.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 40f))
                 }
@@ -91,8 +96,12 @@ fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else 
                             val ty = (point.y / size.height).coerceIn(0f, 1f)
                             scope.launch { x.animateTo(tx, drift) }
                             scope.launch { y.animateTo(ty, drift) }
+                            scope.launch { fx.animateTo(tx, follow) }
+                            scope.launch { fy.animateTo(ty, follow) }
+                            if (event.type == PointerEventType.Press) scope.launch { glow.animateTo(1f, spring(stiffness = 300f)) }
                         }
                         PointerEventType.Release -> {
+                            scope.launch { glow.animateTo(0f, androidx.compose.animation.core.tween(1400)) }
                             settle = scope.launch {
                                 delay(2_200)
                                 launch { x.animateTo(0.5f, drift) }
@@ -110,24 +119,35 @@ fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else 
             val dx = x.value - 0.5f
             val dy = y.value - 0.35f
             val tilt = lean.value
-            val strength = if (dark) 1f else 0.55f
+            val strength = if (dark) 1f else 0.6f
             val blend = if (dark) BlendMode.Screen else BlendMode.SrcOver
-            val red = Offset(w * (0.18f + dx * 0.55f), h * (0.16f + dy * 0.4f - tilt * 0.06f))
+            val red = Offset(w * (0.18f + dx * 0.8f), h * (0.16f + dy * 0.6f - tilt * 0.14f))
             drawCircle(
                 Brush.radialGradient(
-                    listOf(Palette.Red.copy(alpha = 0.085f * strength), Color.Transparent),
+                    listOf(Palette.Red.copy(alpha = 0.17f * strength), Color.Transparent),
                     center = red, radius = w * 0.95f,
                 ),
                 radius = w * 0.95f, center = red, blendMode = blend,
             )
-            val purple = Offset(w * (0.86f + dx * 0.35f), h * (0.74f + dy * 0.28f + tilt * 0.05f))
+            val purple = Offset(w * (0.86f + dx * 0.55f), h * (0.74f + dy * 0.45f + tilt * 0.12f))
             drawCircle(
                 Brush.radialGradient(
-                    listOf(Palette.Purple.copy(alpha = 0.08f * strength), Color.Transparent),
+                    listOf(Palette.Purple.copy(alpha = 0.15f * strength), Color.Transparent),
                     center = purple, radius = w * 0.85f,
                 ),
                 radius = w * 0.85f, center = purple, blendMode = blend,
             )
+            // Under the finger while it is down, fading after it lifts.
+            if (glow.value > 0.01f) {
+                val touch = Offset(w * fx.value, h * fy.value)
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Palette.Red2.copy(alpha = 0.16f * glow.value * strength), Color.Transparent),
+                        center = touch, radius = w * 0.45f,
+                    ),
+                    radius = w * 0.45f, center = touch, blendMode = blend,
+                )
+            }
         }
 }
 

@@ -132,7 +132,7 @@ private fun Thinking(heard: String) {
                     .padding(16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Palette.Purple2, modifier = Modifier.size(18.dp))
+                    com.cineverse.app.core.ui.GeminiLoader(size = 22.dp)
                     Spacer(Modifier.width(8.dp))
                     Text("Understanding", style = MaterialTheme.typography.labelLarge, color = colors.text2)
                 }

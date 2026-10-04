@@ -66,6 +66,7 @@ import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.ScreenPadding
 import com.cineverse.app.core.ui.clickableNoRipple
+import com.cineverse.app.core.ui.collapse
 import com.cineverse.app.data.diary.Diary
 import com.cineverse.app.data.diary.DiaryDay
 import com.cineverse.app.data.diary.DiaryEntry
@@ -162,7 +163,7 @@ class DiaryViewModel(private val app: AppContainer) : ViewModel() {
 /**
  * The Watch Diary: a month of what you watched, each day shaded by how long
  * you spent and carrying the poster of what you watched; the day you pick, in
- * full, with every rewatch marked and dated against the first time; your
+ * full, in full; your
  * streak; and what you watched on this date in years gone by.
  */
 @Composable
@@ -171,18 +172,16 @@ fun DiaryScreen(viewModel: DiaryViewModel, onOpen: (MediaItem) -> Unit, onBack: 
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     val selectedDay = state.days[state.selected]
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    Column(Modifier.fillMaxSize().background(colors.ink)) {
+    com.cineverse.app.core.ui.CvScreenBar(title = "Diary", onBack = onBack, titleAlpha = { list.collapse(80f * density) })
     LazyColumn(
-        Modifier.fillMaxSize().background(colors.ink).windowInsetsPadding(WindowInsets.statusBars),
+        Modifier.fillMaxSize(),
+        state = list,
         contentPadding = PaddingValues(bottom = BottomBarSpace),
     ) {
-        item(key = "bar") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(CvShape.Circle).clickableNoRipple(onBack), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = colors.text)
-                }
-                Text("Diary", style = MaterialTheme.typography.titleLarge, color = colors.text)
-            }
-        }
+        item(key = "large") { com.cineverse.app.core.ui.LargeTitle("Diary", list) }
         item(key = "month") {
             MonthHeader(state, onMove = { haptics?.play(Haptic.Detent); viewModel.move(it) })
         }
@@ -246,6 +245,7 @@ fun DiaryScreen(viewModel: DiaryViewModel, onOpen: (MediaItem) -> Unit, onBack: 
                 EntryRow(entry, onOpen, showYear = true)
             }
         }
+    }
     }
 }
 
@@ -495,36 +495,11 @@ private fun EntryRow(entry: DiaryEntry, onOpen: (MediaItem) -> Unit, showYear: B
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.text3,
             )
-            if (entry.rewatch) {
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    Modifier.clip(CvShape.Pill).background(Palette.Cyan.copy(alpha = 0.14f)).padding(horizontal = 8.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.Replay, null, tint = Palette.Cyan2, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "Rewatch · ${ordinal(entry.viewing)} time · first ${shortDate(entry.allViewings.first())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Palette.Cyan2,
-                        maxLines = 1,
-                    )
-                }
-            }
         }
     }
 }
 
-private fun ordinal(n: Int): String = when {
-    n % 100 in 11..13 -> "${n}th"
-    n % 10 == 1 -> "${n}st"
-    n % 10 == 2 -> "${n}nd"
-    n % 10 == 3 -> "${n}rd"
-    else -> "${n}th"
-}
 
-private fun shortDate(at: Long): String =
-    Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()))
 
 /** The locale, read so a change of language redraws the diary. */
 @Composable

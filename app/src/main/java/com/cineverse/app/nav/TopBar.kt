@@ -59,6 +59,8 @@ fun CvTopBar(
     overArt: Boolean = tab == Tab.Home,
     inboxCount: Int = 0,
     onInbox: (() -> Unit)? = null,
+    /** 0..1: a large title in the page folding into this bar (Stats). */
+    titleAlpha: Float = 1f,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -111,6 +113,7 @@ fun CvTopBar(
                 "  ${if (isHome) "CineVerse" else tab.label}",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W800),
                 color = if (isHome) Palette.Red2 else colors.text,
+                modifier = Modifier.graphicsLayer { alpha = titleAlpha; translationY = (1f - titleAlpha) * 8.dp.toPx() },
             )
         }
         if (onInbox != null) {

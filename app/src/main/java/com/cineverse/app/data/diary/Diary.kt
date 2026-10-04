@@ -17,12 +17,11 @@ data class DiaryEntry(
     val minutes: Int,
     /** "S2 E4" for an episode, empty for a film. */
     val episode: String = "",
-    /** 1 for the first viewing, 2 for the first rewatch, and so on. */
+    /** Always 1: a title appears once in the Diary. */
     val viewing: Int = 1,
-    /** Every date this title was seen, oldest first: what a rewatch is set against. */
+    /** The date it appears on. */
     val allViewings: List<Long> = emptyList(),
 ) {
-    val rewatch: Boolean get() = viewing > 1
     val day: LocalDate get() = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
 }
 
@@ -40,8 +39,8 @@ data class Streak(val current: Int, val longest: Int, val todayActive: Boolean, 
  * The Watch Diary, the website's: every viewing on the day it happened, made
  * from what the library already holds.
  *
- * What counts as viewing is the website's rule. A film counts on every date it
- * was played, so a rewatch is its own day. An episode counts when it was ticked
+ * What counts as viewing is the website's rule. A film counts once, on the
+ * day it was last watched. An episode counts when it was ticked
  * on its own; a whole season or a back-filled history ticked in one go is
  * bookkeeping, not an evening, and never lands on a day. A series marked
  * watched as a whole, with no episodes ticked, is bookkeeping too.
@@ -52,26 +51,24 @@ object Diary {
         val out = mutableListOf<DiaryEntry>()
         for (film in library.watched.values) {
             if (film.type != MediaType.Movie) continue
-            val dates = film.playDates.filter { it > 0 }.ifEmpty { listOfNotNull(film.watchedAt.takeIf { it > 0 }) }.sorted()
-            val item = film.asItem()
-            dates.forEachIndexed { index, at ->
-                out += DiaryEntry(at, item, film.runtime.coerceAtLeast(0), viewing = index + 1, allViewings = dates)
-            }
+            // One day per film: when it was last watched.
+            val at = film.lastPlay.takeIf { it > 0 } ?: continue
+            out += DiaryEntry(at, film.asItem(), film.runtime.coerceAtLeast(0), viewing = 1, allViewings = listOf(at))
         }
         for (show in shows.values) {
             val item = MediaItem(show.tmdbId, MediaType.Tv, show.title, posterPath = show.poster.ifBlank { null }, backdropPath = show.backdrop.ifBlank { null })
-            val seen = HashMap<Long, MutableList<Long>>()
+            val seen = HashSet<Long>()
             for (row in show.log.filterNot { it.bulk }.sortedBy { it.stamp }) {
                 if (row.stamp <= 0) continue
-                val times = seen.getOrPut(row.episodeKey) { mutableListOf() }
-                times += row.stamp
+                // Each episode once, on the day it was first ticked.
+                if (!seen.add(row.episodeKey)) continue
                 out += DiaryEntry(
                     at = row.stamp,
                     item = item,
                     minutes = show.episodeRuntime.coerceAtLeast(0),
                     episode = if (show.isAbsolute) "Episode ${row.episode}" else "S${row.season} E${row.episode}",
-                    viewing = times.size,
-                    allViewings = times.toList(),
+                    viewing = 1,
+                    allViewings = listOf(row.stamp),
                 )
             }
         }

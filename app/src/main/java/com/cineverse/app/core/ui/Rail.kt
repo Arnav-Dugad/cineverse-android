@@ -94,6 +94,8 @@ fun SectionHeader(
     face: String? = null,
     /** A row Gemini wrote: a small sparkle before its title says so. */
     gemini: Boolean = false,
+    /** Tapping the title's logo opens that title; the logo flies into its page. */
+    onLogo: (() -> Unit)? = null,
     onSeeAll: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
@@ -141,7 +143,14 @@ fun SectionHeader(
                     TonedLogo(
                         titleLogo,
                         title,
-                        Modifier.height(34.dp).widthIn(max = 190.dp),
+                        Modifier
+                            .sharedLogo(titleLogo)
+                            .then(
+                                if (onLogo != null) Modifier.clickableNoRipple { LogoMorph.pending = titleLogo; onLogo() }
+                                else Modifier
+                            )
+                            .height(34.dp)
+                            .widthIn(max = 190.dp),
                         align = Alignment.CenterStart,
                     )
                 } else {
@@ -197,6 +206,8 @@ fun PosterRail(
     face: String? = null,
     /** A row Gemini wrote. */
     gemini: Boolean = false,
+    /** For a "More like" row: open the title its logo names. */
+    onTitleLogo: (() -> Unit)? = null,
     /** A Top 10: the position is drawn behind each card. */
     numbered: Boolean = false,
     onSeeAll: (() -> Unit)? = null,
@@ -212,7 +223,7 @@ fun PosterRail(
     if (!loading && items.isEmpty()) return
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, face = face, onSeeAll = onSeeAll, gemini = gemini)
+            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, face = face, onSeeAll = onSeeAll, gemini = gemini, onLogo = onTitleLogo)
             Spacer(Modifier.height(12.dp))
         }
         if (loading) {

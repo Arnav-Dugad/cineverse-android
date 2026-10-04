@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.cineverse.app.core.ui.sharedLogo
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -141,10 +142,19 @@ fun DetailHead(
         // See [risingPoster]: the poster rises into the artwork and takes up
         // only the room it shows below it, so whatever follows sits right
         // under its bottom edge.
+        // A logo flying in from a "More like" heading lands here when the
+        // page shows no logo of its own.
+        val logoLanding = hideTitle && detail.logoPath != null && com.cineverse.app.core.ui.LogoMorph.pending == detail.logoPath
+        androidx.compose.runtime.LaunchedEffect(logoLanding) {
+            if (logoLanding) {
+                kotlinx.coroutines.delay(1_500)
+                com.cineverse.app.core.ui.LogoMorph.pending = null
+            }
+        }
         Box(
             Modifier
                 .risingPoster()
-                .sharedPoster(detail.key)
+                .then(if (logoLanding) Modifier.sharedLogo(detail.logoPath) else Modifier.sharedPoster(detail.key))
                 .clip(CvShape.Large)
                 .border(1.dp, colors.text.copy(alpha = 0.16f), CvShape.Large)
         ) {
@@ -164,7 +174,7 @@ fun DetailHead(
             TonedLogo(
                 detail.logoPath,
                 detail.title,
-                Modifier.fillMaxWidth(0.86f).height(66.dp),
+                Modifier.sharedLogo(detail.logoPath).fillMaxWidth(0.86f).height(66.dp),
                 align = Alignment.Center,
                 fallbackStyle = MaterialTheme.typography.headlineMedium,
                 fallbackLines = 2,

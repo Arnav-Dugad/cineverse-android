@@ -72,7 +72,7 @@ data class ActorHours(
                 if (item.type == MediaType.Movie) {
                     val watched = library.watched[item.key] ?: continue
                     val runtime = watched.runtime.takeIf { it in 1..999 } ?: continue
-                    parts += item.title to runtime * watched.plays.coerceAtLeast(1)
+                    parts += item.title to runtime
                     films++
                 } else {
                     val progress = shows[item.id]

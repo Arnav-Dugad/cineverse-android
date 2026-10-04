@@ -37,6 +37,8 @@ data class Rail(
     val numbered: Boolean = false,
     /** The logo of the title this rail was derived from, for the kicker. */
     val kickerLogo: String? = null,
+    /** That title itself: tapping its logo opens it, the logo flying with it. */
+    val source: MediaItem? = null,
     /** A person's face beside the title: "Starring" and "From" rails. */
     val face: String? = null,
 )
@@ -56,6 +58,8 @@ data class HomeState(
     val personal: List<Rail> = emptyList(),
     /** Gemini's row for this time of day, when it is on and has written one. */
     val moment: Rail? = null,
+    /** After a run of heavy viewing, something lighter. */
+    val cleanser: com.cineverse.app.data.ai.Cleanser? = null,
     val rails: List<Rail> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -105,12 +109,19 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
     /** The catalogue load; the airing rails wait for it, they never race it. */
     private var loadJob: kotlinx.coroutines.Job? = null
 
+    fun dismissCleanser() {
+        val held = _state.value.cleanser ?: return
+        app.palate.dismiss(held.id)
+        _state.value = _state.value.copy(cleanser = null)
+    }
+
     init {
         loadJob = load()
         // The row for this moment, once the library (and so the brief) is in.
         viewModelScope.launch {
             if (!app.settings.settings.value.geminiOn) return@launch
             app.library.library.first { it.loaded }
+            runCatching { app.palate.check() }.getOrNull()?.let { found -> _state.value = _state.value.copy(cleanser = found) }
             val moment = runCatching { app.momentRail.now() }.getOrNull() ?: return@launch
             _state.value = _state.value.copy(
                 moment = Rail(id = "moment", title = moment.title, kicker = "Gemini, for right now", items = moment.items),
@@ -489,6 +500,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
                     kicker = if (logo != null) "More like" else null,
                     items = related,
                     kickerLogo = logo,
+                    source = MediaItem(seed.id, seed.type, seed.title, posterPath = seed.poster.ifBlank { null }),
                 )
             }
         }

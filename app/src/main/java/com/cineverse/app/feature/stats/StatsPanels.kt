@@ -441,50 +441,7 @@ private fun SliceGroup(title: String, slices: List<Slice>, tint: Color) {
     }
 }
 
-// ---------- rewatches ----------
 
-@Composable
-fun RewatchPanelBody(rewatches: List<Rewatch>) {
-    val colors = CvTheme.colors
-    Column {
-        for (item in rewatches) {
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(width = 34.dp, height = 50.dp).clip(CvShape.Small)) {
-                    CvImage(Img.poster(item.poster.ifBlank { null }), item.title, Modifier.fillMaxWidth().fillMaxHeight())
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        item.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        "${item.plays} times through",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.text3,
-                    )
-                }
-                Text(
-                    "+${item.minutes / 60}h",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.gold,
-                )
-            }
-        }
-        Text(
-            "Extra hours only — the first time through is counted in your total.",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.text3,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-}
 
 // ---------- taste changes ----------
 

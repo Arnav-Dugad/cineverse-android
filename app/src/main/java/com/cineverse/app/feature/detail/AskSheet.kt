@@ -7,6 +7,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.rounded.OpenInFull
+import androidx.compose.material.icons.rounded.CloseFullscreen
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.horizontalScroll
@@ -158,8 +162,34 @@ fun AskTitleSheet(
     }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { stopSpeaking() } }
 
+    // Drag the header up and the conversation takes the whole screen; drag
+    // it down (or tap the arrows) and it settles back to the sheet.
+    var full by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val screen = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val listMax by androidx.compose.animation.core.animateDpAsState(
+        if (full) (screen - 300.dp).coerceAtLeast(380.dp) else 380.dp,
+        androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 420f),
+        label = "askFull",
+    )
     CvSheet(onDismiss = onDismiss) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.pointerInput(Unit) {
+                var travel = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { travel = 0f },
+                    onDragEnd = {
+                        if (travel < -60f && !full) { full = true; haptics?.play(Haptic.Detent) }
+                        else if (travel > 60f && full) { full = false; haptics?.play(Haptic.Detent) }
+                    },
+                ) { change, amount ->
+                    // Only take the drag when it means something here; a pull
+                    // down on the small sheet still closes it as before.
+                    if (amount < 0 || full) change.consume()
+                    travel += amount
+                }
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Icon(Icons.Rounded.AutoAwesome, null, tint = GeminiColors[1], modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
@@ -183,6 +213,17 @@ fun AskTitleSheet(
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                if (full) androidx.compose.material.icons.Icons.Rounded.CloseFullscreen else androidx.compose.material.icons.Icons.Rounded.OpenInFull,
+                if (full) "Shrink" else "Full screen",
+                tint = colors.text2,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CvShape.Circle)
+                    .clickableNoRipple { haptics?.play(Haptic.Tap); full = !full }
+                    .padding(8.dp),
+            )
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -200,7 +241,7 @@ fun AskTitleSheet(
 
         LazyColumn(
             state = list,
-            modifier = Modifier.heightIn(min = 120.dp, max = 380.dp),
+            modifier = Modifier.heightIn(min = 120.dp, max = listMax),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (turns.isEmpty()) {
@@ -374,27 +415,16 @@ private const val END = 100_000
 /** Three dots that breathe in Gemini's colours while an answer is written. */
 @Composable
 private fun Thinking() {
-    val loop = rememberInfiniteTransition(label = "askThinking")
+    // The morphing shape while Gemini thinks, in a bubble where the answer will be.
     Row(
         Modifier
             .clip(CvShape.Large)
             .background(CvTheme.colors.text.copy(alpha = 0.05f))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        repeat(3) { index ->
-            val phase by loop.animateFloat(
-                0.25f, 1f,
-                infiniteRepeatable(tween(600, delayMillis = index * 160, easing = LinearEasing), RepeatMode.Reverse),
-                label = "dot$index",
-            )
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .graphicsLayer { alpha = phase; scaleX = 0.7f + 0.3f * phase; scaleY = scaleX }
-                    .clip(CvShape.Circle)
-                    .background(GeminiColors[index]),
-            )
-        }
+        com.cineverse.app.core.ui.GeminiLoader(size = 28.dp)
+        Spacer(Modifier.width(10.dp))
+        Text("Thinking…", style = MaterialTheme.typography.labelMedium, color = CvTheme.colors.text3)
     }
 }

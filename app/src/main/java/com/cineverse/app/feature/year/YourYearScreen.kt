@@ -235,7 +235,7 @@ private fun YearPage(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Figure(
                     "Films", summary.filmCount.toLong(),
-                    if (summary.viewings > summary.filmCount) "${summary.viewings} viewings" else "watched",
+                    "watched",
                     deltas?.first, Modifier.weight(1f),
                 )
                 Figure(
@@ -678,7 +678,6 @@ private fun YearBack(summary: YearSummary) {
     val favourite = summary.films.filter { it.rating > 0 }.maxWithOrNull(compareBy<YearFilm> { it.rating }.thenBy { it.plays })
     val longest = summary.films.maxByOrNull { it.minutes }?.takeIf { it.minutes > 0 }
     val show = summary.shows.maxByOrNull { it.minutes }
-    val rewatched = summary.films.filter { it.plays > 1 }.maxByOrNull { it.plays }
     val genre = summary.films.flatMap { it.genres }.groupingBy { it }.eachCount().maxByOrNull { it.value }
         ?.let { com.cineverse.app.data.model.GenreNames[it.key] }
     Column(
@@ -701,7 +700,6 @@ private fun YearBack(summary: YearSummary) {
         BackLine("Highest rated", favourite?.let { "${it.title} · ${it.rating}/10" } ?: "Rate something this year")
         BackLine("Most time with", show?.let { "${it.title} · ${it.minutes / 60}h" } ?: "No series finished yet")
         BackLine("Longest film", longest?.let { "${it.title} · ${it.minutes / 60}h ${it.minutes % 60}m" } ?: "-")
-        BackLine("Most rewatched", rewatched?.let { "${it.title} · ${it.plays} times" } ?: "Nothing twice yet")
         BackLine("Your genre", genre ?: "-")
     }
 }

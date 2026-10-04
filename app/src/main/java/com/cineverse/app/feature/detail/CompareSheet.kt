@@ -118,7 +118,7 @@ fun CompareSheet(
             when (current) {
                 CompareState.Picking -> Picker(detail, search, onPick)
                 is CompareState.Comparing -> Column {
-                    Faces(detail, current.other, pick = -2)
+                    Faces(detail, current.other, pick = -2, thinking = true)
                     Spacer(Modifier.height(18.dp))
                     repeat(6) {
                         Box(Modifier.padding(vertical = 5.dp).fillMaxWidth().height(34.dp).clip(CvShape.Medium).shimmer())
@@ -216,7 +216,7 @@ private fun Picker(detail: TitleDetail, search: suspend (String) -> List<MediaIt
 
 /** The two posters, facing; the picked one glows and lifts. [pick] -2 means not decided yet. */
 @Composable
-private fun Faces(detail: TitleDetail, other: MediaItem, pick: Int) {
+private fun Faces(detail: TitleDetail, other: MediaItem, pick: Int, thinking: Boolean = false) {
     val colors = CvTheme.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         Poster(Img.poster(detail.posterPath), detail.title, picked = pick == 0)
@@ -229,7 +229,8 @@ private fun Faces(detail: TitleDetail, other: MediaItem, pick: Int) {
                 .border(1.dp, colors.hairline, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Text("vs", style = MaterialTheme.typography.titleSmall, color = colors.text2)
+            if (thinking) com.cineverse.app.core.ui.GeminiLoader(size = 30.dp)
+            else Text("vs", style = MaterialTheme.typography.titleSmall, color = colors.text2)
         }
         Poster(Img.poster(other.posterPath), other.title, picked = pick == 1)
     }

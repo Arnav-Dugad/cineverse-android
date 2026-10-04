@@ -272,6 +272,8 @@ fun CineVerseNav(
     // The bar is a scrim over a front page's hero and glass once the hero has
     // gone - per tab, so a scrolled Movies does not darken Home's bar.
     val heroScrolled = remember { androidx.compose.runtime.mutableStateMapOf<Tab, Boolean>() }
+    // How far Stats' large title has folded into the top bar.
+    var statsTitle by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
 
     Scaffold(
         containerColor = colors.ink,
@@ -293,6 +295,7 @@ fun CineVerseNav(
                     overArt = tab in HeroTabs && heroScrolled[tab] != true,
                     inboxCount = if (shelf.loaded && signedInUid != null) inboxCount else 0,
                     onInbox = { navController.navigate(Route.Inbox) },
+                    titleAlpha = if (tab == Tab.Stats) statsTitle else 1f,
                 )
             }
         },
@@ -464,6 +467,7 @@ fun CineVerseNav(
                     onFranchises = { navController.navigate(Route.Franchises) },
                     onPerson = { navController.navigate(Route.Person(it)) },
                     onOpen = open,
+                    onTitleCollapse = { statsTitle = it },
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 )
             }

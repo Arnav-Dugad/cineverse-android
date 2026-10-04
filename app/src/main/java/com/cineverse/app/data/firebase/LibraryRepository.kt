@@ -327,37 +327,12 @@ class LibraryRepository(
      * what its reconciliation expects: deleting the document outright lets an
      * older offline copy on another device resurrect the row on next sign-in.
      */
-    /**
-     * Another viewing of something already watched.
-     *
-     * Exactly the website's write: `plays`, `playDates` capped at the newest
-     * forty, and `lastPlayedAt`. There is no such thing as a rewatch of
-     * something unwatched, so this refuses rather than inventing a first play —
-     * the caller should mark it watched instead, which is a different action
-     * with different consequences for episodes and ratings.
-     */
     /** Missing details for a watched title, merged in: nothing already there is touched. */
     suspend fun fillWatched(key: String, fields: Map<String, Any?>) {
         val uid = auth.uid.value ?: return
         if (fields.isEmpty() || !library.value.watched.containsKey(key)) return
         user(uid).collection("watched").document(key)
             .set(fields, com.google.firebase.firestore.SetOptions.merge()).await()
-    }
-
-    suspend fun logRewatch(key: String, at: Long = System.currentTimeMillis()): Int {
-        val uid = auth.uid.value ?: return 0
-        val held = library.value.watched[key] ?: return 0
-        val plays = held.plays.coerceAtLeast(1) + 1
-        val dates = (held.playDates + at).sorted().takeLast(40)
-        user(uid).collection("watched").document(key).set(
-            mapOf(
-                "plays" to plays,
-                "playDates" to dates,
-                "lastPlayedAt" to dates.last(),
-            ),
-            com.google.firebase.firestore.SetOptions.merge(),
-        ).await()
-        return plays
     }
 
     suspend fun clearMovieProgress(id: Int) {

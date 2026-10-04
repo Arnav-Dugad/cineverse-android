@@ -99,10 +99,6 @@ class DetailViewModel(
 
     private val _exactAir = MutableStateFlow<Long?>(null)
 
-    private val _nextStill = MutableStateFlow<String?>(null)
-
-    /** TVmaze's still for the next episode, when TMDB has none yet. */
-    val nextStill: StateFlow<String?> = _nextStill.asStateFlow()
 
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
@@ -120,6 +116,35 @@ class DetailViewModel(
     /** Gemini on how this sits with your taste; null until (and unless) it answers. */
     val pitch: StateFlow<com.cineverse.app.data.ai.Pitch?> = _pitch.asStateFlow()
     private var pitchAsked = false
+
+    // All of these above `init` too, for the same reason as the collection:
+    // a cached title loads during construction, and a load that reaches a
+    // flow not yet built is a NullPointerException (it was, on the phone).
+    private val _seasonScores = MutableStateFlow(com.cineverse.app.data.scores.SeasonScores())
+
+    /** The selected season's episode scores: IMDb's with an OMDb key, TVmaze's without. */
+    val seasonScores: StateFlow<com.cineverse.app.data.scores.SeasonScores> = _seasonScores.asStateFlow()
+
+    private val _wiki = MutableStateFlow(com.cineverse.app.data.wiki.WikiFacts())
+
+    /** "Based on" and box office, from Wikidata. */
+    val wiki: StateFlow<com.cineverse.app.data.wiki.WikiFacts> = _wiki.asStateFlow()
+
+    private val _places = MutableStateFlow<List<com.cineverse.app.data.places.Place>>(emptyList())
+
+    /** Filming locations, from Wikidata. */
+    val places: StateFlow<List<com.cineverse.app.data.places.Place>> = _places.asStateFlow()
+
+    private val _nextStill = MutableStateFlow<String?>(null)
+
+    /** TVmaze's still for the next episode, when TMDB has none yet. */
+    val nextStill: StateFlow<String?> = _nextStill.asStateFlow()
+
+    private val _castHours = MutableStateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>>(emptyMap())
+
+    /** Hours you have spent with each of the cast, for the About tab. */
+    val castHours: StateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>> = _castHours.asStateFlow()
+    private var castHoursLoaded = false
 
     init {
         if (type == MediaType.Tv) com.cineverse.app.core.shortcuts.HabitShortcuts.reportOpened(app.context, id)
@@ -209,11 +234,6 @@ class DetailViewModel(
         if (tab == DetailTab.About) loadCastHours()
     }
 
-    private val _castHours = MutableStateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>>(emptyMap())
-
-    /** Hours you have spent with each of the cast, for the About tab. */
-    val castHours: StateFlow<Map<Int, com.cineverse.app.data.cast.ActorHours>> = _castHours.asStateFlow()
-    private var castHoursLoaded = false
 
     /**
      * Each cast member's credits, a few at a time, only once About is shown.
@@ -397,10 +417,6 @@ class DetailViewModel(
         loadSeasonScores(season)
     }
 
-    private val _seasonScores = MutableStateFlow(com.cineverse.app.data.scores.SeasonScores())
-
-    /** The selected season's episode scores: IMDb's with an OMDb key, TVmaze's without. */
-    val seasonScores: StateFlow<com.cineverse.app.data.scores.SeasonScores> = _seasonScores.asStateFlow()
 
     private fun loadSeasonScores(season: Int) = viewModelScope.launch {
         _seasonScores.value = com.cineverse.app.data.scores.SeasonScores()
@@ -434,6 +450,11 @@ class DetailViewModel(
         }
     }
 
+    suspend fun adviseSkip(episode: com.cineverse.app.data.model.Episode): com.cineverse.app.data.ai.Skip? {
+        val detail = _state.value.detail ?: return null
+        return app.skipAdvice.of(detail.id, detail.title, episode)
+    }
+
     /** Your score for an episode; 0 clears it. */
     fun rateEpisode(season: Int, episode: Int, score: Int) = viewModelScope.launch {
         runCatching { app.episodes.rateEpisode(id, season, episode, score) }
@@ -464,14 +485,12 @@ class DetailViewModel(
         val awards = app.awards.of(imdbId)
         if (awards.any) _state.value = _state.value.copy(awards = awards)
         // Where it was filmed, from the same source, after the trophies.
+        _wiki.value = runCatching { app.wikiFacts.of(imdbId) }.getOrDefault(com.cineverse.app.data.wiki.WikiFacts())
         val places = runCatching { app.filmingLocations.of(imdbId) }.getOrDefault(emptyList())
         _places.value = places
     }
 
-    private val _places = MutableStateFlow<List<com.cineverse.app.data.places.Place>>(emptyList())
 
-    /** Filming locations, from Wikidata. */
-    val places: StateFlow<List<com.cineverse.app.data.places.Place>> = _places.asStateFlow()
 
     // ---------- the heatmap ----------
 
@@ -655,12 +674,6 @@ class DetailViewModel(
     fun setRating(value: Int) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         app.library.setRating(detail.key, value, detail.title)
-    }
-
-    fun logRewatch() = viewModelScope.launch {
-        val detail = _state.value.detail ?: return@launch
-        val plays = app.library.logRewatch(detail.key)
-        if (plays > 0) app.say("Logged — seen $plays times now")
     }
 
     fun setDropped(dropped: Boolean) = viewModelScope.launch {

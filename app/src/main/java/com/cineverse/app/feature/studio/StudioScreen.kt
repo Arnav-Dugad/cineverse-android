@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -86,6 +87,8 @@ fun StudioScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
+    val spot by viewModel.spot.collectAsStateWithLifecycle()
+    val spotLoading by viewModel.spotLoading.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val grid = rememberLazyGridState()
     val atEnd by remember {
@@ -106,6 +109,11 @@ fun StudioScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(key = "head", span = { GridItemSpan(maxLineSpan) }) { StudioHead(state.studio, viewModel.network) }
+            if (spot != null || spotLoading) {
+                item(key = "spot", span = { GridItemSpan(maxLineSpan) }) {
+                    com.cineverse.app.core.ui.SpotlightCard(spot, spotLoading, onOpen)
+                }
+            }
 
             item(key = "filters", span = { GridItemSpan(maxLineSpan) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -301,9 +309,32 @@ class StudioViewModel(private val app: AppContainer, route: Route.Studio) : View
 
     private var job: Job? = null
 
+    private val _spot = MutableStateFlow<com.cineverse.app.data.ai.Spot?>(null)
+    val spot: StateFlow<com.cineverse.app.data.ai.Spot?> = _spot.asStateFlow()
+    private val _spotLoading = MutableStateFlow(false)
+    val spotLoading: StateFlow<Boolean> = _spotLoading.asStateFlow()
+
     init {
         viewModelScope.launch { _state.update { it.copy(studio = app.tmdb.studio(id, network)) } }
         reload()
+        // Gemini's take on the studio, from its best-known work, once.
+        viewModelScope.launch {
+            if (!app.settings.settings.value.geminiOn) return@launch
+            val work = runCatching {
+                val type = if (network) MediaType.Tv else MediaType.Movie
+                app.tmdb.discover(type, buildMap {
+                    put("sort_by", "vote_count.desc")
+                    if (network) put("with_networks", id.toString()) else put("with_companies", id.toString())
+                })
+            }.getOrDefault(emptyList()).filter { it.hasArt }
+            if (work.size < 3) return@launch
+            _spotLoading.value = true
+            val name = _state.value.studio?.name ?: kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                _state.first { it.studio != null }.studio?.name
+            }.orEmpty()
+            _spot.value = runCatching { app.spotlight.studio(id, name, network, work) }.getOrNull()
+            _spotLoading.value = false
+        }
     }
 
     private fun params(page: Int): Map<String, String> {

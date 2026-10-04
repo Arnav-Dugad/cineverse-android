@@ -5,6 +5,8 @@ import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
@@ -64,6 +66,32 @@ fun Modifier.sharedPoster(key: String): Modifier {
     return with(shared) {
         this@sharedPoster.sharedElement(
             sharedContentState = rememberSharedContentState(key = "poster/$key"),
+            animatedVisibilityScope = animated,
+            boundsTransform = PosterBounds,
+        )
+    }
+}
+
+/**
+ * The website's logo morph: a "More like [logo]" heading's logo, tapped,
+ * flies into the title page - into the page's own logo when titles are
+ * shown, into the poster when they are hidden. [pending] says which logo is
+ * on its way, so the poster only takes part when it was asked to.
+ */
+object LogoMorph {
+    var pending by androidx.compose.runtime.mutableStateOf<String?>(null)
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun Modifier.sharedLogo(path: String?): Modifier {
+    if (path == null) return this
+    val shared = LocalSharedTransitionScope.current ?: return this
+    val animated = LocalNavAnimatedScope.current ?: return this
+    if (CvTheme.reducedMotion) return this
+    return with(shared) {
+        this@sharedLogo.sharedBounds(
+            sharedContentState = rememberSharedContentState(key = "logo/$path"),
             animatedVisibilityScope = animated,
             boundsTransform = PosterBounds,
         )

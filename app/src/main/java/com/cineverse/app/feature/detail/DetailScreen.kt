@@ -121,6 +121,7 @@ fun DetailScreen(
     val nextStill by viewModel.nextStill.collectAsStateWithLifecycle()
     val seasonScores by viewModel.seasonScores.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
+    val wiki by viewModel.wiki.collectAsStateWithLifecycle()
     val compare by viewModel.compare.collectAsStateWithLifecycle()
     val trivia by viewModel.trivia.collectAsStateWithLifecycle()
     val watching by viewModel.watchingNow.collectAsStateWithLifecycle()
@@ -270,22 +271,6 @@ fun DetailScreen(
                 }
             }
 
-            // Directly under the actions and above the tabs, so it is on screen
-            // whichever tab is selected. It used to live inside About, which is
-            // two taps and a scroll from the question it answers.
-            // Only once it has been watched: there is no such thing as a
-            // rewatch of something unseen.
-            library.watched[detail.key]?.let { entry ->
-                item(key = "rewatch") {
-                    RewatchPanel(
-                        plays = entry.plays,
-                        lastWatched = entry.lastPlay,
-                        onLogRewatch = viewModel::logRewatch,
-                        modifier = Modifier.padding(top = 20.dp),
-                    )
-                }
-            }
-
             // Only when TMDB has a real date. Counting down to a guess is worse
             // than saying nothing.
             detail.nextEpisode
@@ -376,6 +361,7 @@ fun DetailScreen(
                     },
                     seasonScores = seasonScores,
                     onRateEpisode = { season, episode, score -> viewModel.rateEpisode(season, episode, score) },
+                    adviseSkip = if (settings.geminiOn) viewModel::adviseSkip else null,
                 )
 
                 DetailTab.About -> aboutSection(
@@ -386,6 +372,7 @@ fun DetailScreen(
                     onBrand = onBrand,
                     castHours = castHours,
                     places = places,
+                    wiki = wiki,
                 )
 
                 DetailTab.More -> item(key = "more") {
@@ -407,6 +394,28 @@ fun DetailScreen(
             title = detail.title,
             alpha = collapsed,
             onBack = onBack,
+        )
+
+        // Once the action row has gone, the same actions float at the bottom.
+        val headGone by androidx.compose.runtime.remember(listState) {
+            androidx.compose.runtime.derivedStateOf {
+                listState.layoutInfo.visibleItemsInfo.none { it.key == "head" } && listState.firstVisibleItemIndex > 0
+            }
+        }
+        FloatingTitleToolbar(
+            visible = headGone,
+            accent = com.cineverse.app.core.ui.LocalTitleAccent.current,
+            saved = library.isSaved(detail.key),
+            watched = library.isWatched(detail.key),
+            rating = library.ratingOf(detail.key),
+            hasTrailer = detail.trailer != null,
+            onTrailer = { detail.trailer?.key?.let { key -> onPlayTrailer(key, detail.title) } },
+            onSave = viewModel::toggleSaved,
+            onWatched = viewModel::toggleWatched,
+            onRate = { sheet = TitleSheet.Rate },
+            onShare = { onShare(detail) },
+            onAsk = if (settings.geminiOn) ({ asking = true }) else null,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.cineverse.app.core.ui.LocalPinnedBarLift.current),
         )
 
         // There is more below this. A title page opens on a poster and a row of

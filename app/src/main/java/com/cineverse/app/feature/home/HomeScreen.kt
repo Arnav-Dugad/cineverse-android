@@ -57,6 +57,7 @@ import com.cineverse.app.feature.trailer.YouTubePlayer
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.cineverse.app.core.ui.geminiGlow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
@@ -189,6 +190,12 @@ fun HomeScreen(
                 }
             }
 
+            state.cleanser?.takeIf { settings.geminiOn }?.let { cleanser ->
+                item(key = "cleanser") {
+                    CleanserCard(cleanser, onOpen, onPeek, viewModel::dismissCleanser)
+                }
+            }
+
             state.moment?.takeIf { settings.geminiOn }?.let { rail ->
                 item(key = "moment") {
                     // Arrives with a soft rise and a Gemini sparkle by its name.
@@ -214,6 +221,7 @@ fun HomeScreen(
                     title = rail.title,
                     kicker = rail.kicker,
                     titleLogo = rail.kickerLogo,
+                    onTitleLogo = rail.source?.let { source -> { onOpen(source) } },
                     face = rail.face,
                     numbered = rail.numbered,
                     onOpen = onOpen,
@@ -1132,4 +1140,54 @@ private fun SwipeBacking(axis: Int?, armed: Boolean, modifier: Modifier = Modifi
                 else colors.green.copy(alpha = 0.18f * glow)
             )
     )
+}
+
+/**
+ * A palate cleanser after a heavy run: Gemini's line, then a few lighter
+ * titles, and "Not now" to put it away.
+ */
+@Composable
+private fun CleanserCard(
+    cleanser: com.cineverse.app.data.ai.Cleanser,
+    onOpen: (MediaItem) -> Unit,
+    onPeek: (MediaItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val shown = com.cineverse.app.core.ui.rememberArrival(1f, durationMillis = 620)
+    Column(
+        Modifier
+            .padding(horizontal = ScreenPadding)
+            .fillMaxWidth()
+            .graphicsLayer { alpha = shown; translationY = (1f - shown) * 20f }
+            
+            .clip(com.cineverse.app.core.design.CvShape.XLarge)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(com.cineverse.app.core.design.Palette.Gold.copy(alpha = 0.14f), colors.text.copy(alpha = 0.03f))
+                )
+            )
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("☕", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.width(8.dp))
+            Text("A PALATE CLEANSER", style = com.cineverse.app.core.design.KickerStyle, color = colors.text3, modifier = Modifier.weight(1f))
+            Text(
+                "Not now",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+                modifier = Modifier.clip(com.cineverse.app.core.design.CvShape.Pill).clickableNoRipple(onDismiss).padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(cleanser.line, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        Spacer(Modifier.height(12.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(cleanser.picks.size, key = { cleanser.picks[it].key }) { index ->
+                val item = cleanser.picks[index]
+                com.cineverse.app.core.ui.PosterCard(item = item, onOpen = onOpen, width = 104.dp, onLongPress = onPeek)
+            }
+        }
+    }
 }

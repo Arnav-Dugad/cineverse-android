@@ -21,17 +21,23 @@ class DiaryBadgeTest {
     private val zone = ZoneId.systemDefault()
     private fun at(date: String, hour: Int = 21) = LocalDate.parse(date).atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
 
-    @Test fun `every play is a day, and a rewatch knows its first viewing`() {
+    @Test fun `a film appears once, on the day it was last watched`() {
         val film = WatchedItem(
             tmdbId = 1, type = MediaType.Movie, title = "Heat", runtime = 170,
             playDates = listOf(at("2024-03-01"), at("2026-10-02")), plays = 2,
         )
         val entries = Diary.entries(Library(watched = mapOf(film.key to film)), emptyMap())
-        assertEquals(2, entries.size)
-        val rewatch = entries.last()
-        assertTrue(rewatch.rewatch)
-        assertEquals(2, rewatch.viewing)
-        assertEquals(at("2024-03-01"), rewatch.allViewings.first())
+        assertEquals(1, entries.size)
+        assertEquals(at("2026-10-02"), entries.single().at)
+        assertEquals(1, entries.single().viewing)
+    }
+
+    @Test fun `an episode ticked twice is in the Diary once`() {
+        val show = ShowProgress(
+            tmdbId = 7, title = "Show", episodeRuntime = 30,
+            log = listOf(LogRow(1, 1, at("2026-10-01"), bulk = false), LogRow(1, 1, at("2026-10-03"), bulk = false)),
+        )
+        assertEquals(1, Diary.entries(Library(), mapOf(7 to show)).size)
     }
 
     @Test fun `bulk marks are bookkeeping, not viewing`() {

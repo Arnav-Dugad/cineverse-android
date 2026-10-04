@@ -29,7 +29,7 @@ data class YearFilm(
     val id: Int,
     val title: String,
     val poster: String,
-    /** Viewings inside the year — more than one is a rewatch. */
+    /** Viewings inside the year: one per film. */
     val plays: Int,
     val first: Long,
     val dates: List<Long>,
@@ -97,12 +97,9 @@ object YearModel {
     fun yearOf(millis: Long): Int = Instant.ofEpochMilli(millis).atZone(zone).year
     fun monthOf(millis: Long): Int = Instant.ofEpochMilli(millis).atZone(zone).monthValue - 1
 
-    /** Every dated viewing of a watched film, oldest first. */
-    fun viewingDates(entry: WatchedItem): List<Long> {
-        val stored = entry.playDates.filter { it > 0 }.sorted()
-        if (stored.isNotEmpty()) return stored
-        return if (entry.watchedAt > 0) listOf(entry.watchedAt) else emptyList()
-    }
+    /** When a watched film was watched: once, on its latest date. */
+    fun viewingDates(entry: WatchedItem): List<Long> =
+        listOfNotNull(entry.lastPlay.takeIf { it > 0 })
 
     /**
      * When a series was finished: the completion stamp, the caught-up stamp,
@@ -197,10 +194,7 @@ object YearModel {
                 ?.let { add(Moment("Top rated", "${it.rating}/10", it.id, MediaType.Movie, it.title, it.poster)) }
             summary.shows.maxByOrNull { it.episodes }
                 ?.let { add(Moment("Biggest run", "${it.episodes} episodes", it.id, MediaType.Tv, it.title, it.poster)) }
-            val rewatched = summary.films.filter { it.plays > 1 }.maxByOrNull { it.plays }
-            if (rewatched != null) {
-                add(Moment("Most rewatched", "${rewatched.plays} viewings", rewatched.id, MediaType.Movie, rewatched.title, rewatched.poster))
-            } else {
+            run {
                 summary.shows.filter { it.startedAt > 0 }
                     .minByOrNull { it.finishedAt - it.startedAt }
                     ?.let { show ->

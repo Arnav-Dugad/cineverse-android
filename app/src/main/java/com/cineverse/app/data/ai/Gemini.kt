@@ -121,6 +121,38 @@ class Gemini(
         }
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * A picture and a question about it - a screenshot, a poster photo - as
+     * JSON. Flash-Lite first, which reads images and answers in seconds.
+     */
+    suspend fun vision(image: android.graphics.Bitmap, prompt: String, timeoutMs: Long = 25_000): String? {
+        if (!enabled() || System.currentTimeMillis() < unavailableUntil) return null
+        begin()
+        try {
+            for (name in FAST) {
+                val text = withTimeoutOrNull(timeoutMs) {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            model(name, json = true).generateContent(
+                                com.google.firebase.ai.type.content {
+                                    image(image)
+                                    text(prompt)
+                                }
+                            ).text
+                        }.onFailure { lastError = it.message ?: it.javaClass.simpleName }.getOrNull()
+                    }
+                }
+                if (!text.isNullOrBlank()) {
+                    confirmed = true
+                    return text.trim()
+                }
+            }
+            return null
+        } finally {
+            end()
+        }
+    }
+
     private fun model(name: String, json: Boolean) =
         FirebaseAI.getInstance(Firebase.init(context), GenerativeBackend.googleAI()).generativeModel(
             modelName = name,

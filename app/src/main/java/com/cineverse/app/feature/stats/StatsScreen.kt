@@ -5,6 +5,8 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +44,8 @@ import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.geminiGlow
+import com.cineverse.app.core.ui.collapse
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.Icon
 import kotlinx.coroutines.launch
@@ -73,9 +77,15 @@ fun StatsScreen(
     onFranchises: () -> Unit = {},
     onPerson: (Int) -> Unit = {},
     onOpen: (com.cineverse.app.data.model.MediaItem) -> Unit = {},
+    /** 0..1 as the large "Stats" title scrolls up into the top bar. */
+    onTitleCollapse: (Float) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val taste by viewModel.taste.collectAsStateWithLifecycle()
+    val pattern by viewModel.pattern.collectAsStateWithLifecycle()
+    val patternBusy by viewModel.patternBusy.collectAsStateWithLifecycle()
+    val library by viewModel.libraryFlow.collectAsStateWithLifecycle()
+    val canTens = androidx.compose.runtime.remember(library.ratings.size) { viewModel.canExplainTens() }
     val folded by viewModel.sections.collectAsStateWithLifecycle()
     val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -90,11 +100,21 @@ fun StatsScreen(
         return
     }
 
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    val latestCollapse by androidx.compose.runtime.rememberUpdatedState(onTitleCollapse)
+    LaunchedEffect(list) {
+        androidx.compose.runtime.snapshotFlow { list.collapse(80f * density) }
+            .collect { latestCollapse(it) }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { latestCollapse(1f) } }
     LazyColumn(
         modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 10.dp, bottom = BottomBarSpace),
+        state = list,
+        contentPadding = PaddingValues(top = 4.dp, bottom = BottomBarSpace),
         verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
+        item(key = "large") { com.cineverse.app.core.ui.LargeTitle("Stats", list, Modifier.padding(bottom = 0.dp)) }
         item(key = "hero") {
             Column(Modifier.padding(horizontal = ScreenPadding)) {
                 Text("YOUR VIEWING", style = KickerStyle, color = colors.text3)
@@ -115,6 +135,12 @@ fun StatsScreen(
         taste?.let { (text, writing) ->
             item(key = "taste") {
                 TasteCard(text, writing, viewModel::resolveMentions, onOpen, onPerson, Modifier.padding(horizontal = ScreenPadding))
+            }
+        }
+
+        if (canTens) {
+            item(key = "tens") {
+                TensCard(pattern, patternBusy, viewModel::explainTens, viewModel::favourite, onOpen, Modifier.padding(horizontal = ScreenPadding))
             }
         }
 
@@ -266,18 +292,6 @@ fun StatsScreen(
             ) { TastePanelBody(deep.taste) }
         }
 
-        if (deep.rewatches.isNotEmpty()) item(key = "rewatch") {
-            CollapsiblePanel(
-                id = StatsSection.REWATCH,
-                kicker = "What you go back to",
-                title = "Rewatches",
-                collapsed = StatsSection.REWATCH in folded,
-                onToggle = fold,
-                help = "Only shows with a season played more than once. The hours " +
-                    "are the EXTRA viewings; the first time through is already in " +
-                    "your total.",
-            ) { RewatchPanelBody(deep.rewatches) }
-        }
 
         if (deep.shifts.size >= 2) item(key = "evolution") {
             CollapsiblePanel(
@@ -777,6 +791,67 @@ private fun TasteCard(
         if (!mentioned.isEmpty) {
             Spacer(Modifier.height(14.dp))
             com.cineverse.app.core.ui.MentionRow(mentioned, onOpen = onOpen, onPerson = onPerson)
+        }
+    }
+}
+
+/**
+ * "Why did I like it?": a tap asks Gemini what your 10/10s have in common;
+ * the answer arrives as a headline, a short read of the pattern, and three
+ * threads, each with the posters that carry it.
+ */
+@Composable
+private fun TensCard(
+    pattern: com.cineverse.app.data.ai.Pattern?,
+    busy: Boolean,
+    onAsk: () -> Unit,
+    item: (String) -> com.cineverse.app.data.model.MediaItem?,
+    onOpen: (com.cineverse.app.data.model.MediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .geminiGlow(on = pattern != null || busy, corner = 24.dp, width = 1.3.dp, pulse = busy)
+            .clip(com.cineverse.app.core.design.CvShape.XLarge)
+            .background(colors.text.copy(alpha = 0.04f))
+            .then(if (pattern == null && !busy) Modifier.clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onAsk() } else Modifier)
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (busy) com.cineverse.app.core.ui.GeminiLoader(size = 20.dp)
+            else Icon(androidx.compose.material.icons.Icons.Rounded.AutoAwesome, null, tint = colors.gold, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("WHY YOU LOVED THEM", style = KickerStyle, color = colors.text3)
+        }
+        Spacer(Modifier.height(8.dp))
+        if (pattern == null) {
+            Text(
+                if (busy) "Reading your top scores…" else "What do your 10/10s have in common? Tap and Gemini will tell you.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.text2,
+            )
+        } else {
+            Text(pattern.headline, style = MaterialTheme.typography.titleLarge, color = colors.text)
+            Spacer(Modifier.height(6.dp))
+            Text(pattern.pattern, style = MaterialTheme.typography.bodyMedium, color = colors.text2)
+            pattern.threads.forEachIndexed { index, thread ->
+                val shown = com.cineverse.app.core.ui.rememberArrival(1f, delayMillis = 150 + index * 140, durationMillis = 460)
+                Column(Modifier.padding(top = 14.dp).graphicsLayer { alpha = shown; translationY = (1f - shown) * 14f }) {
+                    Text(thread.name.uppercase(), style = KickerStyle, color = colors.gold)
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (title in thread.keys.mapNotNull(item)) {
+                            com.cineverse.app.core.ui.PosterCard(item = title, onOpen = onOpen, width = 78.dp, showCaption = false)
+                        }
+                    }
+                }
+            }
         }
     }
 }

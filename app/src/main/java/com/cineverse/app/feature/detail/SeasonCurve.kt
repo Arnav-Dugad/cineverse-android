@@ -25,6 +25,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -177,17 +182,26 @@ fun EpisodeRateSheet(
     source: String,
     onRate: (Int) -> Unit,
     onDismiss: () -> Unit,
+    /** Gemini on whether it can be skipped; null hides the question. */
+    skip: (suspend () -> com.cineverse.app.data.ai.Skip?)? = null,
+    /** False when the show is not tracked: nowhere to keep a score. */
+    canRate: Boolean = true,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     CvSheet(onDismiss = onDismiss) {
-        Text("Score this episode", style = MaterialTheme.typography.titleLarge, color = colors.text)
+        Text(if (canRate) "Score this episode" else "This episode", style = MaterialTheme.typography.titleLarge, color = colors.text)
         Spacer(Modifier.height(2.dp))
         Text(
             label + (published?.let { "  ·  $source ${"%.1f".format(it)}" } ?: ""),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.text3,
         )
+        if (skip != null) {
+            Spacer(Modifier.height(14.dp))
+            SkipQuestion(skip)
+        }
+        if (canRate) {
         Spacer(Modifier.height(16.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (score in 1..10) {
@@ -209,6 +223,65 @@ fun EpisodeRateSheet(
                 }
             }
         }
+        }
         Spacer(Modifier.height(18.dp))
     }
 }
+
+/** "Should I skip this?" - asked on a tap, answered by Gemini without spoilers. */
+@Composable
+private fun SkipQuestion(ask: suspend () -> com.cineverse.app.data.ai.Skip?) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var state by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Any?>(null) } // null idle, Unit asking, Skip answer, false failed
+    when (val current = state) {
+        is com.cineverse.app.data.ai.Skip -> {
+            val tint = when (current.verdict) {
+                com.cineverse.app.data.ai.Skip.Verdict.Skip -> colors.green
+                com.cineverse.app.data.ai.Skip.Verdict.Optional -> Palette.Gold
+                com.cineverse.app.data.ai.Skip.Verdict.Watch -> Palette.Red2
+            }
+            val shown = com.cineverse.app.core.ui.rememberArrival(1f, durationMillis = 420)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .androidx_lift(shown)
+                    .clip(CvShape.Large)
+                    .background(tint.copy(alpha = 0.10f))
+                    .border(1.dp, tint.copy(alpha = 0.35f), CvShape.Large)
+                    .padding(14.dp),
+            ) {
+                Text(current.verdict.label, style = MaterialTheme.typography.titleSmall, color = tint)
+                if (current.why.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(current.why, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+                }
+            }
+        }
+        Unit -> Row(verticalAlignment = Alignment.CenterVertically) {
+            com.cineverse.app.core.ui.GeminiLoader(size = 26.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("Checking, without spoilers\u2026", style = MaterialTheme.typography.labelLarge, color = colors.text2)
+        }
+        else -> Row(
+            Modifier
+                .clip(CvShape.Pill)
+                .border(1.dp, colors.hairline, CvShape.Pill)
+                .clickableNoRipple {
+                    haptics?.play(Haptic.Tap)
+                    state = Unit
+                    scope.launch { state = runCatching { ask() }.getOrNull() ?: false }
+                }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.AutoAwesome, null, tint = com.cineverse.app.core.ui.GeminiColors[1], modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (current == false) "Gemini didn't answer - try again" else "Should I skip this?", style = MaterialTheme.typography.labelLarge, color = colors.text)
+        }
+    }
+}
+
+private fun Modifier.androidx_lift(value: Float) =
+    this.graphicsLayer { alpha = value; translationY = (1f - value) * 12f }

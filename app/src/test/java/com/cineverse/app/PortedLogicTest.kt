@@ -189,7 +189,7 @@ class PortedLogicTest {
         LocalDate.parse(date).atTime(20, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     @Test
-    fun `a rewatch counts again in the month it happened`() {
+    fun `a film counts once, in the month it was last watched`() {
         val library = Library(
             watched = mapOf(
                 "movie_1" to WatchedItem(
@@ -205,12 +205,12 @@ class PortedLogicTest {
         )
         val summary = YearModel.summary(library, emptyMap(), 2026)
         assertEquals(2, summary.filmCount)
-        assertEquals(3, summary.viewings)
-        assertEquals(1, summary.filmMonths[0])
+        assertEquals(2, summary.viewings)
+        assertEquals(0, summary.filmMonths[0])
         assertEquals(2, summary.filmMonths[2])
-        assertEquals(170 * 2 + 122, summary.minutes)
+        assertEquals(170 + 122, summary.minutes)
         assertEquals(listOf(2), summary.busiest)
-        assertEquals(listOf(2026, 2025), YearModel.years(library, emptyMap()))
+        assertEquals(listOf(2026), YearModel.years(library, emptyMap()))
     }
 
     @Test

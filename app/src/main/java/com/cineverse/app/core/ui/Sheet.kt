@@ -46,14 +46,23 @@ fun CvSheet(
         dragHandle = { CvHandle() },
         modifier = modifier,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp)
-                .padding(bottom = 10.dp)
-                .navigationBarsPadding(),
-            content = content,
-        )
+        // A sheet is a window of its own, and a shared element cannot travel
+        // between windows: a poster in a sheet that tried to crashed the app
+        // ("layouts are not part of the same hierarchy"). Inside, posters are
+        // plain posters.
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalSharedTransitionScope provides null,
+            LocalNavAnimatedScope provides null,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp)
+                    .padding(bottom = 10.dp)
+                    .navigationBarsPadding(),
+                content = content,
+            )
+        }
     }
 }
 
