@@ -101,6 +101,30 @@ class PreviouslyOn(private val context: Context, private val gemini: com.cinever
         return lines.takeIf { it.size >= 2 }?.let { Previously(it, onDevice = false, cloud = true) }
     }
 
+    /**
+     * "Catch me up": a whole season you have finished, before the next one.
+     * Gemini, where it is on, reads every episode's synopsis of that season and
+     * nothing else - so it cannot say anything about the season to come. With
+     * Gemini off it is the episode guide, one opening line per episode.
+     */
+    suspend fun season(showTitle: String, season: Int, episodes: List<Episode>): Previously? {
+        val usable = episodes.filter { it.overview.isNotBlank() }.sortedBy { it.number }
+        if (usable.isEmpty()) return null
+        val prompt = buildString {
+            appendLine("Recap season $season of \"$showTitle\" for someone about to start season ${season + 1}.")
+            appendLine("Five or six short bullet lines, one per line, each starting with \"- \", each under 26 words.")
+            appendLine("Cover the main arcs and where every major character ends the season, in order. Present tense.")
+            appendLine("Use ONLY the synopses below. Never mention, guess at or hint at anything from later seasons.")
+            appendLine()
+            usable.forEach { appendLine("Episode ${it.number}, \"${it.name}\": ${it.overview}") }
+        }
+        gemini.text(prompt, timeoutMs = 25_000)?.let { text ->
+            val lines = text.lines().map { it.trim().trimStart('*', '-', '•', ' ').trim() }.filter { it.length > 3 }.take(7)
+            if (lines.size >= 3) return Previously(lines, onDevice = false, cloud = true)
+        }
+        return Previously(usable.map { "E${it.number} · ${firstSentence(it.overview)}" }, onDevice = false)
+    }
+
     companion object {
         /** The first sentence, which in an episode synopsis is the setup and never the twist. */
         fun firstSentence(text: String): String {

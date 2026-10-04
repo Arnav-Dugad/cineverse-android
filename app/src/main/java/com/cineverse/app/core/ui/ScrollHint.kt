@@ -1,5 +1,6 @@
 package com.cineverse.app.core.ui
 
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -190,5 +191,56 @@ fun androidx.compose.foundation.layout.BoxScope.EdgeHint(listState: androidx.com
                     )
                 )
         )
+    }
+}
+
+/**
+ * The left-hand edge's fade, once a row has been scrolled: the website's
+ * "middle" and "end" states, where there is more back the way you came.
+ */
+@Composable
+fun androidx.compose.foundation.layout.BoxScope.StartEdgeHint(listState: androidx.compose.foundation.lazy.LazyListState) {
+    val colors = CvTheme.colors
+    val behind by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 }
+    }
+    AnimatedVisibility(
+        visible = behind,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = Modifier.align(Alignment.CenterStart),
+    ) {
+        Box(
+            Modifier
+                .width(30.dp)
+                .fillMaxHeight()
+                .background(Brush.horizontalGradient(listOf(colors.ink.copy(alpha = 0.8f), Color.Transparent)))
+        )
+    }
+}
+
+/**
+ * The nudge: the first time a rail is ever on screen, it slides a little way
+ * along and settles back, so a row that is cut by the screen edge says it
+ * scrolls. Each rail does it once on this device, a beat after it arrives,
+ * and not at all under reduced motion or once you have touched it.
+ */
+@Composable
+fun RailNudge(listState: androidx.compose.foundation.lazy.LazyListState, id: String, ready: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val reduced = CvTheme.reducedMotion
+    val distance = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    androidx.compose.runtime.LaunchedEffect(id, ready) {
+        if (!ready || reduced) return@LaunchedEffect
+        val prefs = context.getSharedPreferences("rail_hints", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean(id, false)) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        if (listState.isScrollInProgress || listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) return@LaunchedEffect
+        if (!listState.canScrollForward) return@LaunchedEffect
+        prefs.edit().putBoolean(id, true).apply()
+        listState.animateScrollBy(distance, tween(520, easing = FastOutSlowInEasing))
+        haptics?.play(com.cineverse.app.core.design.Haptic.Tick)
+        listState.animateScrollBy(-distance, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 220f))
     }
 }

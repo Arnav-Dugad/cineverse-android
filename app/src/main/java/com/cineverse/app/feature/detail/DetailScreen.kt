@@ -110,6 +110,7 @@ fun DetailScreen(
     modifier: Modifier = Modifier,
     onCollection: (Int) -> Unit = {},
     onBrand: (com.cineverse.app.data.model.Brand) -> Unit = {},
+    onService: (id: Int, name: String, logo: String) -> Unit = { _, _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val collection by viewModel.collection.collectAsStateWithLifecycle()
@@ -213,6 +214,7 @@ fun DetailScreen(
                     myRating = library.ratingOf(detail.key),
                     movieMinutes = library.movieProgress[detail.id]?.minutes ?: 0,
                     showTitleLogo = settings.titleLogos,
+                    hideTitle = settings.hideTitle,
                     onSave = viewModel::toggleSaved,
                     onWatched = viewModel::toggleWatched,
                     onRate = { sheet = TitleSheet.Rate },
@@ -251,7 +253,25 @@ fun DetailScreen(
                 ?.takeIf { settings.countdowns && it.airDate.isNotBlank() }
                 ?.let { next ->
                 item(key = "next") {
-                    NextEpisodePanel(next, Modifier.padding(top = 16.dp), exactAt = exactAir)
+                    Column {
+                        NextEpisodePanel(next, Modifier.padding(top = 16.dp), exactAt = exactAir)
+                        // A reminder you can see: this countdown on the home screen.
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        if (androidx.compose.runtime.remember { com.cineverse.app.widget.ShowCountdowns.canPin(context) }) {
+                            Text(
+                                "Add countdown to Home screen",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = colors.text2,
+                                modifier = Modifier
+                                    .padding(horizontal = 18.dp)
+                                    .padding(top = 10.dp)
+                                    .clip(com.cineverse.app.core.design.CvShape.Pill)
+                                    .border(1.dp, colors.hairline, com.cineverse.app.core.design.CvShape.Pill)
+                                    .clickableNoRipple { com.cineverse.app.widget.ShowCountdowns.pin(context, detail.id) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -262,7 +282,7 @@ fun DetailScreen(
             }
 
             item(key = "providers") {
-                WhereToWatch(detail)
+                WhereToWatch(detail, onService = { onService(it.id, it.name, it.logoPath.orEmpty()) })
             }
 
             collection?.takeIf { it.id == detail.collectionId }?.let { info ->
@@ -302,6 +322,8 @@ fun DetailScreen(
                     onSeasonRecap = { viewModel.openSeasonRecap(it) },
                     onSeriesRecap = { viewModel.openSeriesRecap() },
                     onPreviously = { viewModel.loadPreviously() },
+                    catchUpSeason = viewModel.catchUpSeason(progress),
+                    onCatchUp = viewModel::loadCatchUp,
                     onOpenEpisode = { season, episode ->
                         viewModel.selectSeason(season)
                         viewModel.selectTab(DetailTab.Episodes)
@@ -498,6 +520,7 @@ private fun DetailHero(
                     )
                 }
             }
+            com.cineverse.app.core.ui.FilmGrain(visible = armed && !settled && collapsed < 0.4f)
         }
 
         // The artwork dissolves into the page rather than ending on it.

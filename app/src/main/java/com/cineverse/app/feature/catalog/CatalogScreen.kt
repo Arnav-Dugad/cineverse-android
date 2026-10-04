@@ -229,6 +229,13 @@ private fun FilterRow(state: CatalogState, viewModel: CatalogViewModel) {
                     viewModel.setFilters(state.filters.copy(rating = it))
                 }
             }
+            if (state.services.isNotEmpty()) {
+                item {
+                    CvDropdown("Service", listOf(0 to "All services") + state.services, state.filters.provider) {
+                        viewModel.setFilters(state.filters.copy(provider = it))
+                    }
+                }
+            }
             item {
                 CvDropdown("Language", Languages, state.filters.language) {
                     viewModel.setFilters(state.filters.copy(language = it))
@@ -291,6 +298,8 @@ data class CatalogFilters(
     val runtime: String = "",
     val status: String = "",
     val format: String = "",
+    /** A streaming service's id: only its subscription catalogue, as on the website. */
+    val provider: Int = 0,
 ) {
     val isDefault: Boolean get() = this == CatalogFilters()
 }
@@ -302,6 +311,8 @@ data class CatalogState(
     val trailers: Map<String, String> = emptyMap(),
     val filters: CatalogFilters = CatalogFilters(),
     val genres: List<Genre> = emptyList(),
+    /** The streaming services in your region, for the Service dropdown. */
+    val services: List<Pair<Int, String>> = emptyList(),
     val items: List<MediaItem> = emptyList(),
     val page: Int = 0,
     val totalPages: Int = 1,
@@ -328,6 +339,11 @@ class CatalogViewModel(private val app: AppContainer, val type: MediaType) : Vie
             _state.update { it.copy(hero = hero) }
         }
         viewModelScope.launch { _state.update { it.copy(genres = app.tmdb.genres(type)) } }
+        viewModelScope.launch {
+            val services = app.tmdb.streamingServices(app.settings.settings.value.region)
+                .take(30).map { it.providerId to it.providerName }
+            _state.update { it.copy(services = services) }
+        }
         loadMore()
     }
 
@@ -389,6 +405,11 @@ class CatalogViewModel(private val app: AppContainer, val type: MediaType) : Vie
             if (tv && f.status.isNotBlank()) put("with_status", f.status)
             if (tv && f.format.isNotBlank()) put("with_type", f.format)
             if (tv) put("without_genres", "10767,10763")
+            if (f.provider > 0) {
+                put("with_watch_providers", f.provider.toString())
+                put("watch_region", app.settings.settings.value.region)
+                put("with_watch_monetization_types", "flatrate")
+            }
             // The website's floors: a rating or "highest rated" needs enough
             // votes to mean anything, and newest-first stops at today.
             when {

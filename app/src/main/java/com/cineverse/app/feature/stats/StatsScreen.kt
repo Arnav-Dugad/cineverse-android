@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.stats
 
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.animation.core.animateFloatAsState
@@ -62,6 +63,8 @@ fun StatsScreen(
     onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
     onYear: () -> Unit = {},
+    onDiary: () -> Unit = {},
+    onBadges: () -> Unit = {},
     onCollection: (Int) -> Unit = {},
     onFranchises: () -> Unit = {},
     onPerson: (Int) -> Unit = {},
@@ -105,6 +108,30 @@ fun StatsScreen(
 
         item(key = "year") {
             YearCard(onYear, Modifier.padding(horizontal = ScreenPadding))
+        }
+
+        item(key = "doors") {
+            Row(
+                Modifier.padding(horizontal = ScreenPadding),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                DoorCard(
+                    icon = androidx.compose.material.icons.Icons.Rounded.CalendarMonth,
+                    title = "Diary",
+                    detail = "Every viewing, day by day",
+                    tint = Palette.Red2,
+                    modifier = Modifier.weight(1f),
+                    onClick = onDiary,
+                )
+                DoorCard(
+                    icon = androidx.compose.material.icons.Icons.Rounded.EmojiEvents,
+                    title = "Badges",
+                    detail = "${com.cineverse.app.data.badges.Badges.ALL.size} badges, ${com.cineverse.app.data.badges.Badges.CHALLENGES.size} challenges",
+                    tint = colors.gold,
+                    modifier = Modifier.weight(1f),
+                    onClick = onBadges,
+                )
+            }
         }
 
         item(key = "figures") {
@@ -340,7 +367,14 @@ private fun FigureCard(figure: Figure, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))
-        CountUpString(figure.value, style = MaterialTheme.typography.headlineMedium, color = colors.text)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CountUpString(figure.value, style = MaterialTheme.typography.headlineMedium, color = colors.text)
+            // The streak burns while it is alive.
+            if (figure.label == "Current streak") {
+                Spacer(Modifier.width(6.dp))
+                com.cineverse.app.core.ui.StreakFlame(lit = figure.value != "0", size = 26.dp)
+            }
+        }
         if (figure.detail.isNotBlank()) {
             Text(
                 figure.detail,
@@ -649,5 +683,30 @@ private fun CastHoursBody(cast: com.cineverse.app.data.cast.CastHours, onPerson:
                 }
             }
         }
+    }
+}
+
+/** A way into a page of its own: the Diary, the badges. */
+@Composable
+private fun DoorCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    detail: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    Column(
+        modifier
+            .glass(CvShape.XLarge)
+            .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onClick() }
+            .padding(16.dp),
+    ) {
+        androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text)
+        Text(detail, style = MaterialTheme.typography.labelSmall, color = colors.text3, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

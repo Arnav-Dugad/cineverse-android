@@ -39,6 +39,9 @@ object DeepLinks {
                 // An update notification: You holds "Check for updates".
                 "update" -> Route.Profile
                 "inbox" -> Route.Inbox
+                "diary" -> Route.Diary
+                "badges" -> Route.Badges
+                "provider" -> segments.firstOrNull()?.toIntOrNull()?.let { Route.Provider(it) }
                 "list" -> Route.MyList
                 "continue" -> Route.Home
                 "stats" -> Route.Stats

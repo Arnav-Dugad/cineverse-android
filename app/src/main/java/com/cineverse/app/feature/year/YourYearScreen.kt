@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.year
 
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -205,15 +206,21 @@ private fun YearPage(
     val colors = CvTheme.colors
     val deltas = previous?.let { YearModel.deltas(summary, it) }
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        // ---- the total ----
+        // ---- the total, which turns over to the year's best ----
+        FlipCard(
+            Modifier.padding(horizontal = ScreenPadding).fillMaxWidth(),
+            back = { YearBack(summary) },
+        ) {
         Column(
             Modifier
-                .padding(horizontal = ScreenPadding)
                 .fillMaxWidth()
                 .glass(CvShape.XLarge, strength = 0.7f)
                 .padding(18.dp)
         ) {
-            Text("COMBINED TOTAL", style = KickerStyle, color = colors.text3)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("COMBINED TOTAL", style = KickerStyle, color = colors.text3, modifier = Modifier.weight(1f))
+                Text("Tap to turn over", style = MaterialTheme.typography.labelSmall, color = colors.text3)
+            }
             Row(verticalAlignment = Alignment.Bottom) {
                 CountUpText(summary.titles.toLong(), style = MaterialTheme.typography.displayMedium, color = colors.text)
                 Spacer(Modifier.width(8.dp))
@@ -264,6 +271,7 @@ private fun YearPage(
                     )
                 }
             }
+        }
         }
 
         // ---- the months ----
@@ -622,4 +630,87 @@ class YourYearViewModel(app: AppContainer, requested: Int = 0) : ViewModel() {
     }
 
     fun toggleMonth(value: Int) = month.update { if (it == value) -1 else value }
+}
+
+/**
+ * A card with two faces: tap and it turns over about its vertical axis, in
+ * perspective, showing the other side halfway round. The face that is turned
+ * away is not drawn, so it can never be read backwards through the front.
+ */
+@Composable
+private fun FlipCard(
+    modifier: Modifier = Modifier,
+    back: @Composable () -> Unit,
+    front: @Composable () -> Unit,
+) {
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    var flipped by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val turn by androidx.compose.animation.core.animateFloatAsState(
+        if (flipped) 180f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 140f),
+        label = "yearFlip",
+    )
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    Box(
+        modifier
+            .clickableNoRipple {
+                haptics?.play(com.cineverse.app.core.design.Haptic.Peek)
+                flipped = !flipped
+            }
+            .graphicsLayer {
+                rotationY = turn
+                cameraDistance = 14f * density
+            },
+    ) {
+        if (turn <= 90f) {
+            front()
+        } else {
+            // Turned back the right way round, so the back reads normally.
+            Box(Modifier.graphicsLayer { rotationY = 180f }) { back() }
+        }
+    }
+}
+
+/** The back of the year card: the year's best, in four lines. */
+@Composable
+private fun YearBack(summary: YearSummary) {
+    val colors = CvTheme.colors
+    val favourite = summary.films.filter { it.rating > 0 }.maxWithOrNull(compareBy<YearFilm> { it.rating }.thenBy { it.plays })
+    val longest = summary.films.maxByOrNull { it.minutes }?.takeIf { it.minutes > 0 }
+    val show = summary.shows.maxByOrNull { it.minutes }
+    val rewatched = summary.films.filter { it.plays > 1 }.maxByOrNull { it.plays }
+    val genre = summary.films.flatMap { it.genres }.groupingBy { it }.eachCount().maxByOrNull { it.value }
+        ?.let { com.cineverse.app.data.model.GenreNames[it.key] }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(CvShape.XLarge)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Palette.Red2.copy(alpha = 0.22f), Palette.Purple.copy(alpha = 0.16f), colors.ink),
+                )
+            )
+            .border(1.dp, colors.hairline, CvShape.XLarge)
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${summary.year}'S BEST", style = KickerStyle, color = colors.text3, modifier = Modifier.weight(1f))
+            Text("Tap to turn back", style = MaterialTheme.typography.labelSmall, color = colors.text3)
+        }
+        Spacer(Modifier.height(10.dp))
+        BackLine("Highest rated", favourite?.let { "${it.title} · ${it.rating}/10" } ?: "Rate something this year")
+        BackLine("Most time with", show?.let { "${it.title} · ${it.minutes / 60}h" } ?: "No series finished yet")
+        BackLine("Longest film", longest?.let { "${it.title} · ${it.minutes / 60}h ${it.minutes % 60}m" } ?: "-")
+        BackLine("Most rewatched", rewatched?.let { "${it.title} · ${it.plays} times" } ?: "Nothing twice yet")
+        BackLine("Your genre", genre ?: "-")
+    }
+}
+
+@Composable
+private fun BackLine(label: String, value: String) {
+    val colors = CvTheme.colors
+    Column(Modifier.padding(vertical = 5.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = colors.text3)
+        Text(value, style = MaterialTheme.typography.titleSmall, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }

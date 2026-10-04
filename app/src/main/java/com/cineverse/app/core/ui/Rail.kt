@@ -253,7 +253,9 @@ fun PosterRail(
                     }
                 }
                 EdgeHint(state)
+                StartEdgeHint(state)
             }
+            RailNudge(state, id = title ?: "rail", ready = revealed && items.size > 3)
         }
     }
 }

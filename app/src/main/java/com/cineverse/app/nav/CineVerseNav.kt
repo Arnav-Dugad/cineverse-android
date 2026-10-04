@@ -332,6 +332,8 @@ fun CineVerseNav(
                     viewModel = cvViewModel("stats") { StatsViewModel(app) },
                     onSignIn = { navController.navigate(Route.Auth) },
                     onYear = { navController.navigate(Route.YourYear()) },
+                    onDiary = { navController.navigate(Route.Diary) },
+                    onBadges = { navController.navigate(Route.Badges) },
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onFranchises = { navController.navigate(Route.Franchises) },
                     onPerson = { navController.navigate(Route.Person(it)) },
@@ -438,6 +440,34 @@ fun CineVerseNav(
                     },
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onBrand = { brand -> navController.navigate(Route.Studio(brand.id, brand.isNetwork, brand.name)) },
+                    onService = { id, name, logo -> navController.navigate(Route.Provider(id, name, logo)) },
+                )
+            }
+
+            cvComposable<Route.Diary> {
+                com.cineverse.app.feature.diary.DiaryScreen(
+                    viewModel = cvViewModel("diary") { com.cineverse.app.feature.diary.DiaryViewModel(app) },
+                    onOpen = open,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.Badges> {
+                com.cineverse.app.feature.badges.BadgesScreen(
+                    viewModel = cvViewModel("badges") { com.cineverse.app.feature.badges.BadgesViewModel(app) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            cvComposable<Route.Provider> { entry ->
+                val route: Route.Provider = entry.toRoute()
+                com.cineverse.app.feature.provider.ProviderScreen(
+                    viewModel = cvViewModel("provider_${route.id}") {
+                        com.cineverse.app.feature.provider.ProviderViewModel(app, route.id, route.name, route.logo)
+                    },
+                    onOpen = open,
+                    onPeek = peek::open,
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -573,6 +603,12 @@ fun CineVerseNav(
         )
     }
 
+    com.cineverse.app.feature.badges.CelebrationHost(
+        app = app,
+        onDiary = { navController.navigate(Route.Diary) },
+        onBadges = { navController.navigate(Route.Badges) },
+    )
+
     if (showUpdate) {
         UpdateSheet(
             state = update,
@@ -617,8 +653,13 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.pushEnter() =
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.pushExit() =
     fadeOut(tween(Motion.Quick)) + scaleOut(tween(Motion.Normal), targetScale = 0.97f)
 
+/**
+ * The page you are going back TO: already there, a little smaller and
+ * dimmer, and growing into place. Under a predictive back gesture the system
+ * scrubs this with your thumb, so the start of the swipe is a peek at it.
+ */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter() =
-    fadeIn(tween(Motion.Normal)) + scaleIn(tween(Motion.Normal), initialScale = 0.97f)
+    fadeIn(tween(Motion.Normal), initialAlpha = 0.55f) + scaleIn(tween(Motion.Normal, easing = Motion.EaseOut), initialScale = 0.93f)
 
 /**
  * Going back.
@@ -632,5 +673,8 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter() =
  * page that slides sideways does not.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit() =
-    scaleOut(tween(Motion.Normal, easing = Motion.EaseOut), targetScale = 0.92f) +
-        fadeOut(tween(Motion.Normal))
+    // Shrinks with the thumb and stays solid for the first half of the swipe,
+    // so the page underneath shows round its edges: the peek. It only fades
+    // once the gesture is past the point of no return.
+    scaleOut(tween(Motion.Normal, easing = Motion.EaseOut), targetScale = 0.86f) +
+        fadeOut(tween(Motion.Normal / 2, delayMillis = Motion.Normal / 2))

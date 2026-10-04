@@ -15,4 +15,6 @@
     <string name="widget_upnext_description">Live countdowns to the next episode of every show you are caught up on.</string>
     <string name="widget_today">CineVerse Today</string>
     <string name="widget_today_description">Your streak and what you have watched today.</string>
+    <string name="widget_countdown">Episode countdown</string>
+    <string name="widget_countdown_description">The next episode of one show, counting down</string>
 </resources>

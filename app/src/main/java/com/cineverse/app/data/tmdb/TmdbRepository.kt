@@ -145,6 +145,26 @@ class TmdbRepository(
         withContext(io) { api.search("person", name).results.filter { it.id > 0 }.maxByOrNull { it.popularity }?.id }
     }.getOrNull()
 
+    /**
+     * The streaming services in a region, in TMDB's own order of prominence -
+     * the website's provider catalogue. Films and series are merged, since a
+     * service is the same service for both.
+     */
+    suspend fun streamingServices(region: String): List<ProviderDto> = runCatching {
+        withContext(io) {
+            (api.watchProviders("movie", region).results + api.watchProviders("tv", region).results)
+                // Rent-and-buy shops are not services: their catalogue on a
+                // subscription filter is empty.
+                .filter { it.providerId > 0 && it.logoPath != null && it.providerId !in Stores }
+                .groupBy { it.providerId }
+                .map { (_, same) -> same.minBy { it.displayPriority } }
+                .sortedWith(compareBy<ProviderDto> { it.displayPriority }.thenBy { it.providerName })
+        }
+    }.getOrDefault(emptyList())
+
+    /** Apple TV Store, Google Play Movies, Amazon Video, Microsoft Store, YouTube, Fandango at Home, Rakuten. */
+    private val Stores = setOf(2, 3, 7, 10, 35, 68, 192)
+
     /** A TMDB keyword id for a theme like "time travel", or null. */
     suspend fun findKeyword(word: String): Int? = runCatching {
         withContext(io) {

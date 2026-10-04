@@ -193,6 +193,10 @@ class AppContainer(val context: Context) {
 
     val speaker by lazy { com.cineverse.app.data.ai.Speaker(context) }
 
+    val celebrations by lazy {
+        com.cineverse.app.data.badges.Celebrations(context, auth, library.library, episodes.progress, scope)
+    }
+
     val watchingNow by lazy { com.cineverse.app.notify.WatchingNowRepository(context) }
 
     val previouslyOn by lazy { com.cineverse.app.data.recap.PreviouslyOn(context, gemini) }

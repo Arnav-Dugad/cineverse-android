@@ -20,6 +20,8 @@ data class DiscoverState(
     val rails: List<Pair<String, Rail>> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
+    /** The streaming services in your region: id, name, logo. */
+    val services: List<Triple<Int, String, String>> = emptyList(),
 )
 
 class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
@@ -29,7 +31,14 @@ class DiscoverViewModel(private val app: AppContainer) : ViewModel() {
 
     val library: StateFlow<Library> = app.library.library
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch {
+            val services = app.tmdb.streamingServices(app.settings.settings.value.region)
+                .take(16).map { Triple(it.providerId, it.providerName, it.logoPath.orEmpty()) }
+            _state.value = _state.value.copy(services = services)
+        }
+    }
 
     /**
      * Pull to refresh.

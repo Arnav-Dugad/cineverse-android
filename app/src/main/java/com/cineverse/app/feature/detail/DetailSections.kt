@@ -258,6 +258,9 @@ fun LazyListScope.episodesSection(
     onSeasonRecap: (Int) -> Unit = {},
     onSeriesRecap: () -> Unit = {},
     onPreviously: () -> Unit = {},
+    /** The finished season to catch up on before the next, if any. */
+    catchUpSeason: Int? = null,
+    onCatchUp: (Int) -> Unit = {},
 ) {
     val detail = state.detail ?: return
     val next = progress?.nextUp()
@@ -302,8 +305,25 @@ fun LazyListScope.episodesSection(
         )
     }
 
-    // Back after a break: what happened, before the next one.
-    if (next != null && (progress?.watchedCount ?: 0) > 0) {
+    // A new season, after a finished one: the whole season, not three episodes.
+    if (catchUpSeason != null) {
+        val upcoming = detail.seasons.firstOrNull { it.number == catchUpSeason + 1 }
+        val when_ = upcoming?.airDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+        item(key = "catchUp") {
+            PreviouslyCard(
+                title = detail.title,
+                state = state.catchUp,
+                onLoad = { onCatchUp(catchUpSeason) },
+                heading = "Catch me up on season $catchUpSeason",
+                idle = when {
+                    when_ == null -> "The whole season, before season ${catchUpSeason + 1}"
+                    when_.isAfter(java.time.LocalDate.now()) -> "Before season ${catchUpSeason + 1} starts ${when_.format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))}"
+                    else -> "Season ${catchUpSeason + 1} is out: the whole of season $catchUpSeason first"
+                },
+                loadingText = "Reading season $catchUpSeason…",
+            )
+        }
+    } else if (next != null && (progress?.watchedCount ?: 0) > 0) {
         item(key = "previously") {
             PreviouslyCard(detail.title, state.previously, onPreviously)
         }
@@ -354,7 +374,14 @@ fun LazyListScope.episodesSection(
 }
 
 @Composable
-private fun PreviouslyCard(title: String, state: PreviouslyState, onLoad: () -> Unit) {
+private fun PreviouslyCard(
+    title: String,
+    state: PreviouslyState,
+    onLoad: () -> Unit,
+    heading: String = "Previously on $title",
+    idle: String = "Catch up on the last three episodes, without spoilers",
+    loadingText: String = "Reading what you have watched…",
+) {
     val colors = CvTheme.colors
     val haptics = com.cineverse.app.core.design.LocalHaptics.current
     Column(
@@ -380,11 +407,11 @@ private fun PreviouslyCard(title: String, state: PreviouslyState, onLoad: () -> 
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("Previously on $title", style = MaterialTheme.typography.titleSmall, color = colors.text, maxLines = 1)
+                Text(heading, style = MaterialTheme.typography.titleSmall, color = colors.text, maxLines = 1)
                 Text(
                     when (state) {
-                        is PreviouslyState.Idle -> "Catch up on the last three episodes, without spoilers"
-                        is PreviouslyState.Loading -> "Reading what you have watched…"
+                        is PreviouslyState.Idle -> idle
+                        is PreviouslyState.Loading -> loadingText
                         is PreviouslyState.Empty -> "The episode guide has nothing to summarise yet"
                         is PreviouslyState.Ready ->
                             when {
@@ -703,7 +730,12 @@ fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier, onBrand: (Bra
  * wants to rent something they could stream.
  */
 @Composable
-fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
+fun WhereToWatch(
+    detail: TitleDetail,
+    modifier: Modifier = Modifier,
+    /** "Everything on Netflix": the whole catalogue of a streaming service here. */
+    onService: (com.cineverse.app.data.model.WatchProvider) -> Unit = {},
+) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -761,6 +793,27 @@ fun WhereToWatch(detail: TitleDetail, modifier: Modifier = Modifier) {
                             )
                         },
                     )
+                }
+            }
+            if (label == "Streaming") {
+                // Each subscription service leads on to everything it has here.
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.padding(horizontal = ScreenPadding).padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (provider in group.take(4)) {
+                        Text(
+                            "Everything on ${provider.name} ›",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.text2,
+                            modifier = Modifier
+                                .clip(CvShape.Pill)
+                                .border(1.dp, colors.hairline, CvShape.Pill)
+                                .clickableNoRipple { haptics?.play(Haptic.Tap); onService(provider) }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))

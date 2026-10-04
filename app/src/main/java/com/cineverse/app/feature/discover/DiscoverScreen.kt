@@ -127,6 +127,45 @@ fun DiscoverScreen(
             }
             }
 
+            if (state.services.isNotEmpty()) {
+                item(key = "services") {
+                    Column {
+                        SectionHeader("On your services")
+                        Spacer(Modifier.height(12.dp))
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = ScreenPadding),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(state.services, key = { it.first }) { (id, name, logo) ->
+                                Column(
+                                    Modifier
+                                        .width(72.dp)
+                                        .clickableNoRipple {
+                                            haptics?.play(Haptic.Select)
+                                            onBrowse(Route.Provider(id, name, logo))
+                                        },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Box(
+                                        Modifier.size(64.dp).clip(CvShape.Large).background(colors.surface2),
+                                    ) {
+                                        com.cineverse.app.core.ui.CvImage(com.cineverse.app.core.ui.Img.provider(logo), name, Modifier.fillMaxSize())
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.text2,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item(key = "surprise") {
             SurpriseCard(shaken = shaken, shakeHint = shakeToPick) {
                 haptics?.play(Haptic.Celebrate)

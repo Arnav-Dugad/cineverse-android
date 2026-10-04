@@ -40,6 +40,12 @@ sealed interface Route {
     @Serializable data class Collection(val id: Int) : Route
 
     @Serializable data object Inbox : Route
+    /** Every viewing on a calendar. */
+    @Serializable data object Diary : Route
+    /** Badges and lifetime challenges. */
+    @Serializable data object Badges : Route
+    /** Everything one streaming service has in your region. */
+    @Serializable data class Provider(val id: Int, val name: String = "", val logo: String = "") : Route
 
     /** The chart: films or series. */
     @Serializable data class TopTen(val type: String = "movie") : Route

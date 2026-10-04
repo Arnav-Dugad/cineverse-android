@@ -1,5 +1,8 @@
 package com.cineverse.app.feature.detail
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.draw.drawWithContent
 import com.cineverse.app.core.ui.geminiGlow
@@ -103,6 +106,8 @@ fun DetailHead(
     movieMinutes: Int,
     /** Off shows the typeset name instead of the title's own treatment. */
     showTitleLogo: Boolean,
+    /** No title at all, logo or name: the poster and artwork say it. */
+    hideTitle: Boolean = false,
     onSave: () -> Unit,
     onWatched: () -> Unit,
     onRate: () -> Unit,
@@ -163,7 +168,11 @@ fun DetailHead(
 
         Spacer(Modifier.height(2.dp))
 
-        if (detail.logoPath != null && showTitleLogo) {
+        if (hideTitle) {
+            // Nothing: the poster above already says what this is. The name is
+            // still read out to accessibility services.
+            Spacer(Modifier.height(4.dp).semantics { heading(); contentDescription = detail.title })
+        } else if (detail.logoPath != null && showTitleLogo) {
             TonedLogo(
                 detail.logoPath,
                 detail.title,

@@ -462,6 +462,8 @@ internal fun Hero(
                     )
                 }
             }
+            // Grain on the still while the trailer loads, gone as it fades up.
+            com.cineverse.app.core.ui.FilmGrain(visible = armed && !settled)
         }
 
         // Two gradients, not one: a short wash under the status bar so the

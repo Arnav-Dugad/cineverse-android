@@ -71,6 +71,11 @@ encoding and the offline queue cannot disagree with each other.
 - **Gemini Nano** — "Previously on" summarised on the phone, from episodes you have already seen
 - **An Up Next widget** whose countdowns tick live, second by second, with the app
   asleep, from a lock-screen sliver to a large layout on the next show's backdrop
+- **A Diary** — every viewing on a calendar, rewatches dated against the first
+  time, your streak with its flame, and what you watched on this day in years past
+- **Badges** — the website's twenty badges and twelve lifetime challenges
+- **Catch me up** — a whole finished season, recapped before the next one
+- **A countdown for one show** on the home screen, pinned from its page
 - **Notifications you choose** — new episodes (and the minute one airs), new
   seasons, releases from your list, your month and app updates, each its own switch
 - **Exact air times** — the broadcaster's own minute, in your time zone

@@ -340,6 +340,10 @@ class UpNextRefreshWorker(
 ) : androidx.work.CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         UpNextWidget().updateAllSafe(applicationContext)
+        runCatching {
+            val manager = androidx.glance.appwidget.GlanceAppWidgetManager(applicationContext)
+            manager.getGlanceIds(ShowCountdownWidget::class.java).forEach { ShowCountdownWidget().update(applicationContext, it) }
+        }
         return Result.success()
     }
 }

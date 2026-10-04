@@ -44,6 +44,8 @@ data class DetailState(
     val recap: RecapView? = null,
     /** "Previously on", once asked for: null, loading, or the lines. */
     val previously: PreviouslyState = PreviouslyState.Idle,
+    /** "Catch me up" on a whole finished season, before the next. */
+    val catchUp: PreviouslyState = PreviouslyState.Idle,
 )
 
 sealed interface PreviouslyState {
@@ -436,6 +438,29 @@ class DetailViewModel(
         _state.value = _state.value.copy(
             previously = result?.let { PreviouslyState.Ready(it) } ?: PreviouslyState.Empty,
         )
+    }
+
+    /**
+     * The season to catch up on: the latest one you have finished whose next
+     * season exists and you have not started. Null when there is none.
+     */
+    fun catchUpSeason(progress: com.cineverse.app.data.model.ShowProgress?): Int? {
+        val detail = _state.value.detail ?: return null
+        val show = progress ?: return null
+        val numbers = detail.seasons.map { it.number }.filter { it > 0 }.toSet()
+        return show.structure.keys.filter { it > 0 }.sortedDescending().firstOrNull { season ->
+            val total = show.structure[season] ?: 0
+            total > 0 && show.watchedIn(season) >= total && (season + 1) in numbers && show.watchedIn(season + 1) == 0
+        }
+    }
+
+    fun loadCatchUp(season: Int) = viewModelScope.launch {
+        if (_state.value.catchUp is PreviouslyState.Loading) return@launch
+        val detail = _state.value.detail ?: return@launch
+        _state.value = _state.value.copy(catchUp = PreviouslyState.Loading)
+        val episodes = _state.value.allSeasons[season] ?: app.tmdb.season(id, season)
+        val result = runCatching { app.previouslyOn.season(detail.title, season, episodes) }.getOrNull()
+        _state.value = _state.value.copy(catchUp = result?.let { PreviouslyState.Ready(it) } ?: PreviouslyState.Empty)
     }
 
     fun markUpTo(season: Int, episode: Int) = viewModelScope.launch {

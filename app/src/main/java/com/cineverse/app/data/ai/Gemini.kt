@@ -62,21 +62,32 @@ class Gemini(private val context: Context) {
                 return text?.trim()?.takeIf { it.isNotEmpty() }
             }
             val message = outcome.exceptionOrNull()?.message.orEmpty()
-            // A model that does not exist: try the next. Anything else - the
-            // service switched off, no network, a quota - is the same for every
-            // model, so stop and stay quiet for a while.
-            if (!message.contains("not found", true) && !message.contains("404")) {
+            // Gemini is not there at all - switched off for the project, a bad
+            // key, no network: the same for every model, so stop and stay quiet
+            // for a while. Anything else - a retired model, one the free tier
+            // does not include, its quota spent - is that model's problem, and
+            // the next one may well answer.
+            if (Off.any { message.contains(it, ignoreCase = true) }) {
                 unavailableUntil = System.currentTimeMillis() + 30 * 60_000L
                 return null
             }
+            // The kept model failing - its quota for the day, say - sends the
+            // next call back through the whole list.
+            lock.withLock { if (model == name) model = null }
         }
-        unavailableUntil = System.currentTimeMillis() + 30 * 60_000L
+        unavailableUntil = System.currentTimeMillis() + 10 * 60_000L
         return null
     }
 
     companion object {
         /** Newest first; the first one that answers is kept. */
-        val MODELS = listOf("gemini-3-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite")
+        val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
+
+        /** Errors that mean Gemini itself is unreachable, not just one model. */
+        private val Off = listOf(
+            "SERVICE_DISABLED", "has not been used", "is disabled", "API key not valid",
+            "API_KEY_INVALID", "Unable to resolve host", "UnknownHost", "failed to connect",
+        )
 
         /** The JSON object inside a reply, tolerating a fenced code block around it. */
         fun extractJson(text: String): String? {

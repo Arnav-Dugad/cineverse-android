@@ -157,10 +157,18 @@ fun SettingsScreen(
             )
                 Divider()
             SwitchRow(
-                title = "Hide title logos on title pages",
-                detail = "Show the name in plain type instead",
-                checked = !settings.titleLogos,
-                onChange = { hide -> viewModel.setTitleLogos(!hide) },
+                title = "Hide titles on title pages",
+                detail = "No logo and no name over the page",
+                checked = settings.hideTitle,
+                onChange = viewModel::setHideTitle,
+            )
+                Divider()
+            SwitchRow(
+                title = "Title logos",
+                detail = "When titles show: the title's own logo, not plain type",
+                checked = settings.titleLogos,
+                onChange = viewModel::setTitleLogos,
+                enabled = !settings.hideTitle,
             )
                 Divider()
             SwitchRow(
