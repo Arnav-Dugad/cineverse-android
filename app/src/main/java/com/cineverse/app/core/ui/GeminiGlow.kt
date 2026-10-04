@@ -88,7 +88,7 @@ fun Modifier.geminiGlow(
  * A sweep gradient whose start is turned by [degrees]. Compose's sweep always
  * starts at three o'clock, so the turn is made by rotating the colour stops.
  */
-private fun rotatedSweep(degrees: Float, width: Float, height: Float): Brush {
+internal fun rotatedSweep(degrees: Float, width: Float, height: Float): Brush {
     val shift = ((degrees % 360f) / 360f)
     val stops = GeminiColors.mapIndexed { index, color ->
         val at = (index.toFloat() / (GeminiColors.size - 1) + shift) % 1f

@@ -5,6 +5,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,9 +27,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -193,70 +200,142 @@ fun CvNavigationBar(
                         )
                     )
             )
-            NavigationBar(
-                containerColor = Color.Transparent,
-                tonalElevation = 0.dp,
+            LiquidTabRow(
+                current = current,
+                savedCount = savedCount,
+                bump = bump.value,
+                onSelect = { tab ->
+                    haptics?.play(if (tab == current) Haptic.Tap else Haptic.Select)
+                    onSelect(tab)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .glassPane(PaneEdge.Top, colors.ink, opacity = 0.975f),
+            )
+        }
+    }
+}
+
+/**
+ * The tabs, with a liquid indicator.
+ *
+ * Seven tabs is two more than Material's bar is built for, so the row is laid
+ * out by hand: equal columns, an icon over a one-line label. Behind the icon
+ * sits the indicator, a soft pill with two edges on two springs. Moving to a
+ * tab on the right, the right edge leaps ahead and the left edge follows a
+ * beat later, so the pill stretches toward where you tapped, thins a little
+ * as it stretches, and gathers itself up when it arrives - a drop of liquid
+ * rather than a box that teleports.
+ */
+@Composable
+private fun LiquidTabRow(
+    current: Tab,
+    savedCount: Int,
+    bump: Float,
+    onSelect: (Tab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    val reduced = CvTheme.reducedMotion
+    val tabs = Tab.entries
+    val index = tabs.indexOf(current).toFloat()
+    val lead = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(index) }
+    val trail = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(index) }
+    androidx.compose.runtime.LaunchedEffect(index) {
+        if (reduced) {
+            lead.snapTo(index); trail.snapTo(index)
+            return@LaunchedEffect
+        }
+        // The front edge is quick and springy, the back edge slower and
+        // calmer; which edge is "front" depends on the direction of travel.
+        kotlinx.coroutines.coroutineScope {
+            launch { lead.animateTo(index, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 900f)) }
+            launch { trail.animateTo(index, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 220f)) }
+        }
+    }
+    val pill = colors.text.copy(alpha = 0.09f)
+    val sheen = colors.text.copy(alpha = 0.05f)
+    Row(
+        modifier
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
+            .height(64.dp)
+            .drawBehind {
+                val column = size.width / tabs.size
+                val half = 27.dp.toPx()
+                val left = minOf(lead.value, trail.value)
+                val right = maxOf(lead.value, trail.value)
+                val stretch = (right - left).coerceIn(0f, 2f)
+                // Thinner as it stretches, like a drop pulled long.
+                val height = 32.dp.toPx() * (1f - 0.16f * (stretch / 2f))
+                val top = 7.dp.toPx() + (32.dp.toPx() - height) / 2f
+                // The quick edge overshoots; it squashes against the bar's ends
+                // rather than running off the screen.
+                val inset = 3.dp.toPx()
+                val x0 = (column * (left + 0.5f) - half).coerceAtLeast(inset)
+                val x1 = (column * (right + 0.5f) + half).coerceAtMost(size.width - inset)
+                val radius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+                drawRoundRect(pill, Offset(x0, top), androidx.compose.ui.geometry.Size(x1 - x0, height), radius)
+                // A lit upper half, so it reads as glass rather than a flat patch.
+                drawRoundRect(
+                    Brush.verticalGradient(listOf(sheen, Color.Transparent), startY = top, endY = top + height),
+                    Offset(x0, top), androidx.compose.ui.geometry.Size(x1 - x0, height), radius,
+                )
+            },
+    ) {
+        for (tab in tabs) {
+            val selected = tab == current
+            val scale by animateFloatAsState(
+                targetValue = if (selected) 1f else 0.94f,
+                animationSpec = Motion.lively(),
+                label = "tab",
+            )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        role = androidx.compose.ui.semantics.Role.Tab,
+                    ) { onSelect(tab) }
+                    .semantics { this.selected = selected },
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                for (tab in Tab.entries) {
-                    val selected = tab == current
-                    NavigationBarItem(
+                Spacer(Modifier.height(7.dp))
+                Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
+                    // Drawn, not glyphed: it fills from the foot up as it
+                    // becomes the tab you are on.
+                    TabIcon(
+                        glyph = tab.glyph,
                         selected = selected,
-                        onClick = {
-                            haptics?.play(if (selected) Haptic.Tap else Haptic.Select)
-                            onSelect(tab)
+                        color = if (selected) colors.text else colors.text3,
+                        modifier = Modifier.graphicsLayer {
+                            val pop = if (tab == Tab.MyList) bump * 0.28f else 0f
+                            if (!reduced) { scaleX = scale + pop; scaleY = scale + pop }
                         },
-                        icon = {
-                            val scale by animateFloatAsState(
-                                targetValue = if (selected) 1f else 0.94f,
-                                animationSpec = Motion.lively(),
-                                label = "tab",
-                            )
-                            // Read outside the graphics layer: the layer block runs
-                            // on the draw pass, where composition locals are not.
-                            val reduced = CvTheme.reducedMotion
-                            Box {
-                                // Drawn, not glyphed: it fills from the foot up
-                                // as it becomes the tab you are on, which is the
-                                // same transition the whole icon set uses.
-                                TabIcon(
-                                    glyph = tab.glyph,
-                                    selected = selected,
-                                    color = if (selected) colors.text else colors.text3,
-                                    modifier = Modifier.graphicsLayer {
-                                        val pop = if (tab == Tab.MyList) bump.value * 0.28f else 0f
-                                        if (!reduced) { scaleX = scale + pop; scaleY = scale + pop }
-                                    },
-                                )
-                                // The count of titles waiting for you, which is
-                                // the one number worth putting on a tab.
-                                if (tab == Tab.MyList && savedCount > 0) {
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(start = 10.dp)
-                                            .size(7.dp)
-                                            .background(Palette.Red2, androidx.compose.foundation.shape.CircleShape)
-                                    )
-                                }
-                            }
-                        },
-                        label = {
-                            Text(tab.label, style = MaterialTheme.typography.labelSmall)
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = colors.text,
-                            selectedTextColor = colors.text,
-                            unselectedIconColor = colors.text3,
-                            unselectedTextColor = colors.text3,
-                            // Softer than the panels: an indicator as bright
-                            // as a card competes with the icon inside it.
-                            indicatorColor = colors.text.copy(alpha = 0.07f),
-                        ),
                     )
+                    // The count of titles waiting for you, the one number worth
+                    // putting on a tab.
+                    if (tab == Tab.MyList && savedCount > 0) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 3.dp)
+                                .offset(x = 4.dp)
+                                .size(7.dp)
+                                .background(Palette.Red2, androidx.compose.foundation.shape.CircleShape)
+                        )
+                    }
                 }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    tab.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, letterSpacing = 0.sp),
+                    color = if (selected) colors.text else colors.text3,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+                )
             }
         }
     }

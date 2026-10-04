@@ -232,6 +232,18 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
                     // for a name it half-knows is someone else entirely.
                     if (people.isEmpty()) null else AskUi.Found(heard, people, ask.why)
                 }
+                is Ask.MakeList -> {
+                    val (outcome, items) = runCatching { assistant.makeList(ask.request, ask.name, ask.count) }
+                        .getOrDefault(Outcome(false, "Something went wrong making that list.") to emptyList())
+                    if (items.isEmpty()) AskUi.Did(heard, outcome)
+                    else AskUi.Results(
+                        heard = heard,
+                        understood = "New list \u00b7 ${ask.name}",
+                        reply = outcome.message,
+                        items = items,
+                        byGemini = true,
+                    )
+                }
                 is Ask.Answer -> {
                     if (mine != generation) return@launch
                     _state.value = _state.value.copy(ask = AskUi.Answered(heard, "", writing = true))
@@ -254,7 +266,7 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
                     when (ui) {
                         is AskUi.Did -> ui.outcome.message
                         is AskUi.Found -> ui.why ?: "That sounds like ${ui.people.first().name}"
-                        is AskUi.Answered -> ui.text
+                        is AskUi.Answered -> com.cineverse.app.data.ai.Mentions.plain(ui.text)
                         is AskUi.Results -> when {
                             ui.items.isEmpty() -> "I couldn't find anything matching all of that."
                             ui.reply != null -> ui.reply
@@ -273,6 +285,9 @@ class SearchViewModel(private val app: AppContainer) : ViewModel() {
         "year" -> "your year"; "top10" -> "the Top 10"; "tv" -> "TV shows"
         else -> page
     }
+
+    suspend fun resolveMentions(answer: String): com.cineverse.app.data.ai.Mentioned =
+        com.cineverse.app.data.ai.Mentions.resolve(app, answer)
 
     /** Back to plain search, keeping the words. */
     fun dismissAsk() {

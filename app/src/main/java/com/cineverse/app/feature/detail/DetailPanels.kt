@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -191,6 +192,8 @@ fun NextEpisodePanel(
      * which for an American show is often half a day early.
      */
     exactAt: Long? = null,
+    /** The episode's picture, beside its name. */
+    still: String? = null,
 ) {
     val colors = CvTheme.colors
 
@@ -264,27 +267,45 @@ fun NextEpisodePanel(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        Text(
-            buildString {
-                append("S").append(episode.season).append("E").append(episode.number)
-                if (episode.name.isNotBlank()) append("  ·  ").append(episode.name)
-            },
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // When it is, in the viewer's own clock - the line people actually
-        // wanted when they asked "what time does it come out here?".
-        Text(
-            if (exact) "${com.cineverse.app.data.airing.Airing.localTime(airAt)} · your time"
-            else "Counting to the air date; the exact time is not published yet",
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.text3,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (still != null) {
+                com.cineverse.app.core.ui.CvImage(
+                    still,
+                    episode.name,
+                    Modifier
+                        .width(118.dp)
+                        .aspectRatio(16f / 9f)
+                        .clip(CvShape.Medium)
+                        .border(1.dp, colors.hairline, CvShape.Medium),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "S${episode.season} E${episode.number}",
+                    style = KickerStyle,
+                    color = colors.cyan,
+                )
+                Text(
+                    episode.name.ifBlank { "Episode ${episode.number}" },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.text,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // When it is, in the viewer's own clock - the line people actually
+                // wanted when they asked "what time does it come out here?".
+                Text(
+                    if (exact) "${com.cineverse.app.data.airing.Airing.localTime(airAt)} · your time"
+                    else "Counting to the air date",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.text3,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
 
         Spacer(Modifier.height(18.dp))
 

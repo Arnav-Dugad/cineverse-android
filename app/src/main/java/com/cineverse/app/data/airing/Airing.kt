@@ -213,6 +213,56 @@ class ExactTimes(context: Context, private val http: OkHttpClient) {
 
     private fun key(showId: Int, season: Int, episode: Int) = "$showId:$season:$episode"
 
+    /** TVmaze's still for an episode, when it published one with the time. */
+    fun cachedImage(showId: Int, season: Int, episode: Int): String? =
+        prefs.getString("img:" + key(showId, season, episode), null)?.takeIf { it.isNotBlank() }
+
+    /**
+     * A series' episode length in minutes from TVmaze, for the shows TMDB
+     * leaves blank - without it every episode was counted as 42 minutes, so
+     * a half-hour sitcom doubled your hours and a long drama halved them.
+     * Matched by IMDb id first (exact), then by name and premiere year.
+     * Remembered for a month when found, a week when not.
+     */
+    suspend fun runtime(tmdbId: Int, imdbId: String, name: String, firstAirDate: String): Int {
+        val key = "rt:$tmdbId"
+        prefs.getString(key, null)?.let { raw ->
+            val minutes = raw.substringBefore('|').toIntOrNull() ?: 0
+            val checked = raw.substringAfter('|').toLongOrNull() ?: 0
+            val ttl = if (minutes > 0) 30 * 86_400_000L else 7 * 86_400_000L
+            if (System.currentTimeMillis() - checked < ttl) return minutes
+        }
+        val found = gate.withPermit {
+            throttle()
+            withContext(Dispatchers.IO) {
+                val urls = buildList {
+                    if (imdbId.isNotBlank()) add("https://api.tvmaze.com/lookup/shows?imdb=$imdbId")
+                    add("https://api.tvmaze.com/singlesearch/shows?q=" + java.net.URLEncoder.encode(name, "UTF-8"))
+                }
+                for ((index, url) in urls.withIndex()) {
+                    val minutes = runCatching {
+                        http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                            if (!response.isSuccessful) return@use null
+                            val root = Http.json.parseToJsonElement(response.body.string()).jsonObject
+                            // A name search must agree on the premiere year.
+                            if (index > 0 || imdbId.isBlank()) {
+                                val mazeYear = root["premiered"]?.jsonPrimitive?.content?.take(4)?.toIntOrNull()
+                                val tmdbYear = firstAirDate.take(4).toIntOrNull()
+                                if (mazeYear != null && tmdbYear != null && kotlin.math.abs(mazeYear - tmdbYear) > 1) return@use 0
+                            }
+                            (root["averageRuntime"]?.jsonPrimitive?.intOrNull ?: root["runtime"]?.jsonPrimitive?.intOrNull ?: 0)
+                        }
+                    }.getOrNull()
+                    if (minutes != null && minutes > 0) return@withContext minutes
+                    if (minutes == null) return@withContext null
+                }
+                0
+            }
+        }
+        if (found != null) prefs.edit().putString(key, "$found|${System.currentTimeMillis()}").apply()
+        return found ?: 0
+    }
+
     /** The cached answer only - no request. Zero when unknown or none. */
     fun cached(showId: Int, season: Int, episode: Int): Long {
         val raw = prefs.getString(key(showId, season, episode), null) ?: return 0
@@ -271,6 +321,13 @@ class ExactTimes(context: Context, private val http: OkHttpClient) {
                 val episodeMatches = episode["season"]?.jsonPrimitive?.intOrNull == next.season &&
                     episode["number"]?.jsonPrimitive?.intOrNull == next.episode
                 val airtime = episode["airtime"]?.jsonPrimitive?.content.orEmpty()
+                if (titleMatches && yearMatches && episodeMatches) {
+                    // The episode's own still, when TVmaze has one before TMDB does.
+                    val image = (episode["image"] as? kotlinx.serialization.json.JsonObject)
+                        ?.let { it["original"]?.jsonPrimitive?.content ?: it["medium"]?.jsonPrimitive?.content }
+                        ?.replace("http://", "https://")
+                    if (!image.isNullOrBlank()) prefs.edit().putString("img:" + key(show.id, next.season, next.episode), image).apply()
+                }
                 val stamp = episode["airstamp"]?.jsonPrimitive?.content.orEmpty()
                 if (titleMatches && yearMatches && episodeMatches && airtime.isNotBlank() && stamp.isNotBlank()) {
                     runCatching { java.time.OffsetDateTime.parse(stamp).toInstant().toEpochMilli() }.getOrDefault(0L)

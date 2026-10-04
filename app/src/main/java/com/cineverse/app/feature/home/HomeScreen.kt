@@ -122,7 +122,8 @@ fun HomeScreen(
             onDismiss = { arranging = false },
         )
     }
-    val barPx = with(LocalDensity.current) { 110.dp.toPx() }
+    // Glass while the hero's foot is still 350dp down: before its buttons reach the bar.
+    val barPx = with(LocalDensity.current) { 350.dp.toPx() }
     val latestScrolled by androidx.compose.runtime.rememberUpdatedState(onScrolledPastHero)
 
     // The top bar turns from scrim to glass the moment the hero's foot passes
@@ -185,6 +186,25 @@ fun HomeScreen(
             if (state.returning.isNotEmpty()) {
                 item(key = "returning") {
                     ReturningSection(state.returning, onOpen)
+                }
+            }
+
+            state.moment?.takeIf { settings.geminiOn }?.let { rail ->
+                item(key = "moment") {
+                    // Arrives with a soft rise and a Gemini sparkle by its name.
+                    val shown = com.cineverse.app.core.ui.rememberArrival(1f, durationMillis = 620)
+                    Box(Modifier.graphicsLayer { alpha = shown; translationY = (1f - shown) * 24f }) {
+                        PosterRail(
+                            items = rail.items,
+                            title = rail.title,
+                            gemini = true,
+                            onOpen = onOpen,
+                            isWatched = { library.isWatched(it.key) },
+                            isSaved = { library.isSaved(it.key) },
+                            ratingOf = { library.ratingOf(it.key) },
+                            onLongPress = onPeek,
+                        )
+                    }
                 }
             }
 
@@ -506,7 +526,10 @@ internal fun Hero(
                     TonedLogo(
                         path,
                         item.title,
-                        Modifier
+                        fallbackStyle = MaterialTheme.typography.displaySmall,
+                        fallbackColor = Color.White,
+                        fallbackLines = 2,
+                        modifier = Modifier
                             .height(84.dp)
                             .fillMaxWidth(0.78f)
                             .graphicsLayer {

@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
         // with the provider stripped out by an aggressive installer should lose
         // notifications, not the app.
         runCatching { com.cineverse.app.notify.WatchWorker.schedule(this) }
+        runCatching { app.backfill.start() }
+        runCatching { app.persona.warm() }
 
         setContent {
             val settings by app.settings.settings.collectAsStateWithLifecycle()
@@ -81,7 +83,12 @@ class MainActivity : ComponentActivity() {
                             blurMature = settings.matureBlur,
                         ),
                 ) {
-                    CineVerseNav(app, pending) { pending = null }
+                    androidx.compose.foundation.layout.Box {
+                        CineVerseNav(app, pending) { pending = null }
+                        // Round the whole screen, over everything, while Gemini works.
+                        val busy by app.gemini.busy.collectAsStateWithLifecycle()
+                        com.cineverse.app.core.ui.GeminiEdgeGlow(active = busy && settings.geminiOn && settings.geminiEdgeGlow)
+                    }
                 }
             }
         }

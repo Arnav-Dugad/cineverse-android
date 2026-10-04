@@ -6,7 +6,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -32,34 +31,44 @@ fun TypewriterText(
     style: TextStyle,
     color: Color,
     modifier: Modifier = Modifier,
+) = TypewriterText(androidx.compose.ui.text.AnnotatedString(text), writing, style, color, modifier)
+
+/** The same, for text with links and styles in it - Gemini's tappable names. */
+@Composable
+fun TypewriterText(
+    text: androidx.compose.ui.text.AnnotatedString,
+    writing: Boolean,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
 ) {
     val reduced = CvTheme.reducedMotion
     val complete = remember { !writing }
     var shown by remember { mutableIntStateOf(if (complete || reduced) text.length else 0) }
-    val target by rememberUpdatedState(text.length)
-    LaunchedEffect(Unit) {
-        if (reduced) return@LaunchedEffect
+    // Runs only while it is behind what has arrived, then rests.
+    LaunchedEffect(text.length, reduced) {
+        if (reduced) { shown = text.length; return@LaunchedEffect }
         var last = 0L
         var carry = 0f
-        while (true) {
+        while (shown < text.length) {
             withFrameNanos { now ->
                 if (last != 0L) {
                     val seconds = (now - last) / 1_000_000_000f
-                    val behind = target - shown
+                    val behind = text.length - shown
                     // Seventy a second, up to four times that when far behind.
                     val rate = 70f * (1f + (behind / 120f).coerceIn(0f, 3f))
                     carry += rate * seconds
                     val step = carry.toInt()
                     if (step > 0) {
                         carry -= step
-                        shown = (shown + step).coerceAtMost(target)
+                        shown = (shown + step).coerceAtMost(text.length)
                     }
                 }
                 last = now
             }
         }
     }
-    val visible = text.take(shown.coerceAtMost(text.length))
+    val visible = text.subSequence(0, shown.coerceAtMost(text.length))
     val caret = writing || shown < text.length
     Text(
         buildAnnotatedString {

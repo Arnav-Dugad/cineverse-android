@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Mic
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +82,13 @@ fun AskTitleSheet(
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
+    /** Finds the titles and people an answer named. */
+    resolve: suspend (String) -> com.cineverse.app.data.ai.Mentioned = { com.cineverse.app.data.ai.Mentioned() },
+    onOpenTitle: (com.cineverse.app.data.model.MediaItem) -> Unit = {},
+    onPerson: (Int) -> Unit = {},
+    /** Reads an answer aloud (or not, by the setting) and then calls back. */
+    speak: (String, () -> Unit) -> Unit = { _, done -> done() },
+    stopSpeaking: () -> Unit = {},
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -98,13 +107,56 @@ fun AskTitleSheet(
         }
     }
     val busy = turns.lastOrNull()?.let { it.answer == null || it.writing } == true
-    fun send(text: String) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // A spoken conversation: ask by voice, hear the answer, and the mic opens
+    // again by itself for the next question. Typing, tapping the mic off or
+    // saying nothing ends it.
+    val voice = com.cineverse.app.feature.search.rememberVoiceInput()
+    var conversation by remember { mutableStateOf(false) }
+    val listening = voice.phase == com.cineverse.app.feature.search.VoiceInput.Phase.Listening ||
+        voice.phase == com.cineverse.app.feature.search.VoiceInput.Phase.Starting
+
+    fun send(text: String, spoken: Boolean = false) {
         val question = text.trim()
         if (question.isEmpty() || busy) return
         haptics?.play(Haptic.Tap)
+        conversation = spoken
         onAsk(question)
         draft = ""
     }
+    fun listen() {
+        stopSpeaking()
+        voice.start { heard -> if (heard.isNotBlank()) send(heard, spoken = true) else conversation = false }
+    }
+    val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) listen() }
+    fun mic() {
+        haptics?.play(Haptic.Tap)
+        if (listening) {
+            voice.stop()
+            conversation = false
+            return
+        }
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.RECORD_AUDIO,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) listen() else askMic.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+    val last = turns.lastOrNull()
+    LaunchedEffect(last?.question, last?.writing, last?.answer != null) {
+        val answer = last?.answer
+        if (!conversation || answer == null || last.writing) return@LaunchedEffect
+        speak(com.cineverse.app.data.ai.Mentions.plain(answer)) {
+            if (conversation) scope.launch { kotlinx.coroutines.delay(350); if (conversation) listen() }
+        }
+    }
+    LaunchedEffect(voice.phase) {
+        if (voice.phase == com.cineverse.app.feature.search.VoiceInput.Phase.Error) conversation = false
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { stopSpeaking() } }
 
     CvSheet(onDismiss = onDismiss) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -182,8 +234,25 @@ fun AskTitleSheet(
                         Thinking()
                     } else {
                         val arrive = rememberArrival(1f, 0, 420)
+                        // Names in the answer are links; once it is finished,
+                        // what it named is found and laid out under it.
+                        val mentioned by androidx.compose.runtime.produceState(com.cineverse.app.data.ai.Mentioned(), answer, turn.writing) {
+                            if (!turn.writing && (answer.contains("[[") || answer.contains("{{"))) value = resolve(answer)
+                        }
+                        fun open(mention: com.cineverse.app.data.ai.Mention) {
+                            haptics?.play(Haptic.Tap)
+                            scope.launch {
+                                val found = mentioned.takeUnless { it.isEmpty } ?: resolve(answer)
+                                if (mention.person) found.person(mention)?.let { onPerson(it.id) }
+                                else found.title(mention)?.let(onOpenTitle)
+                            }
+                        }
+                        val linked = remember(answer, colors.text) {
+                            com.cineverse.app.data.ai.Mentions.annotated(answer, com.cineverse.app.core.ui.GeminiColors[0]) { open(it) }
+                        }
+                        Column {
                         TypewriterText(
-                            answer,
+                            linked,
                             writing = turn.writing,
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.text,
@@ -195,6 +264,11 @@ fun AskTitleSheet(
                                 .background(colors.text.copy(alpha = 0.05f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                         )
+                        if (!mentioned.isEmpty) {
+                            Spacer(Modifier.height(10.dp))
+                            com.cineverse.app.core.ui.MentionRow(mentioned, onOpen = onOpenTitle, onPerson = onPerson)
+                        }
+                        }
                     }
                 }
             }
@@ -229,9 +303,19 @@ fun AskTitleSheet(
                 .padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
+            if (listening) {
+                // Listening: the words as they are heard, where the typing goes.
+                Text(
+                    voice.heard.ifBlank { "Listening\u2026" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (voice.heard.isBlank()) com.cineverse.app.core.ui.GeminiColors[1] else colors.text,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(vertical = 14.dp),
+                )
+            } else BasicTextField(
                 value = draft,
-                onValueChange = { draft = it },
+                onValueChange = { draft = it; if (it.isNotEmpty()) conversation = false },
                 singleLine = true,
                 textStyle = TextStyle(color = colors.text, fontSize = MaterialTheme.typography.bodyLarge.fontSize),
                 cursorBrush = SolidColor(Palette.Red2),
@@ -243,6 +327,28 @@ fun AskTitleSheet(
                     inner()
                 },
             )
+            // The mic: swells with your voice while it listens.
+            val swell by androidx.compose.animation.core.animateFloatAsState(
+                if (listening) 1f + voice.level * 0.35f else 1f, label = "askMicSwell",
+            )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .graphicsLayer { scaleX = swell; scaleY = swell }
+                    .then(if (listening) Modifier.geminiGlow(corner = 20.dp, width = 1.5.dp, pulse = true) else Modifier)
+                    .clip(CvShape.Circle)
+                    .background(if (listening) colors.text.copy(alpha = 0.12f) else colors.glass)
+                    .clickableNoRipple { mic() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.Mic,
+                    if (listening) "Stop listening" else "Ask by voice",
+                    tint = if (listening) com.cineverse.app.core.ui.GeminiColors[1] else colors.text2,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Spacer(Modifier.width(6.dp))
             Box(
                 Modifier
                     .size(40.dp)

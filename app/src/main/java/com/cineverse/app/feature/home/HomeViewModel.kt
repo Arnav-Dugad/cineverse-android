@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** One titled row of posters. */
@@ -53,6 +54,8 @@ data class HomeState(
      * others, which is the worst kind of bug to chase.
      */
     val personal: List<Rail> = emptyList(),
+    /** Gemini's row for this time of day, when it is on and has written one. */
+    val moment: Rail? = null,
     val rails: List<Rail> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -104,6 +107,15 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
 
     init {
         loadJob = load()
+        // The row for this moment, once the library (and so the brief) is in.
+        viewModelScope.launch {
+            if (!app.settings.settings.value.geminiOn) return@launch
+            app.library.library.first { it.loaded }
+            val moment = runCatching { app.momentRail.now() }.getOrNull() ?: return@launch
+            _state.value = _state.value.copy(
+                moment = Rail(id = "moment", title = moment.title, kicker = "Gemini, for right now", items = moment.items),
+            )
+        }
         // Continue Watching is derived, not fetched: it is a view over the
         // episode documents and the library, so it must rebuild the instant
         // either changes — which is what makes a tick on the detail page move

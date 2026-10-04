@@ -239,6 +239,7 @@ fun SearchScreen(
                 onOpen = onOpen,
                 onDismiss = viewModel::dismissAsk,
                 onPerson = onPerson,
+                resolve = viewModel::resolveMentions,
             )
         } else when {
             // An empty box is not an empty page: what you searched for before,

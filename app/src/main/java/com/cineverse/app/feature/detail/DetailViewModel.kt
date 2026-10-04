@@ -33,7 +33,6 @@ data class DetailState(
     /** Season -> every episode, once the heatmap has asked for them. */
     val allSeasons: Map<Int, List<Episode>> = emptyMap(),
     val heatmapOpen: Boolean = false,
-    val allEpisodesOpen: Boolean = false,
     val showNumbers: Boolean = false,
     val heatMode: HeatMode = HeatMode.Rating,
     val heatmap: Heatmap? = null,
@@ -99,6 +98,11 @@ class DetailViewModel(
     val collection: StateFlow<com.cineverse.app.data.franchise.CollectionInfo?> = _collection.asStateFlow()
 
     private val _exactAir = MutableStateFlow<Long?>(null)
+
+    private val _nextStill = MutableStateFlow<String?>(null)
+
+    /** TVmaze's still for the next episode, when TMDB has none yet. */
+    val nextStill: StateFlow<String?> = _nextStill.asStateFlow()
 
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
@@ -181,6 +185,7 @@ class DetailViewModel(
             ),
         )
         _exactAir.value = runCatching { app.airing.times.lookup(brief) }.getOrNull()
+        _nextStill.value = app.airing.times.cachedImage(detail.id, next.season, next.number)
     }
 
     private fun loadCollection(id: Int) = viewModelScope.launch {
@@ -252,8 +257,22 @@ class DetailViewModel(
      */
     fun endingUnlocked(): Boolean {
         val detail = _state.value.detail ?: return false
-        return if (detail.isSeries) app.episodes.progress.value[detail.id]?.complete == true
+        return if (detail.isSeries) app.episodes.progress.value[detail.id]?.complete == true || endingSeason() != null
         else app.library.library.value.isWatched(detail.key)
+    }
+
+    /**
+     * A series still running that you are caught up on, to the end of its
+     * latest season with no newer one out: that season, whose ending can be
+     * explained (and whose trivia is safe) without waiting for the finale.
+     */
+    fun endingSeason(): Int? {
+        val detail = _state.value.detail?.takeIf { it.isSeries } ?: return null
+        val show = app.episodes.progress.value[detail.id] ?: return null
+        if (show.complete || show.watchedCount == 0 || show.nextUp() != null) return null
+        val season = show.seasons.filterValues { it.isNotEmpty() }.keys.filter { it > 0 }.maxOrNull() ?: return null
+        val total = show.structure[season] ?: return null
+        return season.takeIf { total > 0 && show.watchedIn(it) >= total }
     }
 
     fun explainEnding() {
@@ -291,7 +310,7 @@ class DetailViewModel(
         asking = viewModelScope.launch {
             val viewer = viewerBrief(detail)
             runCatching {
-                app.titleChat.answer(detail, line, history, question, ending, viewer).collect { turn ->
+                app.titleChat.answer(detail, line, history, question, ending, viewer, if (ending) endingSeason() else null).collect { turn ->
                     _chat.value = _chat.value.dropLast(1) + turn
                 }
             }.onFailure { error ->
@@ -301,6 +320,16 @@ class DetailViewModel(
             app.chatStore.save(key, _chat.value)
         }
     }
+
+    suspend fun resolveMentions(answer: String): com.cineverse.app.data.ai.Mentioned =
+        com.cineverse.app.data.ai.Mentions.resolve(app, answer)
+
+    /** An answer read aloud when "Voice search answers aloud" is on; [done] either way. */
+    fun speak(text: String, done: () -> Unit) {
+        if (app.settings.settings.value.spokenAnswers) app.speaker.say(text, done) else done()
+    }
+
+    fun stopSpeaking() = app.speaker.stop()
 
     /** Start this title's conversation over. */
     fun clearChat() {
@@ -365,6 +394,49 @@ class DetailViewModel(
             loadingEpisodes = false,
             allSeasons = _state.value.allSeasons + (season to episodes),
         )
+        loadSeasonScores(season)
+    }
+
+    private val _seasonScores = MutableStateFlow(com.cineverse.app.data.scores.SeasonScores())
+
+    /** The selected season's episode scores: IMDb's with an OMDb key, TVmaze's without. */
+    val seasonScores: StateFlow<com.cineverse.app.data.scores.SeasonScores> = _seasonScores.asStateFlow()
+
+    private fun loadSeasonScores(season: Int) = viewModelScope.launch {
+        _seasonScores.value = com.cineverse.app.data.scores.SeasonScores()
+        val detail = _state.value.detail ?: return@launch
+        val imdbId = detail.imdbId.ifBlank { runCatching { app.tmdb.imdbId(id, type) }.getOrDefault("") }
+        val scores = runCatching { app.episodeScores.season(imdbId, detail.title, season) }.getOrNull() ?: return@launch
+        if (_state.value.season == season) _seasonScores.value = scores
+    }
+
+    private val _compare = MutableStateFlow<CompareState?>(null)
+
+    /** "Compare with...": null when the sheet is closed. */
+    val compare: StateFlow<CompareState?> = _compare.asStateFlow()
+    private var comparing: kotlinx.coroutines.Job? = null
+
+    fun openCompare() { _compare.value = CompareState.Picking }
+    fun closeCompare() { comparing?.cancel(); _compare.value = null }
+
+    suspend fun searchTitles(query: String): List<com.cineverse.app.data.model.MediaItem> =
+        app.tmdb.searchPage(query, 1, app.settings.settings.value.adult).items
+
+    fun compareWith(other: com.cineverse.app.data.model.MediaItem) {
+        val detail = _state.value.detail ?: return
+        comparing?.cancel()
+        _compare.value = CompareState.Comparing(other)
+        comparing = viewModelScope.launch {
+            val otherDetail = runCatching { app.tmdb.detail(other.id, other.type, app.settings.settings.value.region) }.getOrNull()
+            val result = otherDetail?.let { runCatching { app.compare.of(detail, it) }.getOrNull() }
+            if (_compare.value !is CompareState.Comparing) return@launch
+            _compare.value = result?.let { CompareState.Done(other, it) } ?: CompareState.Failed(other)
+        }
+    }
+
+    /** Your score for an episode; 0 clears it. */
+    fun rateEpisode(season: Int, episode: Int, score: Int) = viewModelScope.launch {
+        runCatching { app.episodes.rateEpisode(id, season, episode, score) }
     }
 
     private fun loadScores(detail: TitleDetail) = viewModelScope.launch {
@@ -391,25 +463,21 @@ class DetailViewModel(
     private fun loadAwards(imdbId: String) = viewModelScope.launch {
         val awards = app.awards.of(imdbId)
         if (awards.any) _state.value = _state.value.copy(awards = awards)
+        // Where it was filmed, from the same source, after the trophies.
+        val places = runCatching { app.filmingLocations.of(imdbId) }.getOrDefault(emptyList())
+        _places.value = places
     }
+
+    private val _places = MutableStateFlow<List<com.cineverse.app.data.places.Place>>(emptyList())
+
+    /** Filming locations, from Wikidata. */
+    val places: StateFlow<List<com.cineverse.app.data.places.Place>> = _places.asStateFlow()
 
     // ---------- the heatmap ----------
 
     fun toggleHeatmap() {
         val open = !_state.value.heatmapOpen
         _state.value = _state.value.copy(heatmapOpen = open)
-        if (open) loadAllSeasons()
-    }
-
-    /**
-     * Open the whole-run list.
-     *
-     * Shares the same fetch as the heatmap, so opening one and then the other
-     * costs a single sweep of the show rather than two.
-     */
-    fun toggleAllEpisodes() {
-        val open = !_state.value.allEpisodesOpen
-        _state.value = _state.value.copy(allEpisodesOpen = open)
         if (open) loadAllSeasons()
     }
 

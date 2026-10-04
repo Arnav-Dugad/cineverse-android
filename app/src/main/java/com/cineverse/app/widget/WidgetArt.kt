@@ -45,6 +45,12 @@ object WidgetArt {
         return load(context, "https://image.tmdb.org/t/p/w300$path", radiusPx)
     }
 
+    /** Any picture by its full address - TVmaze's episode stills. */
+    suspend fun url(context: Context, url: String?, radiusPx: Float = 0f): Bitmap? {
+        if (url.isNullOrBlank()) return null
+        return load(context, url, radiusPx)
+    }
+
     /** w780 backdrops, for the large Up Next widget's hero. */
     suspend fun backdrop(context: Context, path: String?, radiusPx: Float = 0f): Bitmap? {
         if (path.isNullOrBlank()) return null

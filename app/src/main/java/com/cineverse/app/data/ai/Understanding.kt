@@ -31,6 +31,8 @@ sealed interface Ask {
     data class Person(override val spoken: String, val name: String, val why: String?, val alternatives: List<String>) : Ask
     /** A question that wants a written answer, not a list of titles. */
     data class Answer(override val spoken: String, val question: String) : Ask
+    /** "Make me a list of 10 slow-burn sci-fi I haven't seen": a real list in My List. */
+    data class MakeList(override val spoken: String, val request: String, val name: String, val count: Int) : Ask
 }
 
 /** A discover search, in words, before ids are resolved. */
@@ -255,7 +257,8 @@ object Understanding {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
         if (words.size < 3) return false
         return Regex("""\b(something|anything|movies?|films?|shows?|series|like|with|from|starring|funny|scary|best|good|recommend|under|about|set in|on netflix|on prime|90s|80s|00s|for tonight|to watch)\b""", RegexOption.IGNORE_CASE)
-            .containsMatchIn(text) || isQuestion(text)
+            .containsMatchIn(text) || isQuestion(text) ||
+            Regex("""^(please\s+)?(make|build|create|start)\b.*\blist\b""", RegexOption.IGNORE_CASE).containsMatchIn(text.trim())
     }
 
     /** "Who's the guy from…", "why does…", "is it worth…": wants an answer, or a person. */
@@ -279,6 +282,7 @@ object Understanding {
         "action": one of "search", "discover", "open", "add", "remove", "watched", "rate", "trailer", "next_episode", "navigate", "person", "answer".
           - "person": they describe or ask about a real actor or director rather than naming them ("the guy from Severance with the beard",
             "who played the Joker in The Dark Knight", "that actress from Fleabag who talks to the camera"). Identify them.
+          - "make_list": they ask you to MAKE, BUILD or CREATE a list ("make me a list of 10 slow-burn sci-fi I haven't seen").
           - "answer": a question that wants a written answer rather than titles (trivia, explanations, comparisons, viewing order,
             "is The Bear worth watching", "why is Citizen Kane famous").
           - "discover": the user wants recommendations or a filtered list ("funny 90s movies with Tom Hanks", "something like Dark but shorter", "Korean thrillers on Netflix").
@@ -307,6 +311,9 @@ object Understanding {
         "why": for "person", one short sentence connecting them to the description ("Adam Scott plays Mark Scout in Severance").
         "alternatives": for "person", up to 2 other plausible names, or [].
         "question": for "answer", the question as a clean sentence.
+        "list_name": for "make_list", a short, nice name for the list, 2 to 5 words ("Slow-burn sci-fi").
+        "count": for "make_list", how many titles, 5 to 25 (10 if not said).
+        "request": for "make_list", what should be in it, as a clean phrase.
         "reply": one short friendly sentence describing what you understood, under 12 words.
 
         Sentence: "${utterance.replace("\"", "'")}"
@@ -339,6 +346,12 @@ object Understanding {
             "search" -> Ask.Search(utterance, str("query") ?: title ?: utterance)
             "person" -> Ask.Person(utterance, str("person") ?: return null, str("why"), list("alternatives").take(2))
             "answer" -> Ask.Answer(utterance, str("question") ?: utterance)
+            "make_list" -> Ask.MakeList(
+                utterance,
+                str("request") ?: utterance,
+                str("list_name") ?: "Picked by Gemini",
+                (int("count") ?: 10).coerceIn(3, 25),
+            )
             else -> {
                 val type = when (str("type")) { "movie" -> MediaType.Movie; "tv" -> MediaType.Tv; else -> null }
                 Ask.Discover(

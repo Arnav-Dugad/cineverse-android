@@ -13,6 +13,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.animateDp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,6 +49,7 @@ import androidx.navigation.toRoute
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.graphicsLayer
 import com.cineverse.app.core.ui.LocalPinnedBarLift
+import com.cineverse.app.core.ui.movingLights
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cineverse.app.AppContainer
 import com.cineverse.app.core.design.CvTheme
@@ -110,9 +113,33 @@ private inline fun <reified T : Any> NavGraphBuilder.cvComposable(
     crossinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
 ) = composable<T> { entry ->
     CompositionLocalProvider(LocalNavAnimatedScope provides this) {
-        content(entry)
+        // While it moves, a page is a card: rounded corners, a shadow along
+        // its edge and its own background, so the page beneath never shows
+        // through it. At rest it is square and flat again.
+        val corner by transition.animateDp(
+            transitionSpec = { tween(CARD_MS, easing = CardEasing) },
+            label = "cardCorner",
+        ) { state -> if (state == androidx.compose.animation.EnterExitState.Visible) 0.dp else 26.dp }
+        val ink = CvTheme.colors.ink
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    if (corner > 0.dp) {
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(corner)
+                        clip = true
+                        shadowElevation = 18.dp.toPx() * (corner / 26.dp)
+                    }
+                }
+                .background(ink)
+        ) {
+            content(entry)
+        }
     }
 }
+
+/** The tabs that open on a hero, whose top bar starts as a scrim over the art. */
+private val HeroTabs = setOf(Tab.Home, Tab.Movies, Tab.TvShows)
 
 private fun androidx.navigation.NavDestination.isTab(): Boolean =
     hierarchy.any { node -> Tab.entries.any { node.hasRoute(it.route::class) } }
@@ -233,16 +260,18 @@ fun CineVerseNav(
         ?: hostTab.takeIf { settings.pinNavBar && backStack?.destination?.isFullScreen() == false }
     androidx.compose.runtime.SideEffect { bars.pinned = settings.pinNavBar }
     var barLift by remember { mutableStateOf(0.dp) }
+    // The tab a bar shows while it fades away, once there is no tab under it.
+    var lastShownTab by remember { mutableStateOf(Tab.Home) }
+    androidx.compose.runtime.SideEffect { (barTab ?: currentTab)?.let { lastShownTab = it } }
 
     // Every arrival starts with the bar showing. Scrolling a pushed page (Your
     // Year, a title) tucks it away, and without this you came back to a tab
     // with no way to leave it until you happened to scroll up.
     LaunchedEffect(backStack?.id) { bars.show() }
 
-    // Home's bar is a scrim over the hero and glass once the hero has gone.
-    var homeScrolled by remember { mutableStateOf(false) }
-    // Home, Films or Series - which front page the Home tab is showing.
-    var homeSection by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    // The bar is a scrim over a front page's hero and glass once the hero has
+    // gone - per tab, so a scrolled Movies does not darken Home's bar.
+    val heroScrolled = remember { androidx.compose.runtime.mutableStateMapOf<Tab, Boolean>() }
 
     Scaffold(
         containerColor = colors.ink,
@@ -251,22 +280,30 @@ fun CineVerseNav(
         topBar = {
             // Only over a tab. A pushed screen carries its own back arrow, and
             // two bars stacked is the fastest way to waste a phone's height.
-            if (currentTab != null) {
+            // It fades with the page rather than popping in as a card lands.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = currentTab != null,
+                enter = fadeIn(tween(CARD_MS)),
+                exit = fadeOut(tween(Motion.Quick)),
+            ) {
+                val tab = currentTab ?: lastShownTab
                 CvTopBar(
-                    tab = currentTab,
+                    tab = tab,
                     onSearch = { navController.navigate(Route.Search) },
-                    overArt = currentTab == Tab.Home && !homeScrolled,
+                    overArt = tab in HeroTabs && heroScrolled[tab] != true,
                     inboxCount = if (shelf.loaded && signedInUid != null) inboxCount else 0,
                     onInbox = { navController.navigate(Route.Inbox) },
-                    section = if (currentTab == Tab.Home) homeSection else null,
-                    onSection = { homeSection = it },
                 )
             }
         },
         bottomBar = {
-            if (barTab != null) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = barTab != null,
+                enter = fadeIn(tween(CARD_MS)) + androidx.compose.animation.slideInVertically(tween(CARD_MS, easing = CardEasing)) { it / 3 },
+                exit = fadeOut(tween(Motion.Quick)) + androidx.compose.animation.slideOutVertically(tween(CARD_MS, easing = CardEasing)) { it / 3 },
+            ) {
                 CvNavigationBar(
-                    current = barTab,
+                    current = barTab ?: lastShownTab,
                     bars = bars,
                     // Titles saved and not yet watched: the one number worth a tab.
                     savedCount = savedWaiting,
@@ -312,7 +349,8 @@ fun CineVerseNav(
             modifier = Modifier
                 .fillMaxSize()
                 .background(colors.ink)
-                .nestedScroll(bars.connection),
+                .nestedScroll(bars.connection)
+                .movingLights(settings.movingLights),
             // Tabs cross-fade; anything pushed on top slides in from the side,
             // so the hierarchy is legible from the motion alone.
             enterTransition = { pushEnter() },
@@ -337,34 +375,18 @@ fun CineVerseNav(
                     }
                 }
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().nestedScroll(askScroll)) {
-                androidx.compose.animation.Crossfade(homeSection, label = "frontPage") { section ->
-                    when (section) {
-                        1, 2 -> {
-                            val type = if (section == 1) MediaType.Movie else MediaType.Tv
-                            com.cineverse.app.feature.catalog.CatalogScreen(
-                                viewModel = cvViewModel("catalog_${type.wire}") {
-                                    com.cineverse.app.feature.catalog.CatalogViewModel(app, type)
-                                },
-                                onOpen = open,
-                                onPeek = peek::open,
-                                contentPadding = padding,
-                                onScrolledPastHero = { homeScrolled = it },
-                            )
-                        }
-                        else -> HomeScreen(
-                            viewModel = cvViewModel("home") { HomeViewModel(app) },
-                            onOpen = open,
-                            onBrowse = { navController.navigate(it) },
-                            onContinue = { row ->
-                                navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
-                            },
-                            onPeek = peek::open,
-                            contentPadding = padding,
-                            onScrolledPastHero = { homeScrolled = it },
-                        )
-                    }
-                }
-                if (settings.geminiOn && homeSection == 0) {
+                HomeScreen(
+                    viewModel = cvViewModel("home") { HomeViewModel(app) },
+                    onOpen = open,
+                    onBrowse = { navController.navigate(it) },
+                    onContinue = { row ->
+                        navController.navigate(Route.Detail(row.item.id, row.item.type.wire))
+                    },
+                    onPeek = peek::open,
+                    contentPadding = padding,
+                    onScrolledPastHero = { heroScrolled[Tab.Home] = it },
+                )
+                if (settings.geminiOn) {
                     com.cineverse.app.feature.home.AskCineVerseFab(
                         expanded = askExpanded,
                         onText = { navController.navigate(Route.Search) { launchSingleTop = true } },
@@ -387,6 +409,22 @@ fun CineVerseNav(
                         onDismiss = { tonight = false },
                     )
                 }
+            }
+
+            // The two catalogues, each a tab of its own.
+            for ((tab, type) in listOf(Tab.Movies to MediaType.Movie, Tab.TvShows to MediaType.Tv)) {
+                val content: @Composable () -> Unit = {
+                    com.cineverse.app.feature.catalog.CatalogScreen(
+                        viewModel = cvViewModel("catalog_${type.wire}") {
+                            com.cineverse.app.feature.catalog.CatalogViewModel(app, type)
+                        },
+                        onOpen = open,
+                        onPeek = peek::open,
+                        contentPadding = padding,
+                        onScrolledPastHero = { heroScrolled[tab] = it },
+                    )
+                }
+                if (tab == Tab.Movies) cvComposable<Route.Movies> { content() } else cvComposable<Route.TvShows> { content() }
             }
 
             cvComposable<Route.Discover> {
@@ -425,6 +463,7 @@ fun CineVerseNav(
                     onCollection = { navController.navigate(Route.Collection(it)) },
                     onFranchises = { navController.navigate(Route.Franchises) },
                     onPerson = { navController.navigate(Route.Person(it)) },
+                    onOpen = open,
                     modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 )
             }
@@ -480,9 +519,9 @@ fun CineVerseNav(
                             }
                         }
                         when (page) {
-                            "home" -> { homeSection = 0; tab(Tab.Home) }
-                            "movies" -> { homeSection = 1; tab(Tab.Home) }
-                            "tv" -> { homeSection = 2; tab(Tab.Home) }
+                            "home" -> tab(Tab.Home)
+                            "movies" -> tab(Tab.Movies)
+                            "tv" -> tab(Tab.TvShows)
                             "list" -> tab(Tab.MyList)
                             "stats" -> tab(Tab.Stats)
                             "discover" -> tab(Tab.Discover)
@@ -733,36 +772,38 @@ fun CineVerseNav(
 }
 
 // ---------- transitions ----------
+//
+// Pages are cards. Opening one slides it in from the right edge over the page
+// you were on, which eases a quarter of the way left and dims behind it; going
+// back slides the card off to the right and the page beneath glides back into
+// place. It used to shrink away instead, which read as the page collapsing
+// rather than being put down. Under a predictive back gesture the system
+// scrubs this same slide with your thumb, so the card follows the finger.
+// Switching between tabs is a plain crossfade: tabs are places side by side,
+// not a stack.
+
+private val CardEasing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)
+private const val CARD_MS = 380
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs() =
+    initialState.destination.isTab() && targetState.destination.isTab()
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.pushEnter() =
-    slideInHorizontally(tween(Motion.Normal, easing = Motion.EaseOut)) { it / 6 } +
-        fadeIn(tween(Motion.Normal))
+    if (betweenTabs()) fadeIn(tween(Motion.Normal))
+    else slideInHorizontally(tween(CARD_MS, easing = CardEasing)) { it }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.pushExit() =
-    fadeOut(tween(Motion.Quick)) + scaleOut(tween(Motion.Normal), targetScale = 0.97f)
+    if (betweenTabs()) fadeOut(tween(Motion.Quick))
+    else slideOutHorizontally(tween(CARD_MS, easing = CardEasing)) { -it / 4 } +
+        fadeOut(tween(CARD_MS), targetAlpha = 0.45f)
 
-/**
- * The page you are going back TO: already there, a little smaller and
- * dimmer, and growing into place. Under a predictive back gesture the system
- * scrubs this with your thumb, so the start of the swipe is a peek at it.
- */
+/** The page you are going back TO: a quarter off to the left and dimmed, gliding home. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter() =
-    fadeIn(tween(Motion.Normal), initialAlpha = 0.55f) + scaleIn(tween(Motion.Normal, easing = Motion.EaseOut), initialScale = 0.93f)
+    if (betweenTabs()) fadeIn(tween(Motion.Normal))
+    else slideInHorizontally(tween(CARD_MS, easing = CardEasing)) { -it / 4 } +
+        fadeIn(tween(CARD_MS), initialAlpha = 0.45f)
 
-/**
- * Going back.
- *
- * A horizontal slide used to live here, and it fought the shared poster: the
- * page would move one way while the poster inside it travelled another, and the
- * two together read as a glitch. Scaling the page down instead lets the poster
- * carry the motion on its own, and it is also the shape a PREDICTIVE back
- * gesture wants — the system drives this same transition as the finger moves,
- * so a page that shrinks toward where it came from tracks a thumb honestly and a
- * page that slides sideways does not.
- */
+/** Going back: the card slides off the right edge, whole. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit() =
-    // Shrinks with the thumb and stays solid for the first half of the swipe,
-    // so the page underneath shows round its edges: the peek. It only fades
-    // once the gesture is past the point of no return.
-    scaleOut(tween(Motion.Normal, easing = Motion.EaseOut), targetScale = 0.86f) +
-        fadeOut(tween(Motion.Normal / 2, delayMillis = Motion.Normal / 2))
+    if (betweenTabs()) fadeOut(tween(Motion.Quick))
+    else slideOutHorizontally(tween(CARD_MS, easing = CardEasing)) { it }

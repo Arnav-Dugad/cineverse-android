@@ -15,6 +15,8 @@ import kotlinx.serialization.Serializable
 sealed interface Route {
 
     @Serializable data object Home : Route
+    @Serializable data object Movies : Route
+    @Serializable data object TvShows : Route
     @Serializable data object Discover : Route
     @Serializable data object MyList : Route
     @Serializable data object Stats : Route
@@ -67,13 +69,11 @@ sealed interface Route {
 }
 
 /**
- * The five tabs.
- *
- * Nine nav items on the website become five here, because a bottom bar holds
- * five before the labels start lying. Discover absorbs Movies, TV Shows,
- * Franchises, Box Office and Releases — five pages that are all the same verb —
- * and Search is a mode in the top bar rather than a place, which is where IMDb,
- * YouTube and Prime all ended up.
+ * The seven tabs: Home, the two catalogues, Discover, My List, Stats and
+ * You. Films and series used to be chips under the wordmark on Home; as tabs
+ * they are one tap from anywhere, each with its own saved place. Discover
+ * still holds Franchises, Box Office and Releases, and Search is a mode in
+ * the top bar rather than a place.
  */
 enum class Tab(
     val route: Route,
@@ -81,6 +81,8 @@ enum class Tab(
     val glyph: TabGlyph,
 ) {
     Home(Route.Home, "Home", TabGlyph.Home),
+    Movies(Route.Movies, "Movies", TabGlyph.Film),
+    TvShows(Route.TvShows, "TV Shows", TabGlyph.Tv),
     Discover(Route.Discover, "Discover", TabGlyph.Discover),
     MyList(Route.MyList, "My List", TabGlyph.List),
     Stats(Route.Stats, "Stats", TabGlyph.Stats),

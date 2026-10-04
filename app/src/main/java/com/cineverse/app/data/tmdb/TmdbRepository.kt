@@ -180,12 +180,19 @@ class TmdbRepository(
 
     // ---------- one title ----------
 
+    /** Where a series' episode length comes from when TMDB has none (TVmaze). */
+    var runtimeFallback: (suspend (TitleDetail) -> Int)? = null
+
     suspend fun detail(id: Int, type: MediaType, region: String, refresh: Boolean = false): TitleDetail {
         val key = "${type.wire}_${id}_$region"
         if (!refresh) detailCache[key]?.let { return it }
         return withContext(io) {
-            val detail = if (type == MediaType.Movie) api.movie(id).toDetail(region)
+            val mapped = if (type == MediaType.Movie) api.movie(id).toDetail(region)
             else api.tv(id).toDetail(region)
+            val detail = if (mapped.isSeries && mapped.episodeRuntime <= 0) {
+                val minutes = runCatching { runtimeFallback?.invoke(mapped) }.getOrNull() ?: 0
+                if (minutes > 0) mapped.copy(episodeRuntime = minutes) else mapped
+            } else mapped
             detailCache.put(key, detail)
             if (detail.imdbId.isNotBlank()) imdbIds.put("${type.wire}_$id", detail.imdbId)
             detail

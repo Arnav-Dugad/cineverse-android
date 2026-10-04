@@ -1,5 +1,6 @@
 package com.cineverse.app.feature.stats
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
@@ -67,7 +68,27 @@ class StatsViewModel(private val app: AppContainer) : ViewModel() {
      */
     val castHours: StateFlow<com.cineverse.app.data.cast.CastHours?> = _cast
 
+    private val _taste = kotlinx.coroutines.flow.MutableStateFlow<Pair<String, Boolean>?>(null)
+
+    /** Gemini's paragraph on your taste, and whether it is still being written. */
+    val taste: StateFlow<Pair<String, Boolean>?> = _taste
+
+    suspend fun resolveMentions(text: String) = com.cineverse.app.data.ai.Mentions.resolve(app, text)
+
     init {
+        // This month's paragraph: read back if written already (here or on
+        // another phone), written now - as you watch - if not.
+        viewModelScope.launch {
+            if (!app.settings.settings.value.geminiOn) return@launch
+            app.library.library.first { it.loaded }
+            val saved = runCatching { app.tasteParagraph.cached() }.getOrNull()
+            if (saved != null) { _taste.value = saved to false; return@launch }
+            var last = ""
+            runCatching {
+                app.tasteParagraph.write().collect { text -> last = text; _taste.value = text to true }
+            }
+            _taste.value = if (last.isNotBlank()) last.trim() to false else null
+        }
         viewModelScope.launch {
             app.episodes.progress
                 .map { shows ->

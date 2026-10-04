@@ -82,6 +82,8 @@ fun PeekHostSheet(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(item.key) { host.hydrate() }
+    val settings by app.settings.settings.collectAsStateWithLifecycle()
+    val onWifi by com.cineverse.app.core.net.rememberUnmetered()
 
     PeekSheet(
         item = item,
@@ -90,6 +92,9 @@ fun PeekHostSheet(
         saved = library.isSaved(item.key),
         watched = library.isWatched(item.key),
         rating = library.ratingOf(item.key),
+        // The trailer plays in the peek, muted, as the website's hover preview
+        // does - under the same rules as the hero's.
+        trailerKey = host.detail?.trailer?.key?.takeIf { settings.autoplay && (!settings.autoplayOnWifiOnly || onWifi) },
         onOpen = { host.close(); onOpen(item) },
         onSave = { scope.launch { app.library.toggleSaved(item, host.detail) } },
         onWatched = {

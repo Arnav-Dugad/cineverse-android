@@ -88,14 +88,18 @@ fun FilterDropdowns(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Row(
-            Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(PaddingValues(horizontal = ScreenPadding)),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        val summary = buildList {
+            if (showType && filter.type != TypeFilter.All) add(filter.type.label)
+            genres.firstOrNull { it.id == filter.genreId }?.let { add(it.name) }
+            if (filter.minRating > 0) add("${filter.minRating}+")
+            if (filter.decade > 0) add("${filter.decade}s")
+            if (showHideWatched && filter.hideWatched) add("Unwatched")
+        }
+        com.cineverse.app.core.ui.FoldedFilters(
+            summary = summary,
+            horizontalPadding = ScreenPadding,
+            always = sort,
         ) {
-            sort()
             if (showType) {
                 CvDropdown("Type", TypeFilter.entries.map { it to if (it == TypeFilter.All) "Films and series" else it.label }, filter.type) {
                     onChange(filter.copy(type = it))

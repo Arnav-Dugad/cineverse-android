@@ -41,6 +41,10 @@ import com.cineverse.app.core.design.CvTheme
 import com.cineverse.app.core.design.KickerStyle
 import com.cineverse.app.core.design.Motion
 import com.cineverse.app.core.design.Palette
+import com.cineverse.app.core.ui.geminiGlow
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material3.Icon
+import kotlinx.coroutines.launch
 import com.cineverse.app.core.ui.glass
 import com.cineverse.app.core.ui.BottomBarSpace
 import com.cineverse.app.core.ui.CountUpString
@@ -68,8 +72,10 @@ fun StatsScreen(
     onCollection: (Int) -> Unit = {},
     onFranchises: () -> Unit = {},
     onPerson: (Int) -> Unit = {},
+    onOpen: (com.cineverse.app.data.model.MediaItem) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val taste by viewModel.taste.collectAsStateWithLifecycle()
     val folded by viewModel.sections.collectAsStateWithLifecycle()
     val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
@@ -103,6 +109,12 @@ fun StatsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.text3,
                 )
+            }
+        }
+
+        taste?.let { (text, writing) ->
+            item(key = "taste") {
+                TasteCard(text, writing, viewModel::resolveMentions, onOpen, onPerson, Modifier.padding(horizontal = ScreenPadding))
             }
         }
 
@@ -708,5 +720,63 @@ private fun DoorCard(
         Spacer(Modifier.height(10.dp))
         Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text)
         Text(detail, style = MaterialTheme.typography.labelSmall, color = colors.text3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * "Your taste", by Gemini: one paragraph about you, rewritten each month,
+ * typed out the first time it is read, with the titles and people it names
+ * as links and laid out underneath.
+ */
+@Composable
+private fun TasteCard(
+    text: String,
+    writing: Boolean,
+    resolve: suspend (String) -> com.cineverse.app.data.ai.Mentioned,
+    onOpen: (com.cineverse.app.data.model.MediaItem) -> Unit,
+    onPerson: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = CvTheme.colors
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val mentioned by androidx.compose.runtime.produceState(com.cineverse.app.data.ai.Mentioned(), text, writing) {
+        if (!writing && (text.contains("[[") || text.contains("{{"))) value = resolve(text)
+    }
+    val linked = androidx.compose.runtime.remember(text) {
+        com.cineverse.app.data.ai.Mentions.annotated(text, com.cineverse.app.core.ui.GeminiColors[0]) { mention ->
+            scope.launch {
+                val found = resolve(text)
+                if (mention.person) found.person(mention)?.let { onPerson(it.id) } else found.title(mention)?.let(onOpen)
+            }
+        }
+    }
+    Column(
+        modifier
+            .fillMaxWidth()
+            .geminiGlow(corner = 24.dp, width = 1.3.dp, pulse = writing)
+            .clip(com.cineverse.app.core.design.CvShape.XLarge)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Palette.Purple.copy(alpha = 0.12f), colors.text.copy(alpha = 0.03f)),
+                )
+            )
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(androidx.compose.material.icons.Icons.Rounded.AutoAwesome, null, tint = com.cineverse.app.core.ui.GeminiColors[1], modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("YOUR TASTE, THIS MONTH", style = KickerStyle, color = colors.text3)
+        }
+        Spacer(Modifier.height(10.dp))
+        com.cineverse.app.core.ui.TypewriterText(
+            linked,
+            writing = writing,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.text,
+        )
+        if (!mentioned.isEmpty) {
+            Spacer(Modifier.height(14.dp))
+            com.cineverse.app.core.ui.MentionRow(mentioned, onOpen = onOpen, onPerson = onPerson)
+        }
     }
 }

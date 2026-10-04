@@ -164,6 +164,10 @@ data class ShowProgress(
 ) {
     val key: String get() = "tv_$tmdbId"
 
+    /** Your own score for an episode, 1-10, or 0. Kept on the show's progress document. */
+    fun episodeRating(season: Int, episode: Int): Int =
+        ((extras["episodeRatings"] as? Map<*, *>)?.get("${season}_$episode") as? Number)?.toInt() ?: 0
+
     /** How many episodes the show has, specials excluded. */
     val totalEpisodes: Int get() = structure.values.sum()
 

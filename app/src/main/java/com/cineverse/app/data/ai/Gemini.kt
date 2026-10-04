@@ -32,6 +32,15 @@ class Gemini(
     private var model: String? = null
     private var unavailableUntil = 0L
 
+    private val working = java.util.concurrent.atomic.AtomicInteger(0)
+    private val _busy = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    /** True while any request is in flight: what the edge glow listens to. */
+    val busy: kotlinx.coroutines.flow.StateFlow<Boolean> = _busy
+
+    private fun begin() { _busy.value = working.incrementAndGet() > 0 }
+    private fun end() { _busy.value = working.decrementAndGet() > 0 }
+
     /** True once Gemini has answered at least once this session. */
     @Volatile var confirmed: Boolean = false
         private set
@@ -78,6 +87,8 @@ class Gemini(
      */
     fun stream(prompt: String, timeoutMs: Long = 45_000): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
         if (!enabled() || System.currentTimeMillis() < unavailableUntil) return@flow
+        begin()
+        try {
         for (name in SMART) {
             val sofar = StringBuilder()
             val outcome = runCatching {
@@ -105,6 +116,9 @@ class Gemini(
                 return@flow
             }
         }
+        } finally {
+            end()
+        }
     }.flowOn(Dispatchers.IO)
 
     private fun model(name: String, json: Boolean) =
@@ -117,6 +131,12 @@ class Gemini(
         )
 
     private suspend fun call(prompt: String, json: Boolean, timeoutMs: Long): String? {
+        if (!enabled() || System.currentTimeMillis() < unavailableUntil) return callInner(prompt, json, timeoutMs)
+        begin()
+        return try { callInner(prompt, json, timeoutMs) } finally { end() }
+    }
+
+    private suspend fun callInner(prompt: String, json: Boolean, timeoutMs: Long): String? {
         if (!enabled()) return null
         if (System.currentTimeMillis() < unavailableUntil) {
             android.util.Log.i("CineVerseGemini", "skipped: unavailable for ${(unavailableUntil - System.currentTimeMillis()) / 1000}s more")

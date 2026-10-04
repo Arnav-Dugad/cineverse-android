@@ -158,6 +158,20 @@ class EpisodeRepository(
         }
     }
 
+    /** Your score for one episode, 1-10, or 0 to clear it. */
+    suspend fun rateEpisode(showId: Int, season: Int, episode: Int, score: Int) {
+        val uid = auth.uid.value ?: return
+        val field = com.google.firebase.firestore.FieldPath.of("episodeRatings", "${season}_$episode")
+        val value: Any = if (score in 1..10) score else com.google.firebase.firestore.FieldValue.delete()
+        progressRef(uid, showId).update(field, value).await()
+    }
+
+    /** The show's details (length, seasons, artwork) brought up to date; no tick changes. */
+    suspend fun refreshMeta(show: TitleDetail) {
+        if (of(show.id) == null) return
+        write(show) { it }
+    }
+
     // ---------- the write path ----------
 
     /**

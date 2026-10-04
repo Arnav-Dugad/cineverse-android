@@ -194,10 +194,7 @@ private fun StudioHead(studio: StudioDto?, network: Boolean) {
             contentAlignment = Alignment.Center,
         ) {
             if (studio?.logoPath != null) {
-                CvImage(
-                    Img.logo(studio.logoPath), studio.name, Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit, background = Color.Transparent,
-                )
+                com.cineverse.app.core.ui.MarkOrName(studio.logoPath, studio.name, Modifier.fillMaxSize())
             } else {
                 Text(
                     studio?.name?.take(2)?.uppercase().orEmpty(),

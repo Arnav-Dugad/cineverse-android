@@ -270,6 +270,18 @@ class LibraryRepository(
         }.isSuccess
     }
 
+    /** Put a title in one of your lists, saving it first if it is not saved. */
+    suspend fun addToList(item: MediaItem, listId: String) {
+        val uid = auth.uid.value ?: return
+        val held = library.value.saved[item.key]
+        if (held != null) {
+            setLists(item.key, held.lists + listId)
+        } else {
+            user(uid).collection("watchlist").document(item.key)
+                .set(savedPayload(item, null) + ("lists" to listOf(listId))).await()
+        }
+    }
+
     suspend fun setLists(key: String, lists: List<String>) {
         val uid = auth.uid.value ?: return
         val clean = lists.distinct().ifEmpty { listOf("watchlist") }
@@ -324,6 +336,14 @@ class LibraryRepository(
      * the caller should mark it watched instead, which is a different action
      * with different consequences for episodes and ratings.
      */
+    /** Missing details for a watched title, merged in: nothing already there is touched. */
+    suspend fun fillWatched(key: String, fields: Map<String, Any?>) {
+        val uid = auth.uid.value ?: return
+        if (fields.isEmpty() || !library.value.watched.containsKey(key)) return
+        user(uid).collection("watched").document(key)
+            .set(fields, com.google.firebase.firestore.SetOptions.merge()).await()
+    }
+
     suspend fun logRewatch(key: String, at: Long = System.currentTimeMillis()): Int {
         val uid = auth.uid.value ?: return 0
         val held = library.value.watched[key] ?: return 0

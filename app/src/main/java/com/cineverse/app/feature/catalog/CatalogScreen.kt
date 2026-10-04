@@ -170,7 +170,8 @@ fun CatalogScreen(
 /** Tells the top bar when the hero has slid up behind it. */
 @Composable
 private fun HeroScrollReport(grid: LazyGridState, onScrolled: (Boolean) -> Unit) {
-    val px = with(LocalDensity.current) { 110.dp.toPx() }
+    // Glass before the hero's buttons slide under the bar, not after the hero has gone.
+    val px = with(LocalDensity.current) { 350.dp.toPx() }
     val latest by rememberUpdatedState(onScrolled)
     LaunchedEffect(grid) {
         snapshotFlow {
@@ -210,54 +211,43 @@ private fun FilterRow(state: CatalogState, viewModel: CatalogViewModel) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                CvDropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, state.filters.genre) {
-                    viewModel.setFilters(state.filters.copy(genre = it))
+        val f = state.filters
+        val summary = buildList {
+            state.genres.firstOrNull { it.id == f.genre }?.let { add(it.name) }
+            if (f.year > 0) add("${f.year}")
+            if (f.rating > 0) add("${f.rating}+")
+            state.services.firstOrNull { it.first == f.provider }?.let { add(it.second) }
+            Languages.firstOrNull { it.first == f.language && f.language.isNotEmpty() }?.let { add(it.second) }
+            Statuses.firstOrNull { it.first == f.status && f.status.isNotEmpty() }?.let { add(it.second) }
+            Formats.firstOrNull { it.first == f.format && f.format.isNotEmpty() }?.let { add(it.second) }
+            Runtimes.firstOrNull { it.first == f.runtime && f.runtime.isNotEmpty() }?.let { add(it.second) }
+        }
+        com.cineverse.app.core.ui.FoldedFilters(
+            summary = summary,
+            always = {
+                CvDropdown("Sort", CatalogSort.entries.map { it to it.label }, f.sort) {
+                    viewModel.setFilters(f.copy(sort = it))
                 }
+            },
+        ) {
+            CvDropdown("Genre", listOf(0 to "All genres") + state.genres.map { it.id to it.name }, f.genre) {
+                viewModel.setFilters(f.copy(genre = it))
             }
-            item {
-                CvDropdown("Year", years, state.filters.year) { viewModel.setFilters(state.filters.copy(year = it)) }
-            }
-            item {
-                CvDropdown("Sort", CatalogSort.entries.map { it to it.label }, state.filters.sort) {
-                    viewModel.setFilters(state.filters.copy(sort = it))
-                }
-            }
-            item {
-                CvDropdown("Rating", listOf(0 to "Any rating", 6 to "6+", 7 to "7+", 8 to "8+", 9 to "9+"), state.filters.rating) {
-                    viewModel.setFilters(state.filters.copy(rating = it))
-                }
+            CvDropdown("Year", years, f.year) { viewModel.setFilters(f.copy(year = it)) }
+            CvDropdown("Rating", listOf(0 to "Any rating", 6 to "6+", 7 to "7+", 8 to "8+", 9 to "9+"), f.rating) {
+                viewModel.setFilters(f.copy(rating = it))
             }
             if (state.services.isNotEmpty()) {
-                item {
-                    CvDropdown("Service", listOf(0 to "All services") + state.services, state.filters.provider) {
-                        viewModel.setFilters(state.filters.copy(provider = it))
-                    }
+                CvDropdown("Service", listOf(0 to "All services") + state.services, f.provider) {
+                    viewModel.setFilters(f.copy(provider = it))
                 }
             }
-            item {
-                CvDropdown("Language", Languages, state.filters.language) {
-                    viewModel.setFilters(state.filters.copy(language = it))
-                }
-            }
+            CvDropdown("Language", Languages, f.language) { viewModel.setFilters(f.copy(language = it)) }
             if (tv) {
-                item {
-                    CvDropdown("Status", listOf("" to "Any status", "0" to "Returning", "3" to "Ended", "2" to "In production"), state.filters.status) {
-                        viewModel.setFilters(state.filters.copy(status = it))
-                    }
-                }
-                item {
-                    CvDropdown("Format", listOf("" to "Any format", "4" to "Scripted", "2" to "Miniseries", "3" to "Reality", "0" to "Documentary", "6" to "Animation & video"), state.filters.format) {
-                        viewModel.setFilters(state.filters.copy(format = it))
-                    }
-                }
+                CvDropdown("Status", Statuses, f.status) { viewModel.setFilters(f.copy(status = it)) }
+                CvDropdown("Format", Formats, f.format) { viewModel.setFilters(f.copy(format = it)) }
             } else {
-                item {
-                    CvDropdown("Runtime", listOf("" to "Any length", "short" to "Under 90 min", "medium" to "90 to 150 min", "long" to "Over 150 min"), state.filters.runtime) {
-                        viewModel.setFilters(state.filters.copy(runtime = it))
-                    }
-                }
+                CvDropdown("Runtime", Runtimes, f.runtime) { viewModel.setFilters(f.copy(runtime = it)) }
             }
         }
         if (state.total > 0) {
@@ -276,6 +266,10 @@ private fun FilterRow(state: CatalogState, viewModel: CatalogViewModel) {
  * one both came back as "20,001" - a number that looked exact and was not.
  */
 fun countLabel(total: Int): String = if (total >= 20_000) "20,000+" else "%,d".format(total)
+
+private val Statuses = listOf("" to "Any status", "0" to "Returning", "3" to "Ended", "2" to "In production")
+private val Formats = listOf("" to "Any format", "4" to "Scripted", "2" to "Miniseries", "3" to "Reality", "0" to "Documentary", "6" to "Animation & video")
+private val Runtimes = listOf("" to "Any length", "short" to "Under 90 min", "medium" to "90 to 150 min", "long" to "Over 150 min")
 
 private val Languages = listOf(
     "" to "Any language", "en" to "English", "hi" to "Hindi", "ko" to "Korean", "ja" to "Japanese",

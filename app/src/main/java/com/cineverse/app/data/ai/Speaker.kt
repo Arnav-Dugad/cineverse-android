@@ -19,8 +19,13 @@ class Speaker(private val context: Context) {
     private var ready = false
     private var waiting: String? = null
 
-    fun say(text: String) {
-        if (text.isBlank()) return
+    private var after: (() -> Unit)? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Say it, and call [onDone] on the main thread once it has been said (or could not be). */
+    fun say(text: String, onDone: (() -> Unit)? = null) {
+        if (text.isBlank()) { onDone?.invoke(); return }
+        after = onDone
         val current = engine
         if (current == null) {
             waiting = text
@@ -28,7 +33,16 @@ class Speaker(private val context: Context) {
                 ready = status == TextToSpeech.SUCCESS
                 if (ready) {
                     engine?.language = Locale.getDefault()
+                    engine?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) = Unit
+                        override fun onDone(utteranceId: String?) = finished()
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) = finished()
+                        override fun onStop(utteranceId: String?, interrupted: Boolean) { if (interrupted) after = null }
+                    })
                     waiting?.let { speak(it) }
+                } else {
+                    finished()
                 }
                 waiting = null
             }
@@ -37,11 +51,19 @@ class Speaker(private val context: Context) {
         if (ready) speak(text) else waiting = text
     }
 
+    private fun finished() {
+        val done = after ?: return
+        after = null
+        main.post { done() }
+    }
+
     private fun speak(text: String) {
         runCatching { engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "cineverse-answer") }
+            .onFailure { finished() }
     }
 
     fun stop() {
+        after = null
         runCatching { engine?.stop() }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -91,6 +92,8 @@ fun SectionHeader(
     actionLabel: String = "See all",
     /** A person's face before the title, for "Starring" and "From" rails. */
     face: String? = null,
+    /** A row Gemini wrote: a small sparkle before its title says so. */
+    gemini: Boolean = false,
     onSeeAll: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
@@ -105,6 +108,15 @@ fun SectionHeader(
             // rail reads cleaner. A rail derived from a title says so on the
             // SAME line - "More like" before that title's own logo.
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (gemini) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Rounded.AutoAwesome,
+                        contentDescription = "Written by Gemini",
+                        tint = GeminiColors[1],
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (face != null) {
                     Box(
                         Modifier
@@ -183,6 +195,8 @@ fun PosterRail(
     kicker: String? = null,
     titleLogo: String? = null,
     face: String? = null,
+    /** A row Gemini wrote. */
+    gemini: Boolean = false,
     /** A Top 10: the position is drawn behind each card. */
     numbered: Boolean = false,
     onSeeAll: (() -> Unit)? = null,
@@ -198,7 +212,7 @@ fun PosterRail(
     if (!loading && items.isEmpty()) return
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, face = face, onSeeAll = onSeeAll)
+            SectionHeader(title, kicker = kicker, titleLogo = titleLogo, face = face, onSeeAll = onSeeAll, gemini = gemini)
             Spacer(Modifier.height(12.dp))
         }
         if (loading) {

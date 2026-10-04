@@ -69,6 +69,7 @@ import com.cineverse.app.core.ui.posterGridCells
 import com.cineverse.app.core.ui.rememberArrival
 import com.cineverse.app.data.firebase.Library
 import com.cineverse.app.data.model.MediaItem
+import kotlinx.coroutines.launch
 
 /**
  * A sentence, answered: what search understood, as chips you can read at a
@@ -81,6 +82,7 @@ fun AskPane(
     onOpen: (MediaItem) -> Unit,
     onDismiss: () -> Unit,
     onPerson: (Int) -> Unit = {},
+    resolve: suspend (String) -> com.cineverse.app.data.ai.Mentioned = { com.cineverse.app.data.ai.Mentioned() },
 ) {
     AnimatedContent(
         ask,
@@ -93,7 +95,7 @@ fun AskPane(
             is AskUi.Results -> Results(current, library, onOpen, onDismiss)
             is AskUi.Did -> Did(current, onOpen, onDismiss)
             is AskUi.Found -> Found(current, onPerson, onOpen, onDismiss)
-            is AskUi.Answered -> Answered(current, onDismiss)
+            is AskUi.Answered -> Answered(current, onDismiss, onOpen, onPerson, resolve)
         }
     }
 }
@@ -464,9 +466,28 @@ private fun Found(
 
 /** A question, answered word by word, in Gemini's light while it writes. */
 @Composable
-private fun Answered(result: AskUi.Answered, onDismiss: () -> Unit) {
+private fun Answered(
+    result: AskUi.Answered,
+    onDismiss: () -> Unit,
+    onOpen: (MediaItem) -> Unit,
+    onPerson: (Int) -> Unit,
+    resolve: suspend (String) -> com.cineverse.app.data.ai.Mentioned,
+) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val mentioned by androidx.compose.runtime.produceState(com.cineverse.app.data.ai.Mentioned(), result.text, result.writing) {
+        if (!result.writing && (result.text.contains("[[") || result.text.contains("{{"))) value = resolve(result.text)
+    }
+    val linked = androidx.compose.runtime.remember(result.text) {
+        com.cineverse.app.data.ai.Mentions.annotated(result.text, com.cineverse.app.core.ui.GeminiColors[0]) { mention ->
+            haptics?.play(Haptic.Tap)
+            scope.launch {
+                val found = resolve(result.text)
+                if (mention.person) found.person(mention)?.let { onPerson(it.id) } else found.title(mention)?.let(onOpen)
+            }
+        }
+    }
     LaunchedEffect(result.writing) { if (!result.writing) haptics?.play(Haptic.Land) }
     androidx.compose.foundation.lazy.LazyColumn(
         contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 6.dp, bottom = BottomBarSpace),
@@ -512,11 +533,20 @@ private fun Answered(result: AskUi.Answered, onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.height(12.dp))
                 com.cineverse.app.core.ui.TypewriterText(
-                    result.text,
+                    linked,
                     writing = result.writing,
                     style = MaterialTheme.typography.bodyLarge,
                     color = colors.text,
                 )
+            }
+        }
+        if (!mentioned.isEmpty) {
+            item(key = "mentioned") {
+                Column(Modifier.padding(top = 16.dp)) {
+                    Text("IN THIS ANSWER", style = com.cineverse.app.core.design.KickerStyle, color = colors.text3)
+                    Spacer(Modifier.height(10.dp))
+                    com.cineverse.app.core.ui.MentionRow(mentioned, onOpen = onOpen, onPerson = onPerson)
+                }
             }
         }
     }

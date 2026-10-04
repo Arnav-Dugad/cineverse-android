@@ -59,9 +59,6 @@ fun CvTopBar(
     overArt: Boolean = tab == Tab.Home,
     inboxCount: Int = 0,
     onInbox: (() -> Unit)? = null,
-    /** Home only: which half of the catalogue is showing, 0 Home, 1 Films, 2 Series. */
-    section: Int? = null,
-    onSection: (Int) -> Unit = {},
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -145,58 +142,7 @@ fun CvTopBar(
             )
         }
     }
-    if (section != null) SectionChips(section, onSection)
     }
-    }
-}
-
-/**
- * Home, Films, Series - the website's three front pages, as the chips under
- * the wordmark the way a streaming app does it. The active one is filled and
- * slides between positions; the others are outlined glass.
- */
-@Composable
-private fun SectionChips(section: Int, onSection: (Int) -> Unit) {
-    val colors = CvTheme.colors
-    val haptics = LocalHaptics.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenPadding)
-            .padding(bottom = 10.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-    ) {
-        listOf("Home", "Movies", "TV Shows").forEachIndexed { index, label ->
-            val active = index == section
-            val fill by androidx.compose.animation.animateColorAsState(
-                if (active) colors.text else colors.text.copy(alpha = 0.08f), label = "section",
-            )
-            Box(
-                Modifier
-                    .height(32.dp)
-                    .clip(CircleShape)
-                    .background(fill)
-                    .then(
-                        if (active) Modifier
-                        else Modifier.border(1.dp, colors.text.copy(alpha = 0.3f), CircleShape)
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        if (!active) haptics?.play(Haptic.Select)
-                        onSection(index)
-                    }
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (active) colors.ink else colors.text,
-                )
-            }
-        }
     }
 }
 

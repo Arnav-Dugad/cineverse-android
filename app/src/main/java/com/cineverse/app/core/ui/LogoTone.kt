@@ -121,8 +121,29 @@ fun TonedLogo(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     align: Alignment = Alignment.BottomStart,
+    /** How the name is set if the logo will not load: a title is never a blank. */
+    fallbackStyle: androidx.compose.ui.text.TextStyle = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+    fallbackColor: Color = CvTheme.colors.text,
+    fallbackLines: Int = 1,
 ) {
-    val url = Img.logo(path) ?: return
+    val url = Img.logo(path)
+    var failed by remember(url) { mutableStateOf(url == null) }
+    if (failed || url == null) {
+        androidx.compose.foundation.layout.Box(modifier, contentAlignment = align) {
+            androidx.compose.material3.Text(
+                contentDescription.orEmpty(),
+                style = fallbackStyle,
+                color = fallbackColor,
+                maxLines = fallbackLines,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = when (align) {
+                    Alignment.Center, Alignment.TopCenter, Alignment.BottomCenter -> androidx.compose.ui.text.style.TextAlign.Center
+                    else -> androidx.compose.ui.text.style.TextAlign.Start
+                },
+            )
+        }
+        return
+    }
     val context = LocalContext.current
     val dark = CvTheme.colors.isDark
     var tone by remember(url) { mutableStateOf(toneCache[url] ?: LogoTone.Unknown) }
@@ -144,6 +165,7 @@ fun TonedLogo(
         // Without this a short logo floated in the middle of its box, which
         // left "More like" a thumb's width away from the name it introduces.
         alignment = align,
+        onFailed = { failed = true },
     )
 }
 

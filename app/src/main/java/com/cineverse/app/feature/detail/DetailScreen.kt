@@ -118,6 +118,10 @@ fun DetailScreen(
     val castHours by viewModel.castHours.collectAsStateWithLifecycle()
     val pitch by viewModel.pitch.collectAsStateWithLifecycle()
     val chat by viewModel.chat.collectAsStateWithLifecycle()
+    val nextStill by viewModel.nextStill.collectAsStateWithLifecycle()
+    val seasonScores by viewModel.seasonScores.collectAsStateWithLifecycle()
+    val places by viewModel.places.collectAsStateWithLifecycle()
+    val compare by viewModel.compare.collectAsStateWithLifecycle()
     val trivia by viewModel.trivia.collectAsStateWithLifecycle()
     val watching by viewModel.watchingNow.collectAsStateWithLifecycle()
     var asking by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
@@ -241,6 +245,7 @@ fun DetailScreen(
                     EndingCard(
                         series = detail.isSeries,
                         unlocked = unlocked,
+                        season = androidx.compose.runtime.remember(detail.key, progress?.watchedCount) { viewModel.endingSeason() },
                         modifier = Modifier.padding(horizontal = 18.dp).padding(top = 16.dp),
                     ) {
                         asking = true
@@ -253,11 +258,15 @@ fun DetailScreen(
                     }
                     TriviaCard(
                         series = detail.isSeries,
+                        running = androidx.compose.runtime.remember(detail.key, progress?.watchedCount) { viewModel.endingSeason() != null },
                         unlocked = unlocked,
                         state = trivia,
                         onLoad = viewModel::loadTrivia,
                         modifier = Modifier.padding(horizontal = 18.dp).padding(top = 10.dp),
                     )
+                }
+                item(key = "compare") {
+                    CompareCard(Modifier.padding(horizontal = 18.dp).padding(top = 10.dp), onOpen = viewModel::openCompare)
                 }
             }
 
@@ -284,7 +293,15 @@ fun DetailScreen(
                 ?.let { next ->
                 item(key = "next") {
                     Column {
-                        NextEpisodePanel(next, Modifier.padding(top = 16.dp), exactAt = exactAir)
+                        NextEpisodePanel(
+                            next,
+                            Modifier.padding(top = 16.dp),
+                            exactAt = exactAir,
+                            // The episode's own still; TVmaze's when TMDB has none
+                            // yet; the show's artwork as a last resort.
+                            still = com.cineverse.app.core.ui.Img.still(next.stillPath) ?: nextStill
+                                ?: com.cineverse.app.core.ui.Img.still(detail.backdropPath),
+                        )
                         // A reminder you can see: this countdown on the home screen.
                         val context = androidx.compose.ui.platform.LocalContext.current
                         if (androidx.compose.runtime.remember { com.cineverse.app.widget.ShowCountdowns.canPin(context) }) {
@@ -348,7 +365,6 @@ fun DetailScreen(
                     onHeatmapToggle = viewModel::toggleHeatmap,
                     onHeatMode = viewModel::setHeatMode,
                     onNumbers = viewModel::toggleNumbers,
-                    onAllEpisodes = viewModel::toggleAllEpisodes,
                     onSeasonRecap = { viewModel.openSeasonRecap(it) },
                     onSeriesRecap = { viewModel.openSeriesRecap() },
                     onPreviously = { viewModel.loadPreviously() },
@@ -358,6 +374,8 @@ fun DetailScreen(
                         viewModel.selectSeason(season)
                         viewModel.selectTab(DetailTab.Episodes)
                     },
+                    seasonScores = seasonScores,
+                    onRateEpisode = { season, episode, score -> viewModel.rateEpisode(season, episode, score) },
                 )
 
                 DetailTab.About -> aboutSection(
@@ -367,6 +385,7 @@ fun DetailScreen(
                     onOpen = onOpen,
                     onBrand = onBrand,
                     castHours = castHours,
+                    places = places,
                 )
 
                 DetailTab.More -> item(key = "more") {
@@ -418,6 +437,19 @@ fun DetailScreen(
         null -> Unit
     }
 
+    compare?.takeIf { settings.geminiOn }?.let { current ->
+        state.detail?.let { detail ->
+            CompareSheet(
+                detail = detail,
+                state = current,
+                search = viewModel::searchTitles,
+                onPick = viewModel::compareWith,
+                onAgain = viewModel::openCompare,
+                onDismiss = viewModel::closeCompare,
+            )
+        }
+    }
+
     if (asking && settings.geminiOn) {
         state.detail?.let { detail ->
             val line = androidx.compose.runtime.remember(detail, progress, library.watched.size) { viewModel.spoilerLine() }
@@ -429,6 +461,11 @@ fun DetailScreen(
                     turns = chat,
                     onAsk = viewModel::ask,
                     onClear = viewModel::clearChat,
+                    resolve = viewModel::resolveMentions,
+                    onOpenTitle = { asking = false; onOpen(it) },
+                    onPerson = { id -> asking = false; onPerson(com.cineverse.app.data.model.Person(id = id, name = "")) },
+                    speak = viewModel::speak,
+                    stopSpeaking = viewModel::stopSpeaking,
                     onDismiss = { asking = false },
                 )
             }

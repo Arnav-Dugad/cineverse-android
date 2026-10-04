@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ fun PeekSheet(
     saved: Boolean,
     watched: Boolean,
     rating: Int,
+    trailerKey: String? = null,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onWatched: () -> Unit,
@@ -101,6 +103,28 @@ fun PeekSheet(
                 Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
+            // The trailer, over the artwork once it is genuinely playing: the
+            // still paints first and the video fades in on top, never a black
+            // frame while it loads.
+            if (trailerKey != null) {
+                var playing by androidx.compose.runtime.remember(trailerKey) { androidx.compose.runtime.mutableStateOf(false) }
+                val shown by androidx.compose.animation.core.animateFloatAsState(
+                    if (playing) 1f else 0f,
+                    androidx.compose.animation.core.tween(700),
+                    label = "peekTrailer",
+                )
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = shown }) {
+                    com.cineverse.app.feature.trailer.YouTubePlayer(
+                        videoKey = trailerKey,
+                        modifier = Modifier.fillMaxSize(),
+                        muted = true,
+                        showControls = false,
+                        loop = true,
+                        ambient = true,
+                        onPlaying = { playing = true },
+                    )
+                }
+            }
             // The artwork carries the name, so the sheet does not spend a line
             // on it. The ramp is what makes the type legible over anything.
             Box(

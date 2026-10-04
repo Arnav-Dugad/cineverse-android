@@ -52,6 +52,7 @@ import com.cineverse.app.core.design.Palette
 import com.cineverse.app.core.ui.CvImage
 import com.cineverse.app.core.ui.Img
 import com.cineverse.app.core.ui.clickableNoRipple
+import androidx.compose.foundation.combinedClickable
 import com.cineverse.app.data.model.Episode
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -91,6 +92,13 @@ fun EpisodeRow(
     onMarkUpTo: (() -> Unit)?,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    /** IMDb's (or TVmaze's) score for the episode, and whose it is. */
+    score: Double? = null,
+    scoreSource: String = "",
+    /** Your own score, 1-10, or 0. */
+    myRating: Int = 0,
+    /** Holding the row scores the episode; null turns it off. */
+    onRate: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
@@ -140,7 +148,13 @@ fun EpisodeRow(
                 .fillMaxWidth()
                 .clip(CvShape.Large)
                 .background(if (isNext) colors.glass else Color.Transparent)
-                .clickableNoRipple(onOpen)
+                .combinedClickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onLongClickLabel = if (onRate != null) "Score this episode" else null,
+                    onLongClick = onRate?.let { rate -> { haptics?.play(Haptic.Peek); rate() } },
+                    onClick = onOpen,
+                )
                 .pointerInput(episode.id, watched) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -232,7 +246,20 @@ fun EpisodeRow(
                         )
                     }
                 }
-                if (episode.rated) {
+                if (score != null && score > 0) {
+                    // IMDb's own number when there is one: the score people quote.
+                    Text(
+                        if (scoreSource == "IMDb") String.format("IMDb %.1f", score) else String.format("★ %.1f", score),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (scoreSource == "IMDb") Color(0xFF0B0B10) else Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(4.dp)
+                            .clip(CvShape.Pill)
+                            .background(if (scoreSource == "IMDb") Color(0xFFF5C518) else Color(0xB306060B))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                } else if (episode.rated) {
                     Text(
                         String.format("★ %.1f", episode.voteAverage),
                         style = MaterialTheme.typography.labelSmall,
@@ -244,6 +271,19 @@ fun EpisodeRow(
                             .background(Color(0xB306060B))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
+                }
+                if (myRating > 0) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(5.dp)
+                            .size(22.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Palette.Red2),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("$myRating", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
                 }
             }
 

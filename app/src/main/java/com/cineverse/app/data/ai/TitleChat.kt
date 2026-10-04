@@ -85,12 +85,20 @@ class TitleChat(private val gemini: Gemini) {
         ending: Boolean = false,
         /** Who is asking: the viewer's brief and their own standing with this title. */
         viewer: String = "",
+        /** A running series the fan is caught up on: the season whose ending to explain. */
+        endingSeason: Int? = null,
     ): Flow<ChatTurn> = flow {
         val prompt = buildString {
             appendLine("You are CineVerse's film and TV expert, talking with one particular fan about one title.")
             appendLine("Speak to them as \"you\". Start with the answer itself: no greeting, never their name. Make it personal only")
             appendLine("where it genuinely helps - one title they love that shares something real with this one - never forced.")
-            if (ending) {
+            if (ending && endingSeason != null) {
+                appendLine("The series is still running. The fan is caught up through the end of season $endingSeason, the latest")
+                appendLine("season out, and asked you to explain how it ends.")
+                appendLine("In at most 190 words and three short paragraphs of plain prose: what actually happens at the end of season")
+                appendLine("$endingSeason, what it means for the main characters and the story's themes, and the open threads it leaves")
+                appendLine("for what comes next. Do not speculate as fact about unreleased seasons. If you are not sure of a detail, say so. No headings.")
+            } else if (ending) {
                 appendLine("The fan has watched all of it and asked you to explain the ending.")
                 appendLine("In at most 190 words and three short paragraphs of plain prose: what actually happens at the end,")
                 appendLine("what it means for the main characters and the story's themes, and any open question or popular reading.")
@@ -99,6 +107,7 @@ class TitleChat(private val gemini: Gemini) {
                 appendLine("Answer in at most 100 words, warmly and specifically, in plain prose with no markdown or headings.")
                 appendLine("If you are not sure of a fact, say so rather than inventing one.")
             }
+            appendLine(Mentions.INSTRUCTION)
             appendLine("SPOILER RULE (absolute): ${line.rule}")
             appendLine()
             if (viewer.isNotBlank()) {

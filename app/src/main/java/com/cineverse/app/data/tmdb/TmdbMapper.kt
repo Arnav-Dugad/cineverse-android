@@ -228,7 +228,11 @@ fun TvDetailDto.toDetail(region: String): TitleDetail {
                     overview = it.overview.orEmpty(),
                 )
             },
-        episodeRuntime = episodeRunTime.firstOrNull() ?: 0,
+        // The show's stated length, else the latest episode's own, else the next's.
+        episodeRuntime = episodeRunTime.firstOrNull()?.takeIf { it > 0 }
+            ?: lastEpisode?.runtime?.takeIf { it > 0 }
+            ?: nextEpisode?.runtime?.takeIf { it > 0 }
+            ?: 0,
         numberOfSeasons = numberOfSeasons,
         numberOfEpisodes = numberOfEpisodes,
         nextEpisode = nextEpisode?.toEpisode(),

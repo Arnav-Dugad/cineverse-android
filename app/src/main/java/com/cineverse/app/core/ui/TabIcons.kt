@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.cineverse.app.core.design.CvTheme
 
 /**
- * The five tabs, drawn.
+ * The tabs, drawn.
  *
  * The rest of the icon set is path-drawn and spring-driven; the navigation bar
  * was still Material glyphs, and beside the drawn set they read a shade heavier
@@ -42,7 +42,7 @@ import com.cineverse.app.core.design.CvTheme
  *
  * Everything collapses to its end state under reduced motion.
  */
-enum class TabGlyph { Home, Discover, List, Stats, Person }
+enum class TabGlyph { Home, Film, Tv, Discover, List, Stats, Person }
 
 private const val GRID = 24f
 
@@ -72,6 +72,35 @@ fun TabIcon(
                 val path = housePath(unit)
                 fillUp(path, fill, color)
                 outline(path, color, stroke)
+            }
+            TabGlyph.Film -> {
+                // A clapperboard: the stick is open while the tab is idle and
+                // claps shut as it fills.
+                val body = Path().apply {
+                    addRoundRect(androidx.compose.ui.geometry.RoundRect(3.6f * unit, 10.2f * unit, 20.4f * unit, 19.6f * unit, 1.6f * unit, 1.6f * unit))
+                }
+                fillUp(body, fill, color)
+                outline(body, color, stroke)
+                rotate(degrees = -24f * (1f - fill), pivot = Offset(3.8f * unit, 8.6f * unit)) {
+                    val stick = Path().apply {
+                        addRoundRect(androidx.compose.ui.geometry.RoundRect(3.6f * unit, 5.4f * unit, 20.4f * unit, 8.6f * unit, 1.2f * unit, 1.2f * unit))
+                    }
+                    fillUp(stick, fill, color)
+                    outline(stick, color, stroke)
+                }
+            }
+            TabGlyph.Tv -> {
+                val screen = Path().apply {
+                    addRoundRect(androidx.compose.ui.geometry.RoundRect(3.0f * unit, 7.6f * unit, 21.0f * unit, 18.6f * unit, 2.2f * unit, 2.2f * unit))
+                }
+                fillUp(screen, fill, color)
+                outline(screen, color, stroke)
+                drawLine(color, Offset(8.6f * unit, 21.0f * unit), Offset(15.4f * unit, 21.0f * unit), stroke, StrokeCap.Round)
+                // The antennas tilt out of true while idle and settle upright.
+                rotate(degrees = 14f * (1f - fill), pivot = Offset(12f * unit, 7.4f * unit)) {
+                    drawLine(color, Offset(12f * unit, 7.4f * unit), Offset(8.4f * unit, 3.0f * unit), stroke, StrokeCap.Round)
+                    drawLine(color, Offset(12f * unit, 7.4f * unit), Offset(15.6f * unit, 3.0f * unit), stroke, StrokeCap.Round)
+                }
             }
             TabGlyph.Discover -> {
                 val ring = Path().apply {

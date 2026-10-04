@@ -26,6 +26,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -259,7 +260,8 @@ fun LazyListScope.episodesSection(
     onHeatMode: (com.cineverse.app.data.model.HeatMode) -> Unit,
     onNumbers: () -> Unit,
     onOpenEpisode: (Int, Int) -> Unit,
-    onAllEpisodes: () -> Unit,
+    seasonScores: com.cineverse.app.data.scores.SeasonScores = com.cineverse.app.data.scores.SeasonScores(),
+    onRateEpisode: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onSeasonRecap: (Int) -> Unit = {},
     onSeriesRecap: () -> Unit = {},
     onPreviously: () -> Unit = {},
@@ -281,21 +283,6 @@ fun LazyListScope.episodesSection(
             onMode = onHeatMode,
             onNumbers = onNumbers,
             onOpenEpisode = onOpenEpisode,
-            modifier = Modifier.padding(bottom = 14.dp),
-        )
-    }
-
-    item(key = "allEpisodes") {
-        AllEpisodesPanel(
-            seasons = state.allSeasons,
-            seasonCount = detail.seasons.size,
-            progress = progress,
-            expanded = state.allEpisodesOpen,
-            loading = state.loadingHeatmap,
-            spoilerShield = spoilerShield,
-            onToggle = onAllEpisodes,
-            onToggleEpisode = onToggle,
-            onMarkUpTo = onMarkUpTo,
             modifier = Modifier.padding(bottom = 14.dp),
         )
     }
@@ -347,34 +334,137 @@ fun LazyListScope.episodesSection(
         }
     }
 
-    if (state.loadingEpisodes) {
-        items(5, key = { "skel_$it" }) {
-            Box(
-                Modifier
-                    .padding(horizontal = ScreenPadding, vertical = 8.dp)
-                    .fillMaxWidth()
-                    .height(70.dp)
-                    .clip(CvShape.Large)
-                    .shimmer()
+    // The season's episodes in a box of their own that scrolls inside the
+    // page, so a 24-episode season is a window to scroll rather than a wall
+    // between the seasons and everything below them. It opens on the episode
+    // you are up to.
+    if (!state.loadingEpisodes && state.episodes.isNotEmpty()) {
+        item(key = "curve_${state.season}") {
+            SeasonCurve(
+                season = state.season,
+                episodeCount = state.episodes.count { it.hasAired },
+                scores = seasonScores,
+                progress = progress,
+                modifier = Modifier.padding(bottom = 12.dp),
             )
         }
-        return
     }
 
-    items(state.episodes, key = { "ep_${it.season}_${it.number}" }) { episode ->
-        EpisodeRow(
-            episode = episode,
-            watched = progress?.isWatched(episode.season, episode.number) == true,
-            isNext = next?.first == episode.season && next.second == episode.number,
-            watchedAt = progress?.watchedAt(episode.season, episode.number) ?: 0L,
+    item(key = "episodes") {
+        EpisodeBox(
+            scores = seasonScores,
+            onRateEpisode = onRateEpisode,
+            loading = state.loadingEpisodes,
+            episodes = state.episodes,
+            progress = progress,
+            next = next,
             spoilerShield = spoilerShield,
-            onToggle = { onToggle(episode.season, episode.number) },
-            onMarkUpTo = if (swipeToCatchUp) {
-                { onMarkUpTo(episode.season, episode.number) }
-            } else null,
-            onOpen = { onToggle(episode.season, episode.number) },
-            modifier = Modifier.padding(horizontal = ScreenPadding - 4.dp),
+            swipeToCatchUp = swipeToCatchUp,
+            onToggle = onToggle,
+            onMarkUpTo = onMarkUpTo,
         )
+    }
+}
+
+@Composable
+private fun EpisodeBox(
+    scores: com.cineverse.app.data.scores.SeasonScores,
+    onRateEpisode: (Int, Int, Int) -> Unit,
+    loading: Boolean,
+    episodes: List<com.cineverse.app.data.model.Episode>,
+    progress: ShowProgress?,
+    next: Pair<Int, Int>?,
+    spoilerShield: Boolean,
+    swipeToCatchUp: Boolean,
+    onToggle: (Int, Int) -> Unit,
+    onMarkUpTo: (Int, Int) -> Unit,
+) {
+    val colors = CvTheme.colors
+    val season = episodes.firstOrNull()?.season
+    // A fresh list per season, opening one row above the next episode.
+    val start = remember(season, episodes.size) {
+        episodes.indexOfFirst { next?.first == it.season && next.second == it.number }.let { if (it > 0) it - 1 else 0 }
+    }
+    val list = androidx.compose.runtime.key(season) { androidx.compose.foundation.lazy.rememberLazyListState(start) }
+    var rating by remember { androidx.compose.runtime.mutableStateOf<com.cineverse.app.data.model.Episode?>(null) }
+    rating?.let { episode ->
+        EpisodeRateSheet(
+            label = "S${episode.season} E${episode.number}" + (episode.name.takeIf { it.isNotBlank() }?.let { "  \u00b7  $it" } ?: ""),
+            current = progress?.episodeRating(episode.season, episode.number) ?: 0,
+            published = scores.byEpisode[episode.number],
+            source = scores.source,
+            onRate = { onRateEpisode(episode.season, episode.number, it) },
+            onDismiss = { rating = null },
+        )
+    }
+    Box(
+        Modifier
+            .padding(horizontal = ScreenPadding - 6.dp)
+            .padding(top = 4.dp)
+            .fillMaxWidth()
+            .clip(CvShape.XLarge)
+            .background(colors.text.copy(alpha = 0.035f))
+            .border(1.dp, colors.hairline, CvShape.XLarge),
+    ) {
+        if (loading) {
+            Column(Modifier.padding(vertical = 6.dp)) {
+                repeat(4) {
+                    Box(
+                        Modifier
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .fillMaxWidth()
+                            .height(70.dp)
+                            .clip(CvShape.Large)
+                            .shimmer()
+                    )
+                }
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                state = list,
+                modifier = Modifier.heightIn(max = 470.dp),
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) {
+                items(episodes, key = { "ep_${it.season}_${it.number}" }) { episode ->
+                    EpisodeRow(
+                        episode = episode,
+                        watched = progress?.isWatched(episode.season, episode.number) == true,
+                        isNext = next?.first == episode.season && next.second == episode.number,
+                        watchedAt = progress?.watchedAt(episode.season, episode.number) ?: 0L,
+                        spoilerShield = spoilerShield,
+                        onToggle = { onToggle(episode.season, episode.number) },
+                        onMarkUpTo = if (swipeToCatchUp) {
+                            { onMarkUpTo(episode.season, episode.number) }
+                        } else null,
+                        onOpen = { onToggle(episode.season, episode.number) },
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                        score = scores.byEpisode[episode.number],
+                        scoreSource = scores.source,
+                        myRating = progress?.episodeRating(episode.season, episode.number) ?: 0,
+                        onRate = if (episode.hasAired && progress != null) ({ rating = episode }) else null,
+                    )
+                }
+            }
+            // Soft edges where the list runs on, top and bottom.
+            val fadeTop by animateFloatAsState(if (list.canScrollBackward) 1f else 0f, label = "epFadeTop")
+            val fadeBottom by animateFloatAsState(if (list.canScrollForward) 1f else 0f, label = "epFadeBottom")
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .graphicsLayer { alpha = fadeTop }
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(colors.ink.copy(alpha = 0.85f), androidx.compose.ui.graphics.Color.Transparent)))
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .graphicsLayer { alpha = fadeBottom }
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, colors.ink.copy(alpha = 0.85f))))
+            )
+        }
     }
 }
 
@@ -635,6 +725,7 @@ fun LazyListScope.aboutSection(
     onOpen: (MediaItem) -> Unit,
     onBrand: (Brand) -> Unit = {},
     castHours: Map<Int, com.cineverse.app.data.cast.ActorHours> = emptyMap(),
+    places: List<com.cineverse.app.data.places.Place> = emptyList(),
 ) {
     if (detail.cast.isNotEmpty()) {
         item(key = "cast") { CastRow(detail.cast, onPerson, castHours) }
@@ -647,6 +738,9 @@ fun LazyListScope.aboutSection(
     }
     if (detail.brands.isNotEmpty()) {
         item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp), onBrand) }
+    }
+    if (places.isNotEmpty()) {
+        item(key = "places") { FilmingMap(places) }
     }
     item(key = "facts") { Facts(detail) }
 }
@@ -696,13 +790,7 @@ fun BrandStrip(brands: List<Brand>, modifier: Modifier = Modifier, onBrand: (Bra
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CvImage(
-                        Img.logo(brand.logoPath),
-                        brand.name,
-                        Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                        background = Color.Transparent,
-                    )
+                    com.cineverse.app.core.ui.MarkOrName(brand.logoPath, brand.name, Modifier.fillMaxSize())
                 }
             }
         }
@@ -1342,7 +1430,14 @@ private fun MatchSparkle(modifier: Modifier = Modifier) {
  * A locked tap gives a little shake rather than an error.
  */
 @Composable
-fun EndingCard(series: Boolean, unlocked: Boolean, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+fun EndingCard(
+    series: Boolean,
+    unlocked: Boolean,
+    modifier: Modifier = Modifier,
+    /** A running series you are caught up on: the latest season, whose ending is explained. */
+    season: Int? = null,
+    onOpen: () -> Unit,
+) {
     val colors = CvTheme.colors
     val haptics = com.cineverse.app.core.design.LocalHaptics.current
     val shake = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -1377,14 +1472,15 @@ fun EndingCard(series: Boolean, unlocked: Boolean, modifier: Modifier = Modifier
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                "Explain the ending",
+                if (unlocked && season != null) "Explain how season $season ends" else "Explain the ending",
                 style = MaterialTheme.typography.titleSmall,
                 color = if (unlocked) colors.text else colors.text2,
             )
             Text(
                 when {
+                    unlocked && season != null -> "What happened, what it means, and what it sets up"
                     unlocked -> "What happened, what it means, and the open questions"
-                    series -> "Unlocks once you've finished the series"
+                    series -> "Unlocks once you're caught up on the latest season"
                     else -> "Unlocks once you've marked it watched"
                 },
                 style = MaterialTheme.typography.labelMedium,
@@ -1403,6 +1499,8 @@ fun EndingCard(series: Boolean, unlocked: Boolean, modifier: Modifier = Modifier
 @Composable
 fun TriviaCard(
     series: Boolean,
+    /** A running series you are caught up on, rather than finished. */
+    running: Boolean = false,
     unlocked: Boolean,
     state: TriviaState,
     onLoad: () -> Unit,
@@ -1454,10 +1552,11 @@ fun TriviaCard(
                 )
                 Text(
                     when {
-                        !unlocked && series -> "Three facts, once you've finished the series"
+                        !unlocked && series -> "Three facts, once you're caught up on the latest season"
                         !unlocked -> "Three facts, once you've marked it watched"
                         state is TriviaState.Loading -> "Gemini is digging through the archives…"
                         state is TriviaState.Failed -> "Couldn't get them just now. Tap to try again"
+                        state is TriviaState.Ready && running -> "Behind the scenes, nothing past where you are"
                         state is TriviaState.Ready -> "Behind the scenes, spoiler-free"
                         else -> "Three behind-the-scenes facts, spoiler-free"
                     },

@@ -6,6 +6,9 @@ import com.cineverse.app.data.model.GenreNames
 import com.cineverse.app.data.model.MediaType
 import com.cineverse.app.data.recommend.TasteProfile
 import java.time.Instant
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -28,11 +31,53 @@ class Persona(private val app: AppContainer) {
     private var cached: Pair<String, String>? = null
     private var builtAt = 0L
 
+    // The brief also lives on the account (a field on the user's own
+    // document), so a new phone - or this one, before the library has
+    // arrived - is personal from its first question.
+    @Volatile private var cloud: String? = null
+    private var uploaded: String? = null
+    private var uploadedAt = 0L
+
+    private fun userDoc() = app.auth.uid.value?.let {
+        com.cineverse.app.data.firebase.Firebase.firestore(app.context).collection("users").document(it)
+    }
+
+    /** Fetch the account's last brief, once, in the background. */
+    fun warm() {
+        if (cloud != null) return
+        app.scope.launch {
+            runCatching {
+                // Signing in may still be under way at launch.
+                kotlinx.coroutines.withTimeoutOrNull(20_000) { app.auth.uid.first { it != null } } ?: return@runCatching
+                val doc = userDoc()?.get()?.await() ?: return@runCatching
+                @Suppress("UNCHECKED_CAST")
+                val saved = doc.get("geminiBrief") as? Map<String, Any?>
+                cloud = (saved?.get("text") as? String)?.takeIf { it.isNotBlank() }
+            }
+        }
+    }
+
+    private fun upload(text: String) {
+        val now = System.currentTimeMillis()
+        if (text == uploaded || now - uploadedAt < 10 * 60_000L) return
+        uploaded = text
+        uploadedAt = now
+        cloud = text
+        app.scope.launch {
+            runCatching {
+                userDoc()?.set(
+                    mapOf("geminiBrief" to mapOf("text" to text, "at" to now)),
+                    com.google.firebase.firestore.SetOptions.merge(),
+                )?.await()
+            }
+        }
+    }
+
     /** The brief, or "" before there is anything to say. */
     suspend fun brief(): String {
         val library = app.library.library.value
         val shows = app.episodes.progress.value
-        if (!library.loaded) return ""
+        if (!library.loaded) return cloud.orEmpty()
         val signature = "${library.watched.size}:${library.ratings.size}:${library.saved.size}:${shows.values.sumOf { it.watchedCount }}"
         cached?.let { (sig, text) -> if (sig == signature && System.currentTimeMillis() - builtAt < 60_000) return text }
 
@@ -117,6 +162,7 @@ class Persona(private val app: AppContainer) {
 
         cached = signature to text
         builtAt = System.currentTimeMillis()
+        if (text.isNotBlank()) upload(text)
         return text
     }
 

@@ -7,6 +7,11 @@ import com.cineverse.app.data.model.MediaType
 import com.cineverse.app.data.model.TitleDetail
 import com.cineverse.app.data.model.Video
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import java.text.Normalizer
@@ -211,6 +216,7 @@ class Assistant(private val app: AppContainer) {
             appendLine("Start with the answer itself: no greeting, never their name. At most one personal touch, and only when it")
             appendLine("genuinely illuminates the answer - a title they love that shares something real with it. Never force one.")
             appendLine("Never spoil anything they have not seen. If you are not sure of a fact, say so rather than inventing one.")
+            appendLine(Mentions.INSTRUCTION)
             if (viewer.isNotBlank()) {
                 appendLine()
                 appendLine(viewer)
@@ -220,6 +226,47 @@ class Assistant(private val app: AppContainer) {
             appendLine("Answer:")
         }
         app.gemini.stream(prompt).collect { emit(it) }
+    }
+
+    /**
+     * A list made to order: Gemini picks the titles (from everything it knows
+     * of the viewer, leaving out what they have seen), each is found on TMDB,
+     * and they go into a new list of their own in My List.
+     */
+    suspend fun makeList(request: String, name: String, count: Int): Pair<Outcome, List<MediaItem>> {
+        val viewer = runCatching { app.persona.brief() }.getOrDefault("")
+        val prompt = buildString {
+            if (viewer.isNotBlank()) { appendLine(viewer); appendLine() }
+            appendLine("Pick exactly ${count + 4} films or series for this request: \"$request\".")
+            appendLine("Only titles the viewer has NOT watched (check the brief). Real, well-known enough to find on TMDB, varied, and genuinely fitting.")
+            appendLine("Reply with JSON only: {\"titles\": [{\"title\": string, \"year\": integer, \"type\": \"movie\" or \"tv\"}]}")
+        }
+        val raw = app.gemini.json(prompt, timeoutMs = 20_000)
+            ?: return Outcome(false, "Making a list needs Gemini, which didn't answer just now.") to emptyList()
+        val wanted = runCatching {
+            val obj = com.cineverse.app.core.net.Http.json.parseToJsonElement(Gemini.extractJson(raw) ?: "{}").jsonObject
+            (obj["titles"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { element ->
+                val row = element.jsonObject
+                val title = row["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                Triple(title, row["year"]?.jsonPrimitive?.intOrNull, row["type"]?.jsonPrimitive?.contentOrNull)
+            }
+        }.getOrDefault(emptyList())
+        val library = app.library.library.value
+        val found = coroutineScope {
+            wanted.map { (title, year, type) ->
+                async {
+                    val media = when (type) { "tv" -> MediaType.Tv; "movie" -> MediaType.Movie; else -> null }
+                    runCatching { app.tmdb.searchPage(title, 1, false).items }.getOrDefault(emptyList())
+                        .filter { media == null || it.type == media }
+                        .firstOrNull { year == null || it.year.toIntOrNull()?.let { y -> kotlin.math.abs(y - year) <= 1 } != false }
+                }
+            }.awaitAll()
+        }.filterNotNull().distinctBy { it.key }.filterNot { library.isWatched(it.key) }.take(count)
+        if (found.isEmpty()) return Outcome(false, "I couldn't find titles for that list.") to emptyList()
+        val listId = app.library.createList(name)
+            ?: return Outcome(false, "Sign in to make lists.") to emptyList()
+        for (item in found) runCatching { app.library.addToList(item, listId) }
+        return Outcome(true, "Made \"$name\" with ${found.size} titles. It's in My List.", found.first()) to found
     }
 
     suspend fun discover(query: DiscoverQuery): List<MediaItem> = coroutineScope {

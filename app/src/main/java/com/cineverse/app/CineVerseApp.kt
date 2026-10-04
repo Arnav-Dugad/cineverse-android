@@ -169,7 +169,12 @@ class AppContainer(val context: Context) {
             .build()
     }
 
-    val tmdb: TmdbRepository by lazy { TmdbRepository(retrofit.create(TmdbApi::class.java)) }
+    val tmdb: TmdbRepository by lazy {
+        TmdbRepository(retrofit.create(TmdbApi::class.java)).also { repo ->
+            // Episode lengths TMDB leaves blank, from TVmaze.
+            repo.runtimeFallback = { show -> airing.times.runtime(show.id, show.imdbId, show.title, show.releaseDate) }
+        }
+    }
 
     val recommender: Recommender by lazy { Recommender(tmdb) }
 
@@ -190,6 +195,24 @@ class AppContainer(val context: Context) {
     val forYou by lazy { com.cineverse.app.data.ai.ForYou(gemini, persona) }
 
     val titleChat by lazy { com.cineverse.app.data.ai.TitleChat(gemini) }
+
+    /** Home's row for this time of day, by Gemini. */
+    val momentRail by lazy { com.cineverse.app.data.ai.MomentRail(this) }
+
+    /** Two titles side by side, by Gemini. */
+    val compare by lazy { com.cineverse.app.data.ai.Compare(this) }
+
+    /** "Your taste in one paragraph", monthly. */
+    val tasteParagraph by lazy { com.cineverse.app.data.ai.TasteParagraph(this) }
+
+    /** Where titles were filmed, from Wikidata. */
+    val filmingLocations by lazy { com.cineverse.app.data.places.FilmingLocations(context, http) }
+
+    /** Each episode's IMDb score (with an OMDb key) or TVmaze's. */
+    val episodeScores by lazy { com.cineverse.app.data.scores.EpisodeScores(context, http) { settings.settings.value.omdbKey } }
+
+    /** Older watched titles' missing details, filled in quietly. */
+    val backfill by lazy { com.cineverse.app.data.firebase.WatchedBackfill(this) }
 
     /** The Diary's line for each month. */
     val monthBlurb by lazy { com.cineverse.app.data.ai.MonthBlurb(context, gemini) }

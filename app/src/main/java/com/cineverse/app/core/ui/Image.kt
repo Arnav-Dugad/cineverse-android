@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -74,6 +75,8 @@ fun CvImage(
     colorFilter: androidx.compose.ui.graphics.ColorFilter? = null,
     /** Where a fitted image sits when it is narrower or shorter than its box. */
     alignment: androidx.compose.ui.Alignment = androidx.compose.ui.Alignment.Center,
+    /** Told when the image could not be loaded at all. */
+    onFailed: (() -> Unit)? = null,
 ) {
     val colors = CvTheme.colors
     val plate = if (background == androidx.compose.ui.graphics.Color.Unspecified) {
@@ -90,9 +93,45 @@ fun CvImage(
                 contentScale = contentScale,
                 colorFilter = colorFilter,
                 alignment = alignment,
+                onError = onFailed?.let { failed -> { failed() } },
                 modifier = Modifier.fillMaxSize(),
             )
         }
+    }
+}
+
+/**
+ * A company's or network's mark, or its name set in type when there is no
+ * mark or the mark will not load - never an empty tile.
+ */
+@Composable
+fun MarkOrName(
+    path: String?,
+    name: String,
+    modifier: Modifier = Modifier,
+    style: androidx.compose.ui.text.TextStyle = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+    color: androidx.compose.ui.graphics.Color = CvTheme.colors.text2,
+) {
+    val url = Img.logo(path)
+    var failed by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(url == null) }
+    if (failed) {
+        Box(modifier, contentAlignment = androidx.compose.ui.Alignment.Center) {
+            androidx.compose.material3.Text(
+                name,
+                style = style,
+                color = color,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    } else {
+        CvImage(
+            url, name, modifier,
+            contentScale = ContentScale.Fit,
+            background = androidx.compose.ui.graphics.Color.Transparent,
+            onFailed = { failed = true },
+        )
     }
 }
 

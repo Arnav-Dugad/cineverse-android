@@ -166,6 +166,8 @@ fun DetailHead(
                 detail.title,
                 Modifier.fillMaxWidth(0.86f).height(66.dp),
                 align = Alignment.Center,
+                fallbackStyle = MaterialTheme.typography.headlineMedium,
+                fallbackLines = 2,
             )
         } else {
             Spacer(Modifier.height(16.dp))

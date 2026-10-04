@@ -84,6 +84,10 @@ data class Settings(
     val geminiOn: Boolean = true,
     /** The navigation bar never tucks away, and shows on every page. */
     val pinNavBar: Boolean = false,
+    /** The background glow drifts toward your touch and leans as you scroll. */
+    val movingLights: Boolean = true,
+    /** A glow round the edge of the screen while Gemini is working. */
+    val geminiEdgeGlow: Boolean = true,
     /** The streaming services you pay for, as TMDB provider ids. */
     val myServices: Set<Int> = emptySet(),
     /** Voice search reads its answer aloud. */
@@ -153,6 +157,8 @@ class SettingsRepository(
         val spokenAnswers = booleanPreferencesKey("spokenAnswers")
         val geminiOn = booleanPreferencesKey("geminiOn")
         val pinNavBar = booleanPreferencesKey("pinNavBar")
+        val movingLights = booleanPreferencesKey("movingLights")
+        val geminiEdgeGlow = booleanPreferencesKey("geminiEdgeGlow")
         val myServices = stringPreferencesKey("myServices")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
         val countdowns = booleanPreferencesKey("countdowns")
@@ -206,6 +212,8 @@ class SettingsRepository(
         spokenAnswers = this[Keys.spokenAnswers] ?: true,
         geminiOn = this[Keys.geminiOn] ?: true,
         pinNavBar = this[Keys.pinNavBar] ?: false,
+        movingLights = this[Keys.movingLights] ?: true,
+        geminiEdgeGlow = this[Keys.geminiEdgeGlow] ?: true,
         myServices = this[Keys.myServices].orEmpty().split(',').mapNotNull { it.trim().toIntOrNull() }.toSet(),
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
         countdowns = this[Keys.countdowns] ?: true,
@@ -258,6 +266,8 @@ class SettingsRepository(
     suspend fun setSpokenAnswers(value: Boolean) = edit { it[Keys.spokenAnswers] = value }
     suspend fun setGeminiOn(value: Boolean) = edit { it[Keys.geminiOn] = value }
     suspend fun setPinNavBar(value: Boolean) = edit { it[Keys.pinNavBar] = value }
+    suspend fun setMovingLights(value: Boolean) = edit { it[Keys.movingLights] = value }
+    suspend fun setGeminiEdgeGlow(value: Boolean) = edit { it[Keys.geminiEdgeGlow] = value }
     suspend fun setMyServices(value: Set<Int>) = edit { it[Keys.myServices] = value.sorted().joinToString(",") }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }
     suspend fun setCountdowns(value: Boolean) = edit { it[Keys.countdowns] = value }

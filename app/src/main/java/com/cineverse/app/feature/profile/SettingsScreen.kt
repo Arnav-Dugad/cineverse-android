@@ -116,6 +116,13 @@ fun SettingsScreen(
                 checked = settings.haptics,
                 onChange = viewModel::setHaptics,
             )
+                Divider()
+            SwitchRow(
+                title = "Moving lights",
+                detail = "The glow follows your touch and leans as you scroll",
+                checked = settings.movingLights,
+                onChange = viewModel::setMovingLights,
+            )
             }
         }
 
@@ -348,6 +355,13 @@ fun SettingsScreen(
                     exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
                 ) {
                 Column {
+                Divider()
+                SwitchRow(
+                    title = "Glow round the screen",
+                    detail = "While Gemini is working",
+                    checked = settings.geminiEdgeGlow,
+                    onChange = viewModel::setGeminiEdgeGlow,
+                )
                 Divider()
                 NotifyAction(
                     icon = Icons.Rounded.AutoAwesome,

@@ -73,7 +73,14 @@ class ShowCountdownWidget : GlanceAppWidget() {
                 container.airing.upNext(container.episodes.progress.first()).firstOrNull()
             }
         }.getOrNull()
-        val art = item?.let { WidgetArt.backdrop(context, it.show.backdrop) ?: WidgetArt.poster(context, it.show.poster, 0f) }
+        // The episode itself when there is a picture of it: TMDB's still, then
+        // TVmaze's, then the show's backdrop and poster.
+        val art = item?.let {
+            WidgetArt.still(context, it.next.still, 0f)
+                ?: WidgetArt.url(context, container.airing.times.cachedImage(it.show.id, it.next.season, it.next.episode))
+                ?: WidgetArt.backdrop(context, it.show.backdrop)
+                ?: WidgetArt.poster(context, it.show.poster, 0f)
+        }
         // Redraw the moment it airs.
         item?.let { soon ->
             val wait = soon.at - System.currentTimeMillis()
