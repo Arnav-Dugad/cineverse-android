@@ -76,6 +76,21 @@ private fun movieCertificate(dto: MovieDetailDto, region: String): String {
     return find(region.uppercase()).ifBlank { find("US") }
 }
 
+/** The region's own release dates, in order: premiere, cinemas, digital, disc, TV. */
+private fun regionReleases(dto: MovieDetailDto, region: String): List<com.cineverse.app.data.model.RegionRelease> {
+    val rows = dto.releaseDates?.results.orEmpty()
+    val country = region.uppercase().takeIf { c -> rows.any { it.country == c } } ?: "US"
+    val kinds = mapOf(1 to "Premiere", 2 to "Limited release", 3 to "In cinemas", 4 to "Digital", 5 to "On disc", 6 to "On TV")
+    return rows.firstOrNull { it.country == country }?.releaseDates.orEmpty()
+        .mapNotNull { row ->
+            val date = row.releaseDate?.take(10)?.takeIf { it.length == 10 } ?: return@mapNotNull null
+            val kind = kinds[row.type] ?: return@mapNotNull null
+            com.cineverse.app.data.model.RegionRelease(kind, date, country)
+        }
+        .distinctBy { it.kind }
+        .sortedBy { it.date }
+}
+
 private fun tvCertificate(dto: TvDetailDto, region: String): String {
     val rows = dto.contentRatings?.results.orEmpty()
     fun find(country: String) = rows.firstOrNull { it.country == country }?.rating.orEmpty()
@@ -142,6 +157,7 @@ fun MovieDetailDto.toDetail(region: String): TitleDetail {
         runtime = runtime ?: 0,
         status = status.orEmpty(),
         certificate = movieCertificate(this, region),
+        releases = regionReleases(this, region),
         voteAverage = voteAverage,
         voteCount = voteCount,
         genres = genres.map { Genre(it.id, it.name) },

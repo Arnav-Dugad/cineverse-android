@@ -70,6 +70,9 @@ class ProfileViewModel(private val app: AppContainer) : ViewModel() {
     fun setGeminiOn(value: Boolean) = viewModelScope.launch { app.settings.setGeminiOn(value) }
     fun setPinNavBar(value: Boolean) = viewModelScope.launch { app.settings.setPinNavBar(value) }
     fun setMovingLights(value: Boolean) = viewModelScope.launch { app.settings.setMovingLights(value) }
+    fun setOverviewHooks(value: Boolean) = viewModelScope.launch { app.settings.setOverviewHooks(value) }
+    fun setMesmerise(value: Boolean) = viewModelScope.launch { app.settings.setMesmerise(value) }
+    fun setFloatingToolbar(value: Boolean) = viewModelScope.launch { app.settings.setFloatingToolbar(value) }
     fun setGeminiEdgeGlow(value: Boolean) = viewModelScope.launch { app.settings.setGeminiEdgeGlow(value) }
     fun setMyServices(value: Set<Int>) = viewModelScope.launch { app.settings.setMyServices(value) }
     suspend fun streamingServices() = app.tmdb.streamingServices(app.settings.settings.value.region)

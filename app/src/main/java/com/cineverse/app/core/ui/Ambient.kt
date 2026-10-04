@@ -31,11 +31,23 @@ val LocalTitleAccent = staticCompositionLocalOf<Color?> { null }
 private val accentCache = LruCacheLite<String, Int>(64)
 
 @Composable
-fun rememberPosterAccent(posterPath: String?, enabled: Boolean): State<Color?> {
+fun rememberPosterAccent(posterPath: String?, enabled: Boolean): State<Color?> = rememberAccent(posterPath, enabled, logo = false)
+
+/**
+ * A service logo's brand colour. Logos are flat, fully bright colour - the
+ * very pixels a poster's reading throws away as highlights - so they are
+ * read with those kept.
+ */
+@Composable
+fun rememberLogoAccent(logoPath: String?): State<Color?> = rememberAccent(logoPath, true, logo = true)
+
+@Composable
+private fun rememberAccent(posterPath: String?, enabled: Boolean, logo: Boolean): State<Color?> {
     val context = LocalContext.current
-    return produceState<Color?>(initialValue = posterPath?.let { accentCache[it]?.toAccent() }, posterPath, enabled) {
-        if (!enabled || posterPath == null) { value = null; return@produceState }
-        accentCache[posterPath]?.let { value = it.toAccent(); return@produceState }
+    val key = posterPath?.let { if (logo) "logo:$it" else it }
+    return produceState<Color?>(initialValue = key?.let { accentCache[it]?.toAccent() }, posterPath, enabled) {
+        if (!enabled || posterPath == null || key == null) { value = null; return@produceState }
+        accentCache[key]?.let { value = it.toAccent(); return@produceState }
         val found = withContext(Dispatchers.Default) {
             runCatching {
                 val request = ImageRequest.Builder(context)
@@ -43,10 +55,10 @@ fun rememberPosterAccent(posterPath: String?, enabled: Boolean): State<Color?> {
                     .allowHardware(false)
                     .build()
                 val bitmap = SingletonImageLoader.get(context).execute(request).image?.toBitmap()
-                bitmap?.let(::dominantVividColor)
+                bitmap?.let { dominantVividColor(it, keepBright = logo) }
             }.getOrNull()
         }
-        accentCache.put(posterPath, found ?: NONE)
+        accentCache.put(key, found ?: NONE)
         value = found?.toAccent()
     }
 }
@@ -56,15 +68,15 @@ private const val NONE = 0
 private fun Int.toAccent(): Color? = if (this == NONE) null else Color(this)
 
 /** The dominant vivid hue of a small bitmap, as an ARGB int lifted for a dark page, or null. */
-internal fun dominantVividColor(bitmap: Bitmap): Int? {
+internal fun dominantVividColor(bitmap: Bitmap, keepBright: Boolean = false): Int? {
     val scaled = if (bitmap.width > 64) Bitmap.createScaledBitmap(bitmap, 64, (64f * bitmap.height / bitmap.width).toInt().coerceAtLeast(1), true) else bitmap
     val pixels = IntArray(scaled.width * scaled.height)
     scaled.getPixels(pixels, 0, scaled.width, 0, 0, scaled.width, scaled.height)
-    return dominantVividColor(pixels)
+    return dominantVividColor(pixels, keepBright)
 }
 
 /** Pure, for tests: the same over raw ARGB pixels. */
-internal fun dominantVividColor(pixels: IntArray): Int? {
+internal fun dominantVividColor(pixels: IntArray, keepBright: Boolean = false): Int? {
     val buckets = 24
     val weight = DoubleArray(buckets)
     val sumH = DoubleArray(buckets)
@@ -75,7 +87,7 @@ internal fun dominantVividColor(pixels: IntArray): Int? {
         android.graphics.Color.colorToHSV(pixel, hsv)
         val s = hsv[1]
         val v = hsv[2]
-        if (s < 0.35f || v < 0.25f || v > 0.97f) continue
+        if (s < 0.35f || v < 0.25f || (v > 0.97f && !keepBright)) continue
         val w = (s * v).toDouble()
         val bucket = ((hsv[0] / 360f) * buckets).toInt().coerceIn(0, buckets - 1)
         weight[bucket] += w

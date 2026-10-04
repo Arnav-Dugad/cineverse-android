@@ -132,10 +132,11 @@ class EpisodeRepository(
         }
     }
 
-    suspend fun markShowWatched(show: TitleDetail) {
+    suspend fun markShowWatched(show: TitleDetail, at: Long = System.currentTimeMillis()) {
         write(show) { entry ->
             var next = entry
-            val now = System.currentTimeMillis()
+            // When it was watched: now, or the day picked from the watched menu.
+            val now = at
             for (season in entry.structure.keys) {
                 val episodes = next.episodeNumbers(season)
                     .filter { next.hasAired(season, it) }

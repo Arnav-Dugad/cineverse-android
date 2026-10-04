@@ -50,6 +50,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import com.cineverse.app.core.ui.sharedLogo
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
@@ -112,6 +115,12 @@ fun DetailHead(
     hideTitle: Boolean = false,
     onSave: () -> Unit,
     onWatched: () -> Unit,
+    /** Its place in TMDB's Top 250, for a gold badge. */
+    top250: Int? = null,
+    /** Gemini's hook in place of the synopsis, when switched on and written. */
+    hook: String? = null,
+    /** The split button's other half: watched on a chosen day. */
+    onWatchedOn: (Long) -> Unit = {},
     onRate: () -> Unit,
     onShare: () -> Unit,
     onPlayTrailer: () -> Unit,
@@ -230,6 +239,21 @@ fun DetailHead(
             // The outside scores keep their own marks, which are the whole
             // point of them, so they are placed as-is inside the same flow.
             if (scores.any) ScoreRow(scores)
+            if (top250 != null) {
+                Row(
+                    Modifier
+                        .clip(CvShape.Pill)
+                        .background(Palette.Gold.copy(alpha = 0.16f))
+                        .border(1.dp, Palette.Gold.copy(alpha = 0.5f), CvShape.Pill)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .semantics(mergeDescendants = true) { contentDescription = "Number $top250 in TMDB's Top 250" },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(androidx.compose.material.icons.Icons.Rounded.EmojiEvents, null, tint = Palette.Gold, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Top 250 #$top250", style = MaterialTheme.typography.labelLarge, color = Palette.Gold)
+                }
+            }
 
             detail.year.takeIf { it.isNotBlank() }?.let { Chip { PlainText(it) } }
             detail.certificate.takeIf { it.isNotBlank() }?.let { Chip { PlainText(it) } }
@@ -297,12 +321,11 @@ fun DetailHead(
                 onClick = { haptics?.play(if (saved) Haptic.Untick else Haptic.Tick); onSave() },
             ) { tint -> AnimatedBookmark(saved, tint) }
 
-            ActionCircle(
-                active = watched,
-                activeTint = colors.green,
-                description = if (watched) "Watched" else "Mark watched",
-                onClick = { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() },
-            ) { tint -> AnimatedCheck(watched, tint) }
+            WatchedSplitButton(
+                watched = watched,
+                onToggle = { haptics?.play(if (watched) Haptic.Untick else Haptic.Tick); onWatched() },
+                onDate = onWatchedOn,
+            )
 
             ActionCircle(
                 active = myRating > 0,
@@ -353,7 +376,10 @@ fun DetailHead(
             }
         }
 
-        if (detail.overview.isNotBlank()) {
+        if (hook != null) {
+            Spacer(Modifier.height(20.dp))
+            HookBlock(hook, detail.overview)
+        } else if (detail.overview.isNotBlank()) {
             Spacer(Modifier.height(20.dp))
             ExpandableText(detail.overview)
         }
@@ -588,4 +614,127 @@ private fun runtimeLabelFor(detail: TitleDetail): String? = when {
         "${detail.numberOfSeasons} season${if (detail.numberOfSeasons == 1) "" else "s"}"
     detail.runtime > 0 -> "${detail.runtime / 60}h ${detail.runtime % 60}m"
     else -> null
+}
+
+/**
+ * Watched, as a Material 3 Expressive split button: the tick on the left
+ * marks it (or unmarks it), the arrow on the right opens the rest - watched
+ * today, or on a day you pick. The halves share one pill with a hairline
+ * between them, and the arrow turns as its menu opens.
+ */
+@Composable
+private fun WatchedSplitButton(watched: Boolean, onToggle: () -> Unit, onDate: (Long) -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = LocalHaptics.current
+    val tint = if (watched) colors.green else colors.text
+    var menu by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var picking by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val turn by animateFloatAsState(if (menu) 180f else 0f, Motion.snappy(), label = "splitArrow")
+    Box {
+        Row(
+            Modifier
+                .height(48.dp)
+                .clip(CvShape.Pill)
+                .background(if (watched) colors.green.copy(alpha = 0.14f) else colors.glass)
+                .border(1.dp, if (watched) colors.green.copy(alpha = 0.5f) else colors.hairline, CvShape.Pill),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clickableNoRipple(onToggle)
+                    .semantics { contentDescription = if (watched) "Watched" else "Mark watched" },
+                contentAlignment = Alignment.Center,
+            ) { AnimatedCheck(watched, tint) }
+            Box(Modifier.width(1.dp).height(24.dp).background(if (watched) colors.green.copy(alpha = 0.4f) else colors.hairline))
+            Box(
+                Modifier
+                    .size(width = 30.dp, height = 48.dp)
+                    .clickableNoRipple { haptics?.play(Haptic.Tap); menu = true }
+                    .semantics { contentDescription = "More watched options" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.KeyboardArrowDown,
+                    null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn },
+                )
+            }
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = menu,
+            onDismissRequest = { menu = false },
+            containerColor = colors.surface2,
+            shape = CvShape.Large,
+        ) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Watched today") },
+                onClick = { menu = false; haptics?.play(Haptic.Tick); onDate(System.currentTimeMillis()) },
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Watched on a date\u2026") },
+                onClick = { menu = false; picking = true },
+            )
+            if (watched) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Mark unwatched") },
+                    onClick = { menu = false; onToggle() },
+                )
+            }
+        }
+    }
+    if (picking) {
+        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+        val state = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis(),
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
+            },
+        )
+        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    picking = false
+                    state.selectedDateMillis?.let { utc ->
+                        // The picker gives midnight UTC; the evening of that day here.
+                        val day = java.time.Instant.ofEpochMilli(utc).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                        haptics?.play(Haptic.Success)
+                        onDate(day.atTime(21, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        ) {
+            androidx.compose.material3.DatePicker(state = state)
+        }
+    }
+}
+
+/** Gemini's hook, with the original synopsis one tap away. */
+@Composable
+private fun HookBlock(hook: String, original: String) {
+    val colors = CvTheme.colors
+    var showOriginal by remember { androidx.compose.runtime.mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        androidx.compose.animation.AnimatedContent(showOriginal, label = "hook") { plain ->
+            if (plain) ExpandableText(original)
+            else Text(hook, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.clip(CvShape.Pill).clickableNoRipple { showOriginal = !showOriginal }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(androidx.compose.material.icons.Icons.Rounded.AutoAwesome, null, tint = com.cineverse.app.core.ui.GeminiColors[1], modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(
+                if (showOriginal) "Show Gemini's hook" else "Hook by Gemini \u00b7 original synopsis",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.text3,
+            )
+        }
+    }
 }

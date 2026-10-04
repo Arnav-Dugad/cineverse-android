@@ -54,7 +54,7 @@ class Tonight(private val app: AppContainer) {
 
     /** Tonight's film, skipping anything in [exclude]; null when the list has nothing that fits. */
     suspend fun pick(mood: Mood, time: TimeBox, exclude: Set<String> = emptySet()): TonightPick? = coroutineScope {
-        val library = app.library.library.value
+        val library = app.privacy.library()
         val region = app.settings.settings.value.region
         val saved = library.saved.values
             .filter { it.type == MediaType.Movie && !library.isWatched(it.key) && it.key !in exclude }

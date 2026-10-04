@@ -4,6 +4,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.WarningAmber
 import kotlinx.coroutines.launch
 import com.cineverse.app.core.ui.geminiGlow
 import androidx.compose.ui.semantics.contentDescription
@@ -265,6 +266,7 @@ fun LazyListScope.episodesSection(
     seasonScores: com.cineverse.app.data.scores.SeasonScores = com.cineverse.app.data.scores.SeasonScores(),
     onRateEpisode: (Int, Int, Int) -> Unit = { _, _, _ -> },
     adviseSkip: (suspend (com.cineverse.app.data.model.Episode) -> com.cineverse.app.data.ai.Skip?)? = null,
+    critics: String? = null,
     onSeasonRecap: (Int) -> Unit = {},
     onSeriesRecap: () -> Unit = {},
     onPreviously: () -> Unit = {},
@@ -349,6 +351,7 @@ fun LazyListScope.episodesSection(
                 scores = seasonScores,
                 progress = progress,
                 modifier = Modifier.padding(bottom = 12.dp),
+                critics = critics,
             )
         }
     }
@@ -735,7 +738,12 @@ fun LazyListScope.aboutSection(
     castHours: Map<Int, com.cineverse.app.data.cast.ActorHours> = emptyMap(),
     places: List<com.cineverse.app.data.places.Place> = emptyList(),
     wiki: com.cineverse.app.data.wiki.WikiFacts = com.cineverse.app.data.wiki.WikiFacts(),
+    chart: com.cineverse.app.data.charts.ChartRun? = null,
+    chartSince: String? = null,
 ) {
+    if (chart != null && chart.any) {
+        item(key = "chart") { ChartHistoryCard(chart, chartSince, Modifier.padding(bottom = 18.dp)) }
+    }
     if (wiki.basedOn.isNotEmpty()) {
         item(key = "basedOn") { BasedOnCard(wiki.basedOn, Modifier.padding(horizontal = ScreenPadding).padding(bottom = 18.dp)) }
     }
@@ -750,6 +758,9 @@ fun LazyListScope.aboutSection(
     }
     if (detail.brands.isNotEmpty()) {
         item(key = "brands") { BrandStrip(detail.brands, Modifier.padding(top = 18.dp), onBrand) }
+    }
+    if (!detail.isSeries && detail.releases.isNotEmpty()) {
+        item(key = "releases") { ReleasesPanel(detail.releases) }
     }
     if (!detail.isSeries && wiki.takings.any) {
         item(key = "takings") { TakingsPanel(wiki.takings, detail.budget) }
@@ -928,27 +939,6 @@ fun WhereToWatch(
                     )
                 }
             }
-            if (label == "Streaming") {
-                // Each subscription service leads on to everything it has here.
-                androidx.compose.foundation.layout.FlowRow(
-                    Modifier.padding(horizontal = ScreenPadding).padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (provider in group.take(4)) {
-                        Text(
-                            "Everything on ${provider.name} ›",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.text2,
-                            modifier = Modifier
-                                .clip(CvShape.Pill)
-                                .border(1.dp, colors.hairline, CvShape.Pill)
-                                .clickableNoRipple { haptics?.play(Haptic.Tap); onService(provider) }
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        )
-                    }
-                }
-            }
             Spacer(Modifier.height(14.dp))
         }
     }
@@ -962,6 +952,10 @@ private fun ProviderTile(
     yours: Boolean = false,
 ) {
     val colors = CvTheme.colors
+    // A ring in the service's own colour (green for the ones you pay for).
+    val brand by com.cineverse.app.core.ui.rememberLogoAccent(provider.logoPath)
+    // A logo with no colour to speak of (Apple TV's black) gets a soft neutral ring.
+    val ring = if (yours) colors.green else brand?.copy(alpha = 0.9f) ?: colors.text.copy(alpha = 0.22f)
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -981,10 +975,11 @@ private fun ProviderTile(
             Box(
                 Modifier
                     .size(56.dp)
-                    .clip(CvShape.Medium)
-                    .border(if (yours) 2.dp else 1.dp, if (yours) colors.green else colors.hairline, CvShape.Medium)
+                    .border(2.dp, ring, CvShape.Medium)
+                    .padding(3.dp)
+                    .clip(CvShape.Small)
             ) {
-                CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize().padding(if (yours) 2.dp else 0.dp).clip(CvShape.Small))
+                CvImage(Img.provider(provider.logoPath), provider.name, Modifier.fillMaxSize())
             }
             // A dot, not a badge: it says the app is on this phone without
             // taking a second line to say it.
@@ -1526,18 +1521,22 @@ fun TriviaCard(
     val shake = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val loading = state is TriviaState.Loading
+    var warned by remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(
         modifier
             .fillMaxWidth()
             .graphicsLayer { translationX = shake.value }
-            .geminiGlow(unlocked && state !is TriviaState.Failed, corner = 18.dp, width = 1.2.dp, pulse = loading)
+            .geminiGlow((unlocked || state is TriviaState.Ready) && state !is TriviaState.Failed, corner = 18.dp, width = 1.2.dp, pulse = loading)
             .clip(CvShape.Large)
-            .background(colors.text.copy(alpha = if (unlocked) 0.05f else 0.03f))
+            .background(if (warned && !unlocked && state is TriviaState.Idle) com.cineverse.app.core.design.Palette.Gold.copy(alpha = 0.08f) else colors.text.copy(alpha = if (unlocked) 0.05f else 0.04f))
             .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 380f))
             .clickableNoRipple {
                 when {
-                    !unlocked -> {
+                    // Not finished: the first tap warns, with a little shake;
+                    // the second shows them anyway.
+                    !unlocked && !warned && state is TriviaState.Idle -> {
                         haptics?.play(com.cineverse.app.core.design.Haptic.Warning)
+                        warned = true
                         scope.launch {
                             for (x in listOf(14f, -12f, 9f, -6f, 3f, 0f)) shake.animateTo(x, androidx.compose.animation.core.tween(45))
                         }
@@ -1553,9 +1552,9 @@ fun TriviaCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (loading) com.cineverse.app.core.ui.GeminiLoader(size = 20.dp) else Icon(
-                if (unlocked) androidx.compose.material.icons.Icons.Rounded.Lightbulb else androidx.compose.material.icons.Icons.Rounded.Lock,
+                if (unlocked || state is TriviaState.Ready) androidx.compose.material.icons.Icons.Rounded.Lightbulb else androidx.compose.material.icons.Icons.Rounded.WarningAmber,
                 null,
-                tint = if (unlocked) com.cineverse.app.core.design.Palette.Gold else colors.text3,
+                tint = com.cineverse.app.core.design.Palette.Gold,
                 modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
@@ -1563,12 +1562,14 @@ fun TriviaCard(
                 Text(
                     "Did you know?",
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (unlocked) colors.text else colors.text2,
+                    color = colors.text,
                 )
                 Text(
                     when {
-                        !unlocked && series -> "Three facts, once you're caught up on the latest season"
-                        !unlocked -> "Three facts, once you've marked it watched"
+                        !unlocked && warned && state is TriviaState.Idle -> "Spoiler warning: you haven't finished it. Kept behind the scenes, but tap again only if you're happy to risk it"
+                        !unlocked && state is TriviaState.Idle && series -> "Three facts - you haven't finished it, so there's a spoiler warning"
+                        !unlocked && state is TriviaState.Idle -> "Three facts - you haven't seen it, so there's a spoiler warning"
+                        !unlocked && state is TriviaState.Ready -> "Behind the scenes - careful, you haven't finished it"
                         state is TriviaState.Loading -> "Gemini is digging through the archives…"
                         state is TriviaState.Failed -> "Couldn't get them just now. Tap to try again"
                         state is TriviaState.Ready && running -> "Behind the scenes, nothing past where you are"
@@ -1576,11 +1577,11 @@ fun TriviaCard(
                         else -> "Three behind-the-scenes facts, spoiler-free"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = colors.text3,
+                    color = if (!unlocked && warned && state is TriviaState.Idle) com.cineverse.app.core.design.Palette.Gold else colors.text3,
                 )
             }
         }
-        if (state is TriviaState.Ready && unlocked) {
+        if (state is TriviaState.Ready) {
             Spacer(Modifier.height(12.dp))
             state.facts.forEachIndexed { index, fact ->
                 val turn = com.cineverse.app.core.ui.rememberArrival(1f, delayMillis = 140 + index * 220, durationMillis = 560)
@@ -1687,5 +1688,42 @@ private fun TakingTile(label: String, value: String, note: String?, modifier: Mo
         Text(label, style = MaterialTheme.typography.labelSmall, color = colors.text3)
         Text(value, style = MaterialTheme.typography.titleMedium, color = colors.text)
         if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = colors.gold)
+    }
+}
+
+/** When it reaches the viewer's country: cinemas, digital, disc - each with its date, upcoming ones lit. */
+@Composable
+private fun ReleasesPanel(releases: List<com.cineverse.app.data.model.RegionRelease>) {
+    val colors = CvTheme.colors
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val today = java.time.LocalDate.now()
+    val country = java.util.Locale("", releases.first().country).getDisplayCountry(locale)
+    Column(Modifier.padding(horizontal = ScreenPadding).padding(top = 20.dp)) {
+        Text("RELEASES IN ${country.uppercase()}", style = KickerStyle, color = colors.text3)
+        Spacer(Modifier.height(10.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(CvShape.Large)
+                .background(colors.text.copy(alpha = 0.04f))
+                .border(1.dp, colors.hairline, CvShape.Large)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        ) {
+            for (release in releases) {
+                val date = runCatching { java.time.LocalDate.parse(release.date) }.getOrNull() ?: continue
+                val upcoming = date.isAfter(today)
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (upcoming) colors.cyan else colors.text3.copy(alpha = 0.5f)))
+                    Spacer(Modifier.width(10.dp))
+                    Text(release.kind, style = MaterialTheme.typography.bodyMedium, color = colors.text, modifier = Modifier.weight(1f))
+                    Text(
+                        date.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", locale)) +
+                            if (upcoming) "  ·  in ${java.time.temporal.ChronoUnit.DAYS.between(today, date)} days" else "",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (upcoming) colors.cyan else colors.text2,
+                    )
+                }
+            }
+        }
     }
 }

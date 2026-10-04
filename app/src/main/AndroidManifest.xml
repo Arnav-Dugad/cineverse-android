@@ -140,6 +140,17 @@
         <!-- The streak and today, at a glance. -->
         <!-- One show's next episode, counting down; pinned from its page. -->
         <receiver
+            android:name=".widget.NextEpisodeWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_next">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_episode_widget_info" />
+        </receiver>
+        <receiver
             android:name=".widget.ShowCountdownReceiver"
             android:exported="false"
             android:label="@string/widget_countdown">

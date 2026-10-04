@@ -147,7 +147,7 @@ private fun androidx.navigation.NavDestination.isTab(): Boolean =
 /** Pages that are the whole screen, with or without a pinned bar. */
 private fun androidx.navigation.NavDestination.isFullScreen(): Boolean =
     hasRoute(Route.Trailer::class) || hasRoute(Route.Auth::class) ||
-        hasRoute(Route.Search::class) || hasRoute(Route.VoiceSearch::class)
+        hasRoute(Route.VoiceSearch::class)
 
 @Composable
 fun CineVerseNav(
@@ -192,7 +192,7 @@ fun CineVerseNav(
     var hostTab by androidx.compose.runtime.saveable.rememberSaveable {
         mutableStateOf(
             when (settings.startTab) {
-                "discover" -> Tab.Discover
+                "discover" -> Tab.Home
                 "list" -> Tab.MyList
                 "stats" -> Tab.Stats
                 else -> Tab.Home
@@ -221,7 +221,15 @@ fun CineVerseNav(
         val route = deepLink ?: return@LaunchedEffect
         val tab = Tab.entries.firstOrNull { it.route == route }
         when {
-            tab == null -> navController.navigate(route) { launchSingleTop = true }
+            // A link to another title while on a title page is a new page,
+            // not this one with its arguments swapped: that kept the old
+            // page's scroll and lost it from the back stack. The same title
+            // twice (a widget tapped again) still lands on the one page.
+            tab == null -> {
+                val here = navController.currentBackStackEntry?.arguments
+                val sameTitle = route is Route.Detail && here?.getInt("id", -1) == route.id && here.getString("type") == route.type
+                navController.navigate(route) { launchSingleTop = route !is Route.Detail || sameTitle }
+            }
             // Already inside that tab, on a page pushed over it: back to the
             // tab's own front page. Switching would restore the stack it is
             // already in and land on the very page the link came from.
@@ -283,15 +291,15 @@ fun CineVerseNav(
             // Only over a tab. A pushed screen carries its own back arrow, and
             // two bars stacked is the fastest way to waste a phone's height.
             // It fades with the page rather than popping in as a card lands.
+            // Search carries its own search box, so no wordmark bar above it.
             androidx.compose.animation.AnimatedVisibility(
-                visible = currentTab != null,
+                visible = currentTab != null && currentTab != Tab.Search,
                 enter = fadeIn(tween(CARD_MS)),
                 exit = fadeOut(tween(Motion.Quick)),
             ) {
                 val tab = currentTab ?: lastShownTab
                 CvTopBar(
                     tab = tab,
-                    onSearch = { navController.navigate(Route.Search) },
                     overArt = tab in HeroTabs && heroScrolled[tab] != true,
                     inboxCount = if (shelf.loaded && signedInUid != null) inboxCount else 0,
                     onInbox = { navController.navigate(Route.Inbox) },
@@ -344,7 +352,7 @@ fun CineVerseNav(
             // The tab the user chose, not always Home. This read Route.Home
             // unconditionally, so "Open on" stored a value and changed nothing.
             startDestination = when (settings.startTab) {
-                "discover" -> Route.Discover
+                "discover" -> Route.Home
                 "list" -> Route.MyList
                 "stats" -> Route.Stats
                 else -> Route.Home
@@ -353,7 +361,7 @@ fun CineVerseNav(
                 .fillMaxSize()
                 .background(colors.ink)
                 .nestedScroll(bars.connection)
-                .movingLights(settings.movingLights),
+                .movingLights(settings.movingLights, settings.mesmerise),
             // Tabs cross-fade; anything pushed on top slides in from the side,
             // so the hierarchy is legible from the motion alone.
             enterTransition = { pushEnter() },
@@ -392,7 +400,7 @@ fun CineVerseNav(
                 if (settings.geminiOn) {
                     com.cineverse.app.feature.home.AskCineVerseFab(
                         expanded = askExpanded,
-                        onText = { navController.navigate(Route.Search) { launchSingleTop = true } },
+                        onText = { goToTab(Tab.Search) },
                         onVoice = { navController.navigate(Route.VoiceSearch) { launchSingleTop = true } },
                         onTonight = { tonight = true },
                         modifier = Modifier
@@ -441,7 +449,7 @@ fun CineVerseNav(
                             model.surprise()?.let(open)
                         }
                     },
-                    modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                    onBack = { navController.popBackStack() },
                     shakeToPick = settings.shakeToPick,
                 )
             }
@@ -506,6 +514,7 @@ fun CineVerseNav(
                     onBack = { navController.popBackStack() },
                     onPerson = { navController.navigate(Route.Person(it)) },
                     onTrailer = { key, title -> navController.navigate(Route.Trailer(key, title)) },
+                    onExplore = { navController.navigate(it) },
                     onNavigate = { page ->
                         // A tab is a place, not a step. Search closes first, or
                         // switching tab saves it into Home's stack and it comes
@@ -528,7 +537,7 @@ fun CineVerseNav(
                             "tv" -> tab(Tab.TvShows)
                             "list" -> tab(Tab.MyList)
                             "stats" -> tab(Tab.Stats)
-                            "discover" -> tab(Tab.Discover)
+                            "discover" -> navController.navigate(Route.Discover)
                             "profile" -> tab(Tab.Profile)
                             "inbox" -> navController.navigate(Route.Inbox)
                             "settings" -> navController.navigate(Route.Settings)

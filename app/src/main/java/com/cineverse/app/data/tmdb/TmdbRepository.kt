@@ -48,7 +48,15 @@ class TmdbRepository(
     // ---------- catalogue ----------
 
     suspend fun trending(media: String = "all", window: String = "week", page: Int = 1) =
-        quiet { api.trending(media, window, page).results.toItems() }
+        quiet { api.trending(media, window, page).results.toItems() }.also { items ->
+            // Every sighting of a weekly chart is written down for the Top 10 history.
+            if (window == "week" && page == 1 && (media == "movie" || media == "tv")) {
+                runCatching { onWeeklyChart?.invoke(MediaType.of(media), items) }
+            }
+        }
+
+    /** Told whenever this week's film or series chart is fetched. */
+    var onWeeklyChart: ((MediaType, List<com.cineverse.app.data.model.MediaItem>) -> Unit)? = null
 
     suspend fun movies(list: String, page: Int = 1, region: String? = null) =
         quiet { api.movieList(list, page, region).results.toItems(MediaType.Movie) }
@@ -183,6 +191,9 @@ class TmdbRepository(
     /** Where a series' episode length comes from when TMDB has none (TVmaze). */
     var runtimeFallback: (suspend (TitleDetail) -> Int)? = null
 
+    /** Told about every title whose details load. */
+    var onDetail: ((TitleDetail) -> Unit)? = null
+
     suspend fun detail(id: Int, type: MediaType, region: String, refresh: Boolean = false): TitleDetail {
         val key = "${type.wire}_${id}_$region"
         if (!refresh) detailCache[key]?.let { return it }
@@ -194,6 +205,7 @@ class TmdbRepository(
                 if (minutes > 0) mapped.copy(episodeRuntime = minutes) else mapped
             } else mapped
             detailCache.put(key, detail)
+            runCatching { onDetail?.invoke(detail) }
             if (detail.imdbId.isNotBlank()) imdbIds.put("${type.wire}_$id", detail.imdbId)
             detail
         }

@@ -42,7 +42,7 @@ import com.cineverse.app.core.design.CvTheme
  *
  * Everything collapses to its end state under reduced motion.
  */
-enum class TabGlyph { Home, Film, Tv, Discover, List, Stats, Person }
+enum class TabGlyph { Home, Film, Tv, Discover, Search, List, Stats, Person }
 
 private const val GRID = 24f
 
@@ -101,6 +101,12 @@ fun TabIcon(
                     drawLine(color, Offset(12f * unit, 7.4f * unit), Offset(8.4f * unit, 3.0f * unit), stroke, StrokeCap.Round)
                     drawLine(color, Offset(12f * unit, 7.4f * unit), Offset(15.6f * unit, 3.0f * unit), stroke, StrokeCap.Round)
                 }
+            }
+            TabGlyph.Search -> {
+                // A lens and a handle; the handle grows out as it becomes yours.
+                drawCircle(color, 6.6f * unit, Offset(10.6f * unit, 10.6f * unit), style = Stroke(stroke * 1.15f))
+                val reach = 4.2f + 1.6f * fill
+                drawLine(color, Offset(15.4f * unit, 15.4f * unit), Offset((15.4f + reach * 0.72f) * unit, (15.4f + reach * 0.72f) * unit), stroke * 1.3f, StrokeCap.Round)
             }
             TabGlyph.Discover -> {
                 val ring = Path().apply {

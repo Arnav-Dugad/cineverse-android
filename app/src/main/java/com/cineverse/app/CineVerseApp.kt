@@ -173,6 +173,12 @@ class AppContainer(val context: Context) {
         TmdbRepository(retrofit.create(TmdbApi::class.java)).also { repo ->
             // Episode lengths TMDB leaves blank, from TVmaze.
             repo.runtimeFallback = { show -> airing.times.runtime(show.id, show.imdbId, show.title, show.releaseDate) }
+            // Adult titles are remembered as they are seen, so Gemini is never given them.
+            repo.onDetail = { detail -> privacy.saw(detail.key, detail.adult) }
+            // The Top 10 as it is each week, the same ten Home and the chart show.
+            repo.onWeeklyChart = { type, items ->
+                topTenHistory.record(type, items.filterNot { it.type == com.cineverse.app.data.model.MediaType.Tv && it.genreIds.any { g -> g == 10767 || g == 10763 } })
+            }
         }
     }
 
@@ -207,6 +213,24 @@ class AppContainer(val context: Context) {
 
     /** Gemini's spotlight on people and studios. */
     val spotlight by lazy { com.cineverse.app.data.ai.Spotlight(this) }
+
+    /** Hooks for synopses, and critics in a line. */
+    val lines by lazy { com.cineverse.app.data.ai.Lines(this) }
+
+    /** "Finish or drop?" for titles left half-watched. */
+    val halfWatched by lazy { com.cineverse.app.data.ai.HalfWatched(this) }
+
+    /** TMDB's Top 250 ranks. */
+    val topRated by lazy { com.cineverse.app.data.charts.TopRated(context, tmdb) }
+
+    /** The weekly Top 10, week by week. */
+    val topTenHistory by lazy { com.cineverse.app.data.charts.TopTenHistory(context) }
+
+    /** Gemini's moods for the watchlist. */
+    val moodTags by lazy { com.cineverse.app.data.ai.MoodTags(this) }
+
+    /** What Gemini is never told: adult titles and titles in locked lists. */
+    val privacy by lazy { com.cineverse.app.data.ai.GeminiPrivacy(this) }
 
     /** "Should I skip this?" per episode, by Gemini. */
     val skipAdvice by lazy { com.cineverse.app.data.ai.SkipAdvice(this) }

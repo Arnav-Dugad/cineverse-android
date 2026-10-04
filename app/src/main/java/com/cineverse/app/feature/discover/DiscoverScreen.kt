@@ -78,6 +78,7 @@ fun DiscoverScreen(
     onOpen: (MediaItem) -> Unit,
     onBrowse: (Route) -> Unit,
     onSurprise: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     shakeToPick: Boolean = false,
 ) {
@@ -94,10 +95,14 @@ fun DiscoverScreen(
         onSurprise()
     }
 
+    // Opened from Search now rather than a tab of its own, so it carries
+    // its own bar and a way back.
+    Column(modifier.fillMaxSize()) {
+    com.cineverse.app.core.ui.CvScreenBar("Discover", onBack)
     PullToRefresh(
         refreshing = state.refreshing,
         onRefresh = viewModel::refresh,
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -220,6 +225,7 @@ fun DiscoverScreen(
             )
             }
         }
+    }
     }
 }
 

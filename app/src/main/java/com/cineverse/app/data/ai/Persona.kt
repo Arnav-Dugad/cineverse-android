@@ -75,9 +75,13 @@ class Persona(private val app: AppContainer) {
 
     /** The brief, or "" before there is anything to say. */
     suspend fun brief(): String {
-        val library = app.library.library.value
-        val shows = app.episodes.progress.value
-        if (!library.loaded) return cloud.orEmpty()
+        // Adult titles and anything in a locked list are never part of it.
+        val library = app.privacy.library()
+        val shows = app.privacy.shows()
+        // Not the brief synced from the cloud: older versions wrote it with
+        // locked and adult titles in, and before the library loads there is
+        // no telling which those are.
+        if (!library.loaded) return ""
         val signature = "${library.watched.size}:${library.ratings.size}:${library.saved.size}:${shows.values.sumOf { it.watchedCount }}"
         cached?.let { (sig, text) -> if (sig == signature && System.currentTimeMillis() - builtAt < 60_000) return text }
 

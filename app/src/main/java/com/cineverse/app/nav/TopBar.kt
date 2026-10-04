@@ -55,7 +55,6 @@ import com.cineverse.app.core.ui.glassPane
 @Composable
 fun CvTopBar(
     tab: Tab,
-    onSearch: () -> Unit,
     overArt: Boolean = tab == Tab.Home,
     inboxCount: Int = 0,
     onInbox: (() -> Unit)? = null,
@@ -121,27 +120,7 @@ fun CvTopBar(
                 count = inboxCount,
                 color = androidx.compose.ui.graphics.lerp(colors.text, Color.White, art),
                 onClick = { haptics?.play(Haptic.Tap); onInbox() },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 44.dp),
-            )
-        }
-        Box(
-            Modifier
-                .align(Alignment.CenterEnd)
-                .size(42.dp)
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = interaction,
-                    indication = null,
-                ) { haptics?.play(Haptic.Tap); onSearch() },
-            contentAlignment = Alignment.Center,
-        ) {
-            // Pressing it pulls the handle out of the glass, which is the only
-            // feedback a 42dp target with no ripple gets.
-            val pressed by interaction.collectIsPressedAsState()
-            AnimatedSearch(
-                active = pressed,
-                color = androidx.compose.ui.graphics.lerp(colors.text, Color.White, art),
-                size = 23.dp,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
             )
         }
     }

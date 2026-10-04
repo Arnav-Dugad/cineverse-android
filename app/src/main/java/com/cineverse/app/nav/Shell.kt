@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
@@ -264,6 +266,9 @@ private fun LiquidTabRow(
                 val half = 27.dp.toPx()
                 val left = minOf(lead.value, trail.value)
                 val right = maxOf(lead.value, trail.value)
+                // At rest on Search, the raised disc is the indicator.
+                val searchIndex = tabs.indexOf(Tab.Search).toFloat()
+                if (kotlin.math.abs(left - searchIndex) < 0.02f && kotlin.math.abs(right - searchIndex) < 0.02f) return@drawBehind
                 val stretch = (right - left).coerceIn(0f, 2f)
                 // Thinner as it stretches, like a drop pulled long.
                 val height = 32.dp.toPx() * (1f - 0.16f * (stretch / 2f))
@@ -302,6 +307,33 @@ private fun LiquidTabRow(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(7.dp))
+                if (tab == Tab.Search) {
+                    // Search, the one tab that stands out: a raised disc in the
+                    // brand red, lifting a little off the bar, that swells when
+                    // it is where you are.
+                    val lift by animateFloatAsState(if (selected) 1f else 0f, Motion.lively(), label = "searchLift")
+                    Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier
+                                .graphicsLayer {
+                                    translationY = -10.dp.toPx() - 3.dp.toPx() * lift
+                                    val grow = if (reduced) 1f else 1f + 0.06f * lift
+                                    scaleX = grow; scaleY = grow
+                                }
+                                // Required, not plain size: the 32dp icon slot would
+                                // otherwise squash the disc into a pill.
+                                .requiredSize(52.dp)
+                                .androidx_shadow()
+                                .background(
+                                    Brush.linearGradient(listOf(Palette.Red2, Palette.Red)),
+                                    androidx.compose.foundation.shape.CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            TabIcon(glyph = tab.glyph, selected = selected, color = Color.White, size = 26.dp)
+                        }
+                    }
+                } else {
                 Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
                     // Drawn, not glyphed: it fills from the foot up as it
                     // becomes the tab you are on.
@@ -327,6 +359,7 @@ private fun LiquidTabRow(
                         )
                     }
                 }
+                }
                 Spacer(Modifier.height(3.dp))
                 Text(
                     tab.label,
@@ -340,3 +373,6 @@ private fun LiquidTabRow(
         }
     }
 }
+
+private fun Modifier.androidx_shadow() =
+    this.shadow(10.dp, androidx.compose.foundation.shape.CircleShape, clip = false, ambientColor = Palette.Red, spotColor = Palette.Red)

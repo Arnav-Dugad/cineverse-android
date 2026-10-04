@@ -123,6 +123,13 @@ fun SettingsScreen(
             )
                 Divider()
             SwitchRow(
+                title = "Mesmerising background",
+                detail = "A slow aurora that drifts behind everything",
+                checked = settings.mesmerise,
+                onChange = viewModel::setMesmerise,
+            )
+                Divider()
+            SwitchRow(
                 title = "Moving lights",
                 detail = "The glow follows your touch and leans as you scroll",
                 checked = settings.movingLights,
@@ -215,9 +222,8 @@ fun SettingsScreen(
             SettingsGroup("Start") {
             ChoiceRow(
                 title = "Open on",
-                options = listOf("Home", "Discover", "My List", "Stats"),
+                options = listOf("Home", "My List", "Stats"),
                 selected = when (settings.startTab) {
-                    "discover" -> "Discover"
                     "list" -> "My List"
                     "stats" -> "Stats"
                     else -> "Home"
@@ -225,13 +231,19 @@ fun SettingsScreen(
                 onSelect = { label ->
                     viewModel.setStartTab(
                         when (label) {
-                            "Discover" -> "discover"
                             "My List" -> "list"
                             "Stats" -> "stats"
                             else -> "home"
                         }
                     )
                 },
+            )
+                Divider()
+            SwitchRow(
+                title = "Floating actions on title pages",
+                detail = "Trailer, save, watched and more, once the buttons scroll away",
+                checked = settings.floatingToolbar,
+                onChange = viewModel::setFloatingToolbar,
             )
                 Divider()
             SwitchRow(
@@ -360,6 +372,13 @@ fun SettingsScreen(
                     exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
                 ) {
                 Column {
+                Divider()
+                SwitchRow(
+                    title = "Hooks instead of synopses",
+                    detail = "Gemini rewrites a flat overview as a spoiler-free hook",
+                    checked = settings.overviewHooks,
+                    onChange = viewModel::setOverviewHooks,
+                )
                 Divider()
                 SwitchRow(
                     title = "Glow round the screen",

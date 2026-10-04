@@ -78,6 +78,10 @@ class WatchWorker(
         }
         val shows = app.episodes.progress.value
         val region = settings.region
+        // Keeps the Top 10 history going even in weeks the app is not opened.
+        runCatching { app.tmdb.trending("movie", "week"); app.tmdb.trending("tv", "week") }
+        // And which library titles are adult, so Gemini is never told of them.
+        runCatching { app.privacy.sweep() }
         val today = LocalDate.now()
 
         if (settings.notifyNewEpisodes) {

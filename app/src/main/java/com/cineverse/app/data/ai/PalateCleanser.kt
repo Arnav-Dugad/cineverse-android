@@ -37,8 +37,8 @@ class PalateCleanser(private val app: AppContainer) {
     fun dismiss(id: String) = prefs.edit().putString("dismissed", id).apply()
 
     suspend fun check(): Cleanser? {
-        val library = app.library.library.value
-        val shows = app.episodes.progress.value
+        val library = app.privacy.library()
+        val shows = app.privacy.shows()
         val since = System.currentTimeMillis() - 4 * 86_400_000L
         val recent = Diary.entries(library, shows).filter { it.at >= since }
             .sortedByDescending { it.at }.distinctBy { it.item.key }.take(3)

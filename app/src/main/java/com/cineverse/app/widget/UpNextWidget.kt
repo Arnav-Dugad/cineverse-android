@@ -62,7 +62,7 @@ class UpNextWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val container = (context.applicationContext as CineVerseApp).container
-        val shows = container.episodes.progress.first()
+        val shows = lockScreenShows(container)
         val items = runCatching { container.airing.upNext(shows) }.getOrDefault(emptyList()).take(5)
         val art = kotlinx.coroutines.coroutineScope {
             items.map { item ->

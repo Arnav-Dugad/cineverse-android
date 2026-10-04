@@ -138,7 +138,7 @@ object Mentions {
                 }
             }
             Mentioned(
-                titles = titles.mapNotNull { it.await() }.distinctBy { it.second.key },
+                titles = titles.mapNotNull { it.await() }.filterNot { it.second.adult || app.privacy.isAdult(it.second.key) }.distinctBy { it.second.key },
                 people = people.mapNotNull { it.await() }.distinctBy { it.second.id },
             )
         }

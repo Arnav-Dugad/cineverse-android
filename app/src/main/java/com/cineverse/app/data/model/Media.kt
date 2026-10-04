@@ -209,6 +209,8 @@ data class TitleDetail(
     val nextEpisode: Episode? = null,
     val lastEpisode: Episode? = null,
     val inProduction: Boolean = false,
+    /** Release dates in the viewer's region (or the US when it has none): kind to ISO date. */
+    val releases: List<RegionRelease> = emptyList(),
 ) {
     val key: String get() = "${type.wire}_$id"
     val year: String get() = releaseDate.take(4)
@@ -266,3 +268,7 @@ val GenreNames: Map<Int, String> = mapOf(
     10764 to "Reality", 10765 to "Sci-Fi & Fantasy", 10766 to "Soap",
     10767 to "Talk", 10768 to "War & Politics",
 )
+
+/** One release of a film in one country: in cinemas, digital, on disc, on TV. */
+@Immutable
+data class RegionRelease(val kind: String, val date: String, val country: String)

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -129,7 +130,19 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
     }
 
     Column(modifier.padding(top = 20.dp)) {
-        SectionHeader("Where it was filmed", count = places.size)
+        val hasStory = places.any { it.story }
+        SectionHeader(if (hasStory) "On the map" else "Where it was filmed", count = places.size)
+        if (hasStory) {
+            Row(Modifier.padding(horizontal = ScreenPadding).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Palette.Red2))
+                Spacer(Modifier.width(5.dp))
+                Text("Filmed", style = MaterialTheme.typography.labelSmall, color = colors.text2)
+                Spacer(Modifier.width(14.dp))
+                Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.cyan))
+                Spacer(Modifier.width(5.dp))
+                Text("Where the story is set", style = MaterialTheme.typography.labelSmall, color = colors.text2)
+            }
+        }
         Spacer(Modifier.height(12.dp))
         BoxWithConstraints(
             Modifier
@@ -216,6 +229,14 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
                 }
                 groups
             }
+            // A pulse that walks the places one after another, like a route.
+            val routeLoop = androidx.compose.animation.core.rememberInfiniteTransition(label = "route")
+            val route by routeLoop.animateFloat(
+                0f, clusters.size.toFloat().coerceAtLeast(1f),
+                androidx.compose.animation.core.infiniteRepeatable(tween(1400 * clusters.size.coerceAtLeast(1), easing = androidx.compose.animation.core.LinearEasing)),
+                label = "routeStep",
+            )
+            val reduced = CvTheme.reducedMotion
             Canvas(
                 Modifier
                     .fillMaxSize()
@@ -228,20 +249,47 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
                         }
                     },
             ) {
-                for (group in clusters) {
+                val settled = drops.all { it.value >= 0.99f }
+                // The route itself: a faint dashed line through the places in order.
+                if (settled && clusters.size > 1 && !reduced) {
+                    val line = androidx.compose.ui.graphics.Path()
+                    clusters.forEachIndexed { i, g -> val p = points[g.first()]; if (i == 0) line.moveTo(p.x, p.y) else line.lineTo(p.x, p.y) }
+                    drawPath(
+                        line,
+                        Palette.Red2.copy(alpha = 0.28f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            1.4.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
+                        ),
+                    )
+                }
+                val walking = route.toInt().coerceIn(0, (clusters.size - 1).coerceAtLeast(0))
+                val walk = route - route.toInt()
+                clusters.forEachIndexed { groupIndex, group ->
                     val lead = group.first()
                     val drop = group.maxOf { drops[it].value }
-                    if (drop <= 0f) continue
+                    if (drop <= 0f) return@forEachIndexed
+                    val story = group.all { places[it].story }
+                    val pinColour = if (story) colors.cyan else Palette.Red2
+                    // This stop's turn on the route: a ring that swells and fades.
+                    if (settled && !reduced && groupIndex == walking) {
+                        drawCircle(
+                            pinColour.copy(alpha = 0.5f * (1f - walk)),
+                            radius = (8f + 22f * walk).dp.toPx(),
+                            center = points[lead],
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()),
+                        )
+                    }
                     val lift = (1f - drop) * -18.dp.toPx()
                     val point = points[lead] + Offset(0f, lift)
                     val on = selected != null && selected in group
                     val radius = (if (group.size > 1) 11.dp else if (places[lead].broad) 8.dp else 6.dp).toPx() * (if (on) 1.25f else 1f)
                     drawCircle(
-                        Brush.radialGradient(listOf(Palette.Red.copy(alpha = 0.5f * drop), Color.Transparent), center = point, radius = radius * 3.4f),
+                        Brush.radialGradient(listOf(pinColour.copy(alpha = 0.5f * drop), Color.Transparent), center = point, radius = radius * 3.4f),
                         radius = radius * 3.4f, center = point,
                     )
                     drawCircle(Color.White.copy(alpha = drop), radius * 0.78f, point)
-                    drawCircle((if (on) Palette.Gold else Palette.Red2).copy(alpha = drop), radius * 0.56f, point)
+                    drawCircle((if (on) Palette.Gold else pinColour).copy(alpha = drop), radius * 0.56f, point)
                     if (group.size > 1) {
                         val label = "${group.size}"
                         val laid = measurer.measure(label, androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
@@ -319,8 +367,11 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            places.take(16).forEachIndexed { index, place ->
+            // A place both filmed in and set in (Paris, for Inception) is
+            // one chip; a place only the story visits is edged in its cyan.
+            places.withIndex().distinctBy { it.value.name }.take(16).forEach { (index, place) ->
                 val on = selected == index
+                val storyOnly = places.none { it.name == place.name && !it.story }
                 Text(
                     place.name,
                     style = MaterialTheme.typography.labelMedium,
@@ -328,7 +379,7 @@ fun FilmingMap(places: List<Place>, modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .clip(CvShape.Pill)
                         .background(if (on) Palette.Gold else Color.Transparent)
-                        .border(1.dp, if (on) Color.Transparent else colors.hairline, CvShape.Pill)
+                        .border(1.dp, if (on) Color.Transparent else if (storyOnly) colors.cyan.copy(alpha = 0.6f) else colors.hairline, CvShape.Pill)
                         .clickableNoRipple { select(index, zoom = true) }
                         .padding(horizontal = 11.dp, vertical = 6.dp),
                 )

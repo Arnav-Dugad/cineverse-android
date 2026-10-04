@@ -70,6 +70,22 @@ enum class ListSort(val label: String) {
     }
 }
 
+/** The numbers at the top of the page. */
+@Immutable
+data class ListSummary(
+    val titles: Int = 0,
+    val films: Int = 0,
+    val series: Int = 0,
+    /** Minutes it would take to watch what is still unwatched here. */
+    val minutesLeft: Int = 0,
+    /** Up to three of the most recent posters, for the fan. */
+    val posters: List<String> = emptyList(),
+)
+
+/** Where a show in progress is: the next episode and how far through you are. */
+@Immutable
+data class ShowPlace(val next: String, val fraction: Float)
+
 /** A list's cover and the website's numbers under it. */
 @Immutable
 data class ListShowcase(
@@ -95,11 +111,19 @@ data class MyListState(
     /** What the user actually sees. */
     val items: List<MediaItem> = emptyList(),
     val genres: List<Genre> = emptyList(),
-    /** Which custom list is selected, or empty for all of them. */
-    val listId: String = "",
+    /** Which list is selected: "watchlist" or a custom list's id. */
+    val listId: String = "watchlist",
     val sort: ListSort = ListSort.Recent,
     /** The selected list's collage and numbers, when one is selected. */
     val showcase: ListShowcase? = null,
+    val summary: ListSummary = ListSummary(),
+    /** Gemini's moods: the one chosen, and how many titles here carry each. */
+    val mood: com.cineverse.app.data.ai.MoodTags.Mood? = null,
+    val moods: List<Pair<com.cineverse.app.data.ai.MoodTags.Mood, Int>> = emptyList(),
+    /** Shows in progress: where each one is. */
+    val places: Map<String, ShowPlace> = emptyMap(),
+    /** Grid of posters, or compact rows. */
+    val rows: Boolean = false,
 ) {
     val filteredOut: Boolean get() = all.isNotEmpty() && items.isEmpty()
 }
@@ -108,7 +132,10 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
 
     private val segment = MutableStateFlow(ListSegment.Watchlist)
     private val filter = MutableStateFlow(MediaFilter())
-    private val listId = MutableStateFlow("")
+    private val listId = MutableStateFlow("watchlist")
+    private val mood = MutableStateFlow<com.cineverse.app.data.ai.MoodTags.Mood?>(null)
+    private val viewPrefs = app.context.getSharedPreferences("my_list_view", android.content.Context.MODE_PRIVATE)
+    private val rows = MutableStateFlow(viewPrefs.getBoolean("rows", false))
     private val genres = MutableStateFlow<List<Genre>>(emptyList())
     private val sort = MutableStateFlow(ListSort.Recent)
     private val coverPrefs = app.context.getSharedPreferences("list_covers", android.content.Context.MODE_PRIVATE)
@@ -119,6 +146,12 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
             genres.value = (app.tmdb.genres(MediaType.Movie) + app.tmdb.genres(MediaType.Tv))
                 .distinctBy { it.id }
                 .sortedBy { it.name }
+        }
+        // Gemini's moods for anything on the list not tagged yet.
+        viewModelScope.launch {
+            app.library.library.collect { lib ->
+                if (lib.loaded && app.settings.settings.value.geminiOn) runCatching { app.moodTags.tagMissing(lib.saved.values) }
+            }
         }
     }
 
@@ -132,6 +165,7 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
         combine(
             segment, filter, listId, genres,
             app.library.library, app.episodes.progress, app.unlockedLists.ids, sort, coverOffsets,
+            mood, app.moodTags.tags, rows,
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val seg = values[0] as ListSegment
@@ -148,6 +182,10 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
             val order = values[7] as ListSort
             @Suppress("UNCHECKED_CAST")
             val offsets = values[8] as Map<String, Int>
+            val chosenMood = values[9] as com.cineverse.app.data.ai.MoodTags.Mood?
+            @Suppress("UNCHECKED_CAST")
+            val tags = values[10] as Map<String, Set<com.cineverse.app.data.ai.MoodTags.Mood>>
+            val asRows = values[11] as Boolean
             // Lists whose PIN has not been entered this session.
             val locked = lib.lists.filter { it.hasPin && it.id !in open }.map { it.id }.toSet()
 
@@ -159,13 +197,9 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
                 // way to reach them. The website shows all of them and offers
                 // "unwatched only" as a FILTER -- which this app now has too,
                 // in the filter sheet, where the user can see it is on.
+                // One list at a time - the Watchlist itself, or one of yours.
                 ListSegment.Watchlist -> lib.saved.values
-                    // A custom list narrows the watchlist rather than replacing
-                    // it, so the segment still means the same thing either way.
-                    .filter { list.isBlank() || it.lists.contains(list) }
-                    // In "All", a title that lives ONLY in locked lists stays
-                    // hidden: showing it here would undo the PIN entirely.
-                    .filter { list.isNotBlank() || it.lists.isEmpty() || !it.lists.all { id -> id in locked } }
+                    .filter { it.lists.ifEmpty { listOf("watchlist") }.contains(list.ifBlank { "watchlist" }) }
                     .sortedByDescending { it.addedAt }
                     .map { it.asItem() }
 
@@ -189,8 +223,12 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
 
             // "Watching" arrives in the order that matters -- most recently
             // ticked -- so the default order leaves it exactly as it is.
+            val moodCounts = if (seg == ListSegment.Watchlist) {
+                com.cineverse.app.data.ai.MoodTags.Mood.entries.map { m -> m to all.count { m in tags[it.key].orEmpty() } }.filter { it.second > 0 }
+            } else emptyList()
+            val moody = if (seg == ListSegment.Watchlist && chosenMood != null) all.filter { chosenMood in tags[it.key].orEmpty() } else all
             val filtered = active.copy(sort = SortOrder.Relevance)
-                .apply(all, isWatched = { lib.isWatched(it.key) }, imdbOf = ::imdbOf)
+                .apply(moody, isWatched = { lib.isWatched(it.key) }, imdbOf = ::imdbOf)
             val shown = sorted(filtered, order, seg, lib, shows)
             val selected = lib.lists.firstOrNull { it.id == list }
             MyListState(
@@ -204,6 +242,17 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
                 showcase = if (seg == ListSegment.Watchlist && selected != null) {
                     showcase(selected, lib.saved.values.filter { it.lists.contains(selected.id) }, offsets[selected.id] ?: 0)
                 } else null,
+                summary = summary(all, lib, shows),
+                mood = chosenMood.takeIf { seg == ListSegment.Watchlist },
+                moods = moodCounts,
+                places = if (seg == ListSegment.Watching) shows.values.associate { show ->
+                    val next = show.nextUp()
+                    "tv_${show.tmdbId}" to ShowPlace(
+                        next = next?.let { (s, e) -> if (show.isAbsolute) "Episode $e next" else "S$s E$e next" } ?: "Caught up",
+                        fraction = if (show.totalEpisodes > 0) show.watchedCount.toFloat() / show.totalEpisodes else 0f,
+                    )
+                } else emptyMap(),
+                rows = asRows,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MyListState())
 
@@ -300,6 +349,38 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
 
     fun setSort(value: ListSort) { sort.value = value }
 
+    fun setMood(value: com.cineverse.app.data.ai.MoodTags.Mood?) { mood.value = value }
+
+    fun setRows(value: Boolean) {
+        rows.value = value
+        viewPrefs.edit().putBoolean("rows", value).apply()
+    }
+
+    /** Titles, the split, and the time it would take to watch what is left. */
+    private fun summary(
+        items: List<MediaItem>,
+        lib: Library,
+        shows: Map<Int, com.cineverse.app.data.model.ShowProgress>,
+    ): ListSummary {
+        var minutes = 0
+        for (item in items) {
+            if (lib.isWatched(item.key)) continue
+            minutes += when (item.type) {
+                MediaType.Movie -> (lib.saved[item.key]?.runtime ?: 0).takeIf { it > 0 } ?: 110
+                MediaType.Tv -> shows[item.id]?.let { show ->
+                    (show.totalEpisodes - show.watchedCount).coerceAtLeast(0) * (show.episodeRuntime.takeIf { it > 0 } ?: 42)
+                } ?: 0
+            }
+        }
+        return ListSummary(
+            titles = items.size,
+            films = items.count { it.type == MediaType.Movie },
+            series = items.count { it.type == MediaType.Tv },
+            minutesLeft = minutes,
+            posters = items.mapNotNull { it.posterPath }.take(3),
+        )
+    }
+
     /** The next four posters on the cover, remembered on this device, as on the website. */
     fun shuffleCover(listId: String) {
         val next = (coverOffsets.value[listId] ?: 0) + 1
@@ -336,6 +417,8 @@ class MyListViewModel(private val app: AppContainer) : ViewModel() {
         // Setting a PIN leaves the list open for now - you just proved you
         // know it - exactly as the website does.
         if (saved) app.unlockedLists.unlock(list.id)
+        // Its shows leave the lock-screen widgets now, not at their next redraw.
+        if (saved) com.cineverse.app.widget.refreshShowWidgets(app.context)
         return saved
     }
 

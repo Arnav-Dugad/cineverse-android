@@ -34,10 +34,10 @@ class Spotlight(private val app: AppContainer) {
     private suspend fun spot(key: String, who: String, work: List<MediaItem>): Spot? {
         cache.get(key)?.let { return it }
         if (work.size < 3) return null
-        val library = app.library.library.value
-        val shows = app.episodes.progress.value
+        val library = app.privacy.library()
+        val shows = app.privacy.shows()
         fun seen(item: MediaItem) = library.isWatched(item.key) || (item.type == MediaType.Tv && (shows[item.id]?.watchedCount ?: 0) > 0)
-        val list = work.distinctBy { it.key }.sortedByDescending { it.voteCount }.take(45)
+        val list = work.filterNot { it.adult || app.privacy.isAdult(it.key) }.distinctBy { it.key }.sortedByDescending { it.voteCount }.take(45)
         val viewer = runCatching { app.persona.brief() }.getOrDefault("")
         val prompt = buildString {
             if (viewer.isNotBlank()) { appendLine(viewer); appendLine() }

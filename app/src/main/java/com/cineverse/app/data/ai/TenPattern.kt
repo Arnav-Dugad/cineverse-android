@@ -34,7 +34,7 @@ class TenPattern(private val app: AppContainer) {
 
     /** The titles it is about: 10s first, then 9s, at most thirty. */
     fun favourites(): List<Pair<String, Int>> {
-        val ratings = app.library.library.value.ratings
+        val ratings = app.privacy.library().ratings
         val tens = ratings.filterValues { it >= 10 }.keys.toList()
         val nines = ratings.filterValues { it == 9 }.keys.toList()
         return (tens.map { it to 10 } + (if (tens.size < 8) nines.map { it to 9 } else emptyList())).take(30)
@@ -53,7 +53,7 @@ class TenPattern(private val app: AppContainer) {
         cached()?.let { return it }
         val list = favourites()
         if (list.size < 3) return null
-        val library = app.library.library.value
+        val library = app.privacy.library()
         val lines = list.mapNotNull { (key, score) ->
             val watched = library.watched[key]
             val saved = library.saved[key]

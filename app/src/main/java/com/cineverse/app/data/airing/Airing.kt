@@ -213,6 +213,9 @@ class ExactTimes(context: Context, private val http: OkHttpClient) {
 
     private fun key(showId: Int, season: Int, episode: Int) = "$showId:$season:$episode"
 
+    /** The show's regular slot and channel from TVmaze, e.g. "Thursdays at 21:00 on Apple TV+". */
+    fun schedule(showId: Int): String? = prefs.getString("sched:$showId", null)?.takeIf { it.isNotBlank() }
+
     /** TVmaze's still for an episode, when it published one with the time. */
     fun cachedImage(showId: Int, season: Int, episode: Int): String? =
         prefs.getString("img:" + key(showId, season, episode), null)?.takeIf { it.isNotBlank() }
@@ -321,6 +324,29 @@ class ExactTimes(context: Context, private val http: OkHttpClient) {
                 val episodeMatches = episode["season"]?.jsonPrimitive?.intOrNull == next.season &&
                     episode["number"]?.jsonPrimitive?.intOrNull == next.episode
                 val airtime = episode["airtime"]?.jsonPrimitive?.content.orEmpty()
+                // The show's regular slot and where it airs, for when the
+                // episode itself has no time: "Thursdays at 21:00 on Apple TV+".
+                if (titleMatches && yearMatches) {
+                    runCatching {
+                        val schedule = root["schedule"] as? kotlinx.serialization.json.JsonObject
+                        val time = schedule?.get("time")?.jsonPrimitive?.content.orEmpty()
+                        val days = (schedule?.get("days") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it.jsonPrimitive.content }.orEmpty()
+                        val network = (root["network"] as? kotlinx.serialization.json.JsonObject)
+                        val web = (root["webChannel"] as? kotlinx.serialization.json.JsonObject)
+                        val channel = (network ?: web)?.get("name")?.jsonPrimitive?.content.orEmpty()
+                        val zone = (network?.get("country") as? kotlinx.serialization.json.JsonObject)?.get("timezone")?.jsonPrimitive?.content
+                        val local = if (time.isNotBlank() && zone != null && next.airDate.isNotBlank()) runCatching {
+                            val at = java.time.LocalDate.parse(next.airDate).atTime(java.time.LocalTime.parse(time)).atZone(java.time.ZoneId.of(zone))
+                            at.withZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime().toString()
+                        }.getOrNull() else time.takeIf { it.isNotBlank() }
+                        val line = buildString {
+                            if (days.size == 1) append("${days.first()}s") else if (days.size in 2..6) append(days.joinToString(", ") { d -> d.take(3) })
+                            if (local != null) append(if (isEmpty()) "At $local" else " at $local")
+                            if (channel.isNotBlank()) append(if (isEmpty()) "On $channel" else " on $channel")
+                        }
+                        if (line.isNotBlank()) prefs.edit().putString("sched:${show.id}", line).apply()
+                    }
+                }
                 if (titleMatches && yearMatches && episodeMatches) {
                     // The episode's own still, when TVmaze has one before TMDB does.
                     val image = (episode["image"] as? kotlinx.serialization.json.JsonObject)

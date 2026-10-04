@@ -70,7 +70,7 @@ class ShowCountdownWidget : GlanceAppWidget() {
                     Airing.upNext(b, stamp)
                 }
             } else {
-                container.airing.upNext(container.episodes.progress.first()).firstOrNull()
+                container.airing.upNext(lockScreenShows(container)).firstOrNull()
             }
         }.getOrNull()
         // The episode itself when there is a picture of it: TMDB's still, then

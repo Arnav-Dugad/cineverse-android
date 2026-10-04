@@ -14,6 +14,7 @@ import com.cineverse.app.data.recommend.SeedReason
 import com.cineverse.app.data.recommend.TasteProfile
 import kotlinx.coroutines.async
 import com.cineverse.app.widget.updateAllSafe
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +61,8 @@ data class HomeState(
     val moment: Rail? = null,
     /** After a run of heavy viewing, something lighter. */
     val cleanser: com.cineverse.app.data.ai.Cleanser? = null,
+    /** A title left half-watched: finish it or drop it? */
+    val unfinished: com.cineverse.app.data.ai.Unfinished? = null,
     val rails: List<Rail> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -109,6 +112,18 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
     /** The catalogue load; the airing rails wait for it, they never race it. */
     private var loadJob: kotlinx.coroutines.Job? = null
 
+    fun snoozeUnfinished() {
+        val held = _state.value.unfinished ?: return
+        app.halfWatched.snooze(held.item.key)
+        _state.value = _state.value.copy(unfinished = null)
+    }
+
+    fun dropUnfinished() {
+        val held = _state.value.unfinished ?: return
+        _state.value = _state.value.copy(unfinished = null)
+        viewModelScope.launch { runCatching { app.halfWatched.drop(held) } }
+    }
+
     fun dismissCleanser() {
         val held = _state.value.cleanser ?: return
         app.palate.dismiss(held.id)
@@ -121,7 +136,10 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
         viewModelScope.launch {
             if (!app.settings.settings.value.geminiOn) return@launch
             app.library.library.first { it.loaded }
+            // Learn which saved titles are adult, so Gemini never hears of them.
+            launch { runCatching { app.privacy.sweep(60) } }
             runCatching { app.palate.check() }.getOrNull()?.let { found -> _state.value = _state.value.copy(cleanser = found) }
+            runCatching { app.halfWatched.find() }.getOrNull()?.let { found -> _state.value = _state.value.copy(unfinished = found) }
             val moment = runCatching { app.momentRail.now() }.getOrNull() ?: return@launch
             _state.value = _state.value.copy(
                 moment = Rail(id = "moment", title = moment.title, kicker = "Gemini, for right now", items = moment.items),
@@ -186,6 +204,7 @@ class HomeViewModel(private val app: AppContainer) : ViewModel() {
             _state.value = _state.value.copy(upNext = upNext.await(), returning = returning.await())
             // The home-screen widget shows the same countdowns; keep it in step.
             com.cineverse.app.widget.UpNextWidget().updateAllSafe(app.context)
+            runCatching { com.cineverse.app.widget.NextEpisodeWidget().updateAll(app.context) }
             // And the "it's out" alarms, from the same answer, so they are set
             // the moment the app knows a time rather than at the next sweep.
             val settings = app.settings.settings.value

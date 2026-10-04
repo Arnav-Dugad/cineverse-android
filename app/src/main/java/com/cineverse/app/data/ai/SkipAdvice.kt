@@ -25,9 +25,16 @@ class SkipAdvice(private val app: AppContainer) {
 
     private val prefs = app.context.getSharedPreferences("skip_advice", Context.MODE_PRIVATE)
 
-    suspend fun of(showId: Int, showTitle: String, episode: Episode): Skip? {
+    /** Every episode's advice for a show, once it is locked away. */
+    fun forget(showId: Int) {
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith("$showId:") }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
+    suspend fun of(showId: Int, showTitle: String, episode: Episode, keep: Boolean = true): Skip? {
         val key = "$showId:${episode.season}:${episode.number}"
-        prefs.getString(key, null)?.let { raw ->
+        if (keep) prefs.getString(key, null)?.let { raw ->
             val verdict = runCatching { Skip.Verdict.valueOf(raw.substringBefore('|')) }.getOrNull()
             if (verdict != null) return Skip(verdict, raw.substringAfter('|'))
         }
@@ -53,7 +60,7 @@ class SkipAdvice(private val app: AppContainer) {
             val why = obj["why"]?.jsonPrimitive?.contentOrNull?.let(Gemini::plain)?.trim().orEmpty()
             Skip(verdict, why)
         }.getOrNull() ?: return null
-        prefs.edit().putString(key, "${skip.verdict.name}|${skip.why}").apply()
+        if (keep) prefs.edit().putString(key, "${skip.verdict.name}|${skip.why}").apply()
         return skip
     }
 }

@@ -50,7 +50,15 @@ import kotlinx.coroutines.launch
  * phase, so a moving light costs no recomposition. Reduced motion keeps the
  * lights where they rest.
  */
-fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else composed {
+fun Modifier.movingLights(enabled: Boolean, mesmerise: Boolean = false): Modifier = if (!enabled && !mesmerise) this else composed {
+    // The mesmerising background: four soft auroras drifting on slow
+    // Lissajous paths that never quite repeat (their periods share no
+    // factor), breathing in and out. Read only in the draw phase.
+    val aurora = rememberInfiniteTransition(label = "aurora")
+    val t1 by aurora.animateFloat(0f, 1f, infiniteRepeatable(tween(47_000, easing = LinearEasing)), label = "a1")
+    val t2 by aurora.animateFloat(0f, 1f, infiniteRepeatable(tween(61_000, easing = LinearEasing)), label = "a2")
+    val t3 by aurora.animateFloat(0f, 1f, infiniteRepeatable(tween(73_000, easing = LinearEasing)), label = "a3")
+    val breath by aurora.animateFloat(0f, 1f, infiniteRepeatable(tween(9_000), RepeatMode.Reverse), label = "aBreath")
     val reduced = CvTheme.reducedMotion
     val dark = CvTheme.colors.isDark
     val scope = rememberCoroutineScope()
@@ -120,6 +128,31 @@ fun Modifier.movingLights(enabled: Boolean): Modifier = if (!enabled) this else 
             val dy = y.value - 0.35f
             val tilt = lean.value
             val strength = if (dark) 1f else 0.6f
+            if (mesmerise) {
+                val tau = (2 * Math.PI).toFloat()
+                fun s(t: Float, k: Float = 1f) = kotlin.math.sin(t * tau * k)
+                fun c(t: Float, k: Float = 1f) = kotlin.math.cos(t * tau * k)
+                val still = reduced
+                val auroras = listOf(
+                    Triple(Offset(w * (0.5f + 0.42f * s(t1)), h * (0.3f + 0.22f * c(t2, 2f))), Palette.Red, 1.05f),
+                    Triple(Offset(w * (0.5f + 0.45f * c(t2)), h * (0.62f + 0.25f * s(t3))), Palette.Purple, 1.15f),
+                    Triple(Offset(w * (0.5f + 0.4f * s(t3, 2f)), h * (0.5f + 0.35f * c(t1))), Color(0xFF2E6BFF), 0.95f),
+                    Triple(Offset(w * (0.5f + 0.38f * c(t1, 2f)), h * (0.18f + 0.3f * s(t2))), Color(0xFF14B8A6), 0.85f),
+                )
+                for ((index, aurora) in auroras.withIndex()) {
+                    val (centre, colour, size) = aurora
+                    val at = if (still) Offset(w * (0.2f + 0.2f * index), h * (0.25f + 0.17f * index)) else centre
+                    val radius = w * size * (0.9f + 0.18f * breath)
+                    drawCircle(
+                        Brush.radialGradient(
+                            listOf(colour.copy(alpha = 0.11f * strength), colour.copy(alpha = 0.04f * strength), Color.Transparent),
+                            center = at, radius = radius,
+                        ),
+                        radius = radius, center = at, blendMode = if (dark) BlendMode.Screen else BlendMode.SrcOver,
+                    )
+                }
+            }
+            if (!enabled) return@drawWithContent
             val blend = if (dark) BlendMode.Screen else BlendMode.SrcOver
             val red = Offset(w * (0.18f + dx * 0.8f), h * (0.16f + dy * 0.6f - tilt * 0.14f))
             drawCircle(

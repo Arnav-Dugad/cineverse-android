@@ -90,6 +90,8 @@ fun NextEpisodePanel(
     exactAt: Long? = null,
     /** The episode's picture, beside its name. */
     still: String? = null,
+    /** TVmaze's regular slot, shown when the exact time is not known. */
+    schedule: String? = null,
 ) {
     val colors = CvTheme.colors
 
@@ -193,8 +195,11 @@ fun NextEpisodePanel(
                 // When it is, in the viewer's own clock - the line people actually
                 // wanted when they asked "what time does it come out here?".
                 Text(
-                    if (exact) "${com.cineverse.app.data.airing.Airing.localTime(airAt)} · your time"
-                    else "Counting to the air date",
+                    when {
+                        exact -> "${com.cineverse.app.data.airing.Airing.localTime(airAt)} · your time"
+                        schedule != null -> "Usually $schedule".replace("Usually On ", "On ").replace("Usually At ", "At ")
+                        else -> "Counting to the air date"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.text3,
                     maxLines = 1,

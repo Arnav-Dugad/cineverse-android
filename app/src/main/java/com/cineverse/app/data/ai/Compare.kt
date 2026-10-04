@@ -49,8 +49,11 @@ class Compare(private val app: AppContainer) {
                 appendLine()
             }
             appendLine("Compare these two titles for this viewer, without spoilers beyond each premise.")
-            val library = app.library.library.value
+            val library = app.privacy.library()
             fun seen(detail: TitleDetail): String {
+                // Nothing of yours about a locked or adult title: not even
+                // whether you have seen it.
+                if (app.privacy.hidden(detail.key)) return ""
                 val rated = library.ratings[detail.key]
                 return when {
                     library.isWatched(detail.key) || (app.episodes.progress.value[detail.id]?.watchedCount ?: 0) > 0 ->

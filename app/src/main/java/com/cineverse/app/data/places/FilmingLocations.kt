@@ -16,7 +16,7 @@ import java.net.URLEncoder
 
 /** Somewhere a title was filmed. */
 @Immutable
-data class Place(val name: String, val lat: Double, val lon: Double) {
+data class Place(val name: String, val lat: Double, val lon: Double, val story: Boolean = false) {
     /** A country or a state is a region, not a place you could stand: drawn smaller. */
     val broad: Boolean get() = (lat * 10).rem(10.0) == 0.0 && (lon * 10).rem(10.0) == 0.0
 }
@@ -33,12 +33,16 @@ class FilmingLocations(context: Context, private val http: OkHttpClient) {
 
     suspend fun of(imdbId: String): List<Place> {
         if (!imdbId.matches(Regex("^tt\\d+$"))) return emptyList()
-        prefs.getString(imdbId, null)?.let { raw ->
+        prefs.getString("v2:$imdbId", null)?.let { raw ->
             val at = raw.substringBefore('\n').toLongOrNull() ?: 0
             if (System.currentTimeMillis() - at < 30 * 86_400_000L) return decode(raw.substringAfter('\n'))
         }
-        val query = "SELECT ?locLabel ?coord WHERE { ?item wdt:P345 \"$imdbId\". ?item wdt:P915 ?loc. " +
-            "?loc wdt:P625 ?coord. SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". } } LIMIT 40"
+        // Where it was filmed (P915), and where the story is set (P840). As
+        // VALUES, not a UNION of two BINDs: Wikidata plans that UNION so
+        // badly it times out every time, and the map vanished with it.
+        val query = "SELECT ?locLabel ?coord ?kind WHERE { ?item wdt:P345 \"$imdbId\". " +
+            "VALUES (?p ?kind) { (wdt:P915 \"film\") (wdt:P840 \"story\") } ?item ?p ?loc. " +
+            "?loc wdt:P625 ?coord. SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". } } LIMIT 60"
         val places = withTimeoutOrNull(25_000) {
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -59,20 +63,26 @@ class FilmingLocations(context: Context, private val http: OkHttpClient) {
                             val (lon, lat) = Regex("""Point\(([-\d.eE]+) ([-\d.eE]+)\)""").find(point)?.destructured ?: return@mapNotNull null
                             // An unlabelled item comes back as its own Q-number.
                             if (name.matches(Regex("Q\\d+"))) return@mapNotNull null
-                            Place(name, lat.toDouble(), lon.toDouble())
-                        }.distinctBy { it.name }
+                            val story = fields["kind"]?.jsonObject?.get("value")?.jsonPrimitive?.contentOrNull == "story"
+                            Place(name, lat.toDouble(), lon.toDouble(), story)
+                        }.distinctBy { it.name to it.story }
                     }
                 }.getOrNull()
             }
         } ?: return emptyList()
-        prefs.edit().putString(imdbId, "${System.currentTimeMillis()}\n" + encode(places)).apply()
+        prefs.edit().putString("v2:$imdbId", "${System.currentTimeMillis()}\n" + encode(places)).apply()
         return places
     }
 
-    private fun encode(places: List<Place>) = places.joinToString("\n") { "${it.lat}\t${it.lon}\t${it.name}" }
+    private fun encode(places: List<Place>) = places.joinToString("\n") { "${it.lat}\t${it.lon}\t${it.name}\t${if (it.story) "s" else "f"}" }
 
     private fun decode(raw: String) = raw.lines().mapNotNull { line ->
         val parts = line.split('\t')
-        if (parts.size < 3) null else Place(parts[2], parts[0].toDoubleOrNull() ?: return@mapNotNull null, parts[1].toDoubleOrNull() ?: return@mapNotNull null)
+        if (parts.size < 3) null else Place(
+            parts[2],
+            parts[0].toDoubleOrNull() ?: return@mapNotNull null,
+            parts[1].toDoubleOrNull() ?: return@mapNotNull null,
+            parts.getOrNull(3) == "s",
+        )
     }
 }

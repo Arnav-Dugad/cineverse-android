@@ -121,6 +121,7 @@ class DiaryViewModel(private val app: AppContainer) : ViewModel() {
         val entries = Diary.entries(lib, shows)
         val days = Diary.days(entries)
         val inMonth = days.values.filter { YearMonth.from(it.date) == m }.flatMap { it.entries }
+            .filterNot { app.privacy.hidden(it.item.key, lib) }
         DiaryState(
             month = m,
             selected = s,
@@ -138,7 +139,7 @@ class DiaryViewModel(private val app: AppContainer) : ViewModel() {
         viewModelScope.launch {
             state
                 .filter { it.loaded && it.blurb == null && app.settings.settings.value.geminiOn }
-                .map { it.month to it.monthDays.flatMap { day -> day.entries } }
+                .map { it.month to it.monthDays.flatMap { day -> day.entries }.filterNot { e -> app.privacy.hidden(e.item.key) } }
                 .distinctUntilChanged { a, b -> a.first == b.first && a.second.size == b.second.size }
                 .collectLatest { (m, entries) ->
                     kotlinx.coroutines.delay(400)

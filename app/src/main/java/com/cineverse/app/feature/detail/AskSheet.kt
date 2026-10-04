@@ -291,6 +291,13 @@ fun AskTitleSheet(
                             com.cineverse.app.data.ai.Mentions.annotated(answer, com.cineverse.app.core.ui.GeminiColors[0]) { open(it) }
                         }
                         Column {
+                        // The thinking shape hands off to the answer: it shrinks and
+                        // spins down into the place where the first letter appears.
+                        val handoff = remember { androidx.compose.animation.core.Animatable(if (turn.writing) 1f else 0f) }
+                        LaunchedEffect(Unit) {
+                            if (handoff.value > 0f) handoff.animateTo(0f, androidx.compose.animation.core.tween(560, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                        }
+                        Box {
                         TypewriterText(
                             linked,
                             writing = turn.writing,
@@ -304,6 +311,21 @@ fun AskTitleSheet(
                                 .background(colors.text.copy(alpha = 0.05f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                         )
+                        if (handoff.value > 0.01f) {
+                            com.cineverse.app.core.ui.GeminiLoader(
+                                modifier = Modifier
+                                    .padding(start = 8.dp, top = 6.dp)
+                                    .graphicsLayer {
+                                        val k = handoff.value
+                                        scaleX = 0.35f + 0.65f * k; scaleY = scaleX
+                                        alpha = k
+                                        rotationZ = (1f - k) * 180f
+                                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.15f, 0.25f)
+                                    },
+                                size = 28.dp,
+                            )
+                        }
+                        }
                         if (!mentioned.isEmpty) {
                             Spacer(Modifier.height(10.dp))
                             com.cineverse.app.core.ui.MentionRow(mentioned, onOpen = onOpenTitle, onPerson = onPerson)

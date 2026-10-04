@@ -67,6 +67,8 @@ fun SeasonCurve(
     scores: SeasonScores,
     progress: ShowProgress?,
     modifier: Modifier = Modifier,
+    /** Gemini's one line on how critics received the season. */
+    critics: String? = null,
 ) {
     val colors = CvTheme.colors
     val mine = (1..episodeCount).mapNotNull { number ->
@@ -152,6 +154,14 @@ fun SeasonCurve(
                 val label = "$number"
                 val laid = measurer.measure(label, androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
                 drawText(measurer, label, Offset(x(number) - laid.size.width / 2f, bottom + 3.dp.toPx()), style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, color = colors.text3))
+            }
+        }
+        if (critics != null) {
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.Top) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.AutoAwesome, null, tint = com.cineverse.app.core.ui.GeminiColors[1], modifier = Modifier.padding(top = 3.dp).size(13.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (critics.startsWith("critic", ignoreCase = true)) critics else "Critics: $critics", style = MaterialTheme.typography.bodySmall, color = colors.text2)
             }
         }
         Spacer(Modifier.height(6.dp))

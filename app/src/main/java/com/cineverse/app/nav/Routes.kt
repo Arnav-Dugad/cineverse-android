@@ -69,11 +69,11 @@ sealed interface Route {
 }
 
 /**
- * The seven tabs: Home, the two catalogues, Discover, My List, Stats and
+ * The seven tabs: Home, the two catalogues, Search, My List, Stats and
  * You. Films and series used to be chips under the wordmark on Home; as tabs
- * they are one tap from anywhere, each with its own saved place. Discover
- * still holds Franchises, Box Office and Releases, and Search is a mode in
- * the top bar rather than a place.
+ * they are one tap from anywhere, each with its own saved place. Search sits
+ * in the middle as a raised disc, and its empty page leads on to Discover,
+ * Top 10, Box Office and Franchises.
  */
 enum class Tab(
     val route: Route,
@@ -83,7 +83,7 @@ enum class Tab(
     Home(Route.Home, "Home", TabGlyph.Home),
     Movies(Route.Movies, "Movies", TabGlyph.Film),
     TvShows(Route.TvShows, "TV Shows", TabGlyph.Tv),
-    Discover(Route.Discover, "Discover", TabGlyph.Discover),
+    Search(Route.Search, "Search", TabGlyph.Search),
     MyList(Route.MyList, "My List", TabGlyph.List),
     Stats(Route.Stats, "Stats", TabGlyph.Stats),
     Profile(Route.Profile, "You", TabGlyph.Person),

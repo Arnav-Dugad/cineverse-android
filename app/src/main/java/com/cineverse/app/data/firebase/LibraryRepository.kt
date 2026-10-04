@@ -271,14 +271,14 @@ class LibraryRepository(
     }
 
     /** Put a title in one of your lists, saving it first if it is not saved. */
-    suspend fun addToList(item: MediaItem, listId: String) {
+    suspend fun addToList(item: MediaItem, listId: String, detail: TitleDetail? = null) {
         val uid = auth.uid.value ?: return
         val held = library.value.saved[item.key]
         if (held != null) {
             setLists(item.key, held.lists + listId)
         } else {
             user(uid).collection("watchlist").document(item.key)
-                .set(savedPayload(item, null) + ("lists" to listOf(listId))).await()
+                .set(savedPayload(item, detail) + ("lists" to listOf(listId))).await()
         }
     }
 
@@ -327,6 +327,27 @@ class LibraryRepository(
      * what its reconciliation expects: deleting the document outright lets an
      * older offline copy on another device resurrect the row on next sign-in.
      */
+    /** Watched, on a given day: a new mark, or the date of an existing one moved. */
+    suspend fun markWatchedOn(item: MediaItem, detail: TitleDetail?, at: Long) {
+        val uid = auth.uid.value ?: return
+        val stamp = com.google.firebase.Timestamp(java.util.Date(at))
+        val ref = user(uid).collection("watched").document(item.key)
+        val existing = library.value.watched[item.key]
+        if (existing != null && library.value.isWatched(item.key)) {
+            // Only the latest viewing moves. A history the website kept (more
+            // than one play) keeps its earlier dates and its first-watched day.
+            val dates = existing.playDates
+            val fields = if (dates.size <= 1) {
+                mapOf("watchedAt" to stamp, "lastPlayedAt" to at, "playDates" to listOf(at))
+            } else {
+                mapOf("lastPlayedAt" to at, "playDates" to (dates.dropLast(1) + at).sorted())
+            }
+            ref.set(fields, com.google.firebase.firestore.SetOptions.merge()).await()
+        } else {
+            ref.set(watchedPayload(item, detail) + mapOf("watchedAt" to stamp, "lastPlayedAt" to at, "playDates" to listOf(at))).await()
+        }
+    }
+
     /** Missing details for a watched title, merged in: nothing already there is touched. */
     suspend fun fillWatched(key: String, fields: Map<String, Any?>) {
         val uid = auth.uid.value ?: return

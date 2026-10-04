@@ -216,7 +216,10 @@ data class ShowProgress(
 
     /** When an episode was marked, or 0 — what the diary and the heatmap read. */
     fun watchedAt(season: Int, episode: Int): Long =
-        log.lastOrNull { it.season == season && it.episode == episode }?.stamp ?: 0L
+        // The log keeps a row after an episode is unticked; that is history,
+        // not a watch, and the episode list said "Watched" beside an empty circle.
+        if (!isWatched(season, episode)) 0L
+        else log.lastOrNull { it.season == season && it.episode == episode }?.stamp ?: 0L
 
     /**
      * The next episode to watch: the lowest unwatched one that has aired.

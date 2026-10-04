@@ -86,6 +86,12 @@ data class Settings(
     val pinNavBar: Boolean = false,
     /** The background glow drifts toward your touch and leans as you scroll. */
     val movingLights: Boolean = true,
+    /** Gemini's spoiler-free hook in place of a flat synopsis. */
+    val overviewHooks: Boolean = true,
+    /** A slowly flowing aurora behind the whole app. */
+    val mesmerise: Boolean = true,
+    /** Floating actions on title pages once the buttons scroll away. */
+    val floatingToolbar: Boolean = true,
     /** A glow round the edge of the screen while Gemini is working. */
     val geminiEdgeGlow: Boolean = true,
     /** The streaming services you pay for, as TMDB provider ids. */
@@ -158,6 +164,9 @@ class SettingsRepository(
         val geminiOn = booleanPreferencesKey("geminiOn")
         val pinNavBar = booleanPreferencesKey("pinNavBar")
         val movingLights = booleanPreferencesKey("movingLights")
+        val overviewHooks = booleanPreferencesKey("overviewHooks")
+        val mesmerise = booleanPreferencesKey("mesmerise")
+        val floatingToolbar = booleanPreferencesKey("floatingToolbar")
         val geminiEdgeGlow = booleanPreferencesKey("geminiEdgeGlow")
         val myServices = stringPreferencesKey("myServices")
         val episodeSwipe = booleanPreferencesKey("episodeSwipe")
@@ -213,6 +222,9 @@ class SettingsRepository(
         geminiOn = this[Keys.geminiOn] ?: true,
         pinNavBar = this[Keys.pinNavBar] ?: false,
         movingLights = this[Keys.movingLights] ?: true,
+        overviewHooks = this[Keys.overviewHooks] ?: true,
+        mesmerise = this[Keys.mesmerise] ?: true,
+        floatingToolbar = this[Keys.floatingToolbar] ?: true,
         geminiEdgeGlow = this[Keys.geminiEdgeGlow] ?: true,
         myServices = this[Keys.myServices].orEmpty().split(',').mapNotNull { it.trim().toIntOrNull() }.toSet(),
         episodeSwipe = this[Keys.episodeSwipe] ?: true,
@@ -267,6 +279,9 @@ class SettingsRepository(
     suspend fun setGeminiOn(value: Boolean) = edit { it[Keys.geminiOn] = value }
     suspend fun setPinNavBar(value: Boolean) = edit { it[Keys.pinNavBar] = value }
     suspend fun setMovingLights(value: Boolean) = edit { it[Keys.movingLights] = value }
+    suspend fun setOverviewHooks(value: Boolean) = edit { it[Keys.overviewHooks] = value }
+    suspend fun setMesmerise(value: Boolean) = edit { it[Keys.mesmerise] = value }
+    suspend fun setFloatingToolbar(value: Boolean) = edit { it[Keys.floatingToolbar] = value }
     suspend fun setGeminiEdgeGlow(value: Boolean) = edit { it[Keys.geminiEdgeGlow] = value }
     suspend fun setMyServices(value: Set<Int>) = edit { it[Keys.myServices] = value.sorted().joinToString(",") }
     suspend fun setEpisodeSwipe(value: Boolean) = edit { it[Keys.episodeSwipe] = value }

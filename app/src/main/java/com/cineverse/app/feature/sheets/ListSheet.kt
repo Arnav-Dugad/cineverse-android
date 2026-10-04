@@ -76,7 +76,7 @@ import com.cineverse.app.data.model.UserList
 @Composable
 fun ListSheet(
     title: String,
-    lists: List<UserList>,
+    allLists: List<UserList>,
     membership: List<String>,
     onToggle: (String, Boolean) -> Unit,
     onCreate: (String) -> Unit,
@@ -84,6 +84,9 @@ fun ListSheet(
     onDelete: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // The website stores the watchlist as a list of its own; it has a fixed
+    // row above, and a second row with the same key would crash the column.
+    val lists = remember(allLists) { allLists.filter { it.id != "watchlist" } }
     val colors = CvTheme.colors
     val haptics = LocalHaptics.current
     var creating by remember { mutableStateOf(false) }
@@ -154,12 +157,16 @@ fun ListSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "watchlist") {
+                val checked = membership.contains("watchlist")
                 ListRow(
                     name = "Watchlist",
-                    sub = "Always on",
-                    checked = true,
-                    locked = true,
-                    onToggle = { haptics?.play(Haptic.Warning) },
+                    sub = null,
+                    checked = checked,
+                    locked = false,
+                    onToggle = {
+                        haptics?.play(if (checked) Haptic.Untick else Haptic.Tick)
+                        onToggle("watchlist", !checked)
+                    },
                 )
             }
             items(lists, key = { it.id }) { list ->

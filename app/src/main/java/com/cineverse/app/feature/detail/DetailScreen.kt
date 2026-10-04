@@ -1,5 +1,7 @@
 package com.cineverse.app.feature.detail
 
+import kotlinx.coroutines.launch
+
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
@@ -33,6 +35,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.AttachMoney
+import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
@@ -63,6 +70,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -123,6 +131,12 @@ fun DetailScreen(
     val places by viewModel.places.collectAsStateWithLifecycle()
     val wiki by viewModel.wiki.collectAsStateWithLifecycle()
     val compare by viewModel.compare.collectAsStateWithLifecycle()
+    val top250 by viewModel.top250.collectAsStateWithLifecycle()
+    val schedule by viewModel.schedule.collectAsStateWithLifecycle()
+    val hook by viewModel.hook.collectAsStateWithLifecycle()
+    val critics by viewModel.critics.collectAsStateWithLifecycle()
+    val chartRun = androidx.compose.runtime.remember(state.detail?.key) { viewModel.chartRun() }
+    val chartSince = androidx.compose.runtime.remember { viewModel.chartSince() }
     val trivia by viewModel.trivia.collectAsStateWithLifecycle()
     val watching by viewModel.watchingNow.collectAsStateWithLifecycle()
     var asking by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
@@ -130,7 +144,10 @@ fun DetailScreen(
     val shows by viewModel.progressFlow.collectAsStateWithLifecycle()
     val colors = CvTheme.colors
     val listState = rememberLazyListState()
+    val chapterScope = androidx.compose.runtime.rememberCoroutineScope()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    // Gemini is never used for adult titles: on their pages it simply is not there.
+    val geminiHere = settings.geminiOn && state.detail?.adult != true
     val onWifi by com.cineverse.app.core.net.rememberUnmetered()
     // Which sheet, if any, is up. Held here rather than in the view model: it is
     // screen state, it should not survive a process death, and a sheet that
@@ -221,8 +238,11 @@ fun DetailScreen(
                     movieMinutes = library.movieProgress[detail.id]?.minutes ?: 0,
                     showTitleLogo = settings.titleLogos,
                     hideTitle = settings.hideTitle,
-                    onSave = viewModel::toggleSaved,
+                    onSave = { sheet = TitleSheet.Lists },
                     onWatched = viewModel::toggleWatched,
+                    onWatchedOn = viewModel::markWatchedOn,
+                    top250 = top250,
+                    hook = hook.takeIf { geminiHere && settings.overviewHooks },
                     onRate = { sheet = TitleSheet.Rate },
                     onShare = { onShare(detail) },
                     onPlayTrailer = {
@@ -230,7 +250,7 @@ fun DetailScreen(
                     },
                     onLists = { sheet = TitleSheet.Lists },
                     onProgress = { sheet = TitleSheet.Progress },
-                    onAsk = if (settings.geminiOn) ({ asking = true }) else null,
+                    onAsk = if (geminiHere) ({ asking = true }) else null,
                     onWatchingNow = if (!detail.isSeries && detail.runtime > 0) viewModel::toggleWatchingNow else null,
                     watchingNow = watching?.id == detail.id,
                 )
@@ -238,7 +258,7 @@ fun DetailScreen(
             }
 
             // The ending, explained - locked until it is all watched.
-            if (settings.geminiOn && (detail.isSeries || detail.releaseDate.take(10) <= java.time.LocalDate.now().toString())) {
+            if (geminiHere && (detail.isSeries || detail.releaseDate.take(10) <= java.time.LocalDate.now().toString())) {
                 item(key = "ending") {
                     val unlocked = androidx.compose.runtime.remember(detail.key, library.watched.size, progress?.watchedCount) {
                         viewModel.endingUnlocked()
@@ -286,6 +306,7 @@ fun DetailScreen(
                             // yet; the show's artwork as a last resort.
                             still = com.cineverse.app.core.ui.Img.still(next.stillPath) ?: nextStill
                                 ?: com.cineverse.app.core.ui.Img.still(detail.backdropPath),
+                            schedule = schedule,
                         )
                         // A reminder you can see: this countdown on the home screen.
                         val context = androidx.compose.ui.platform.LocalContext.current
@@ -307,7 +328,7 @@ fun DetailScreen(
                 }
             }
 
-            pitch?.takeIf { settings.geminiOn }?.let { forYou ->
+            pitch?.takeIf { geminiHere }?.let { forYou ->
                 item(key = "forYou") {
                     ForYouCard(forYou, Modifier.padding(horizontal = 18.dp).padding(top = 18.dp))
                 }
@@ -330,11 +351,46 @@ fun DetailScreen(
             }
 
             stickyHeader(key = "tabs") {
-                SegmentedTabs(
-                    tabs = tabsFor(detail),
-                    selected = state.tab,
-                    onSelect = viewModel::selectTab,
-                )
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                // The list runs up behind the app bar, so a header pinned at
+                // the list's top was pinned out of sight. It rides down to sit
+                // just under the bar instead - moved, not padded, so nothing
+                // below it shifts while it settles.
+                val barPx = WindowInsets.statusBars.getTop(density) + with(density) { 56.dp.roundToPx() }
+                androidx.compose.foundation.layout.Column(
+                    Modifier
+                        // Lowered but not yet pinned, it would otherwise sit
+                        // under the items that follow it.
+                        .zIndex(2f)
+                        .graphicsLayer {
+                            val at = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "tabs" }?.offset ?: barPx
+                            translationY = (barPx - at).coerceAtLeast(0).toFloat()
+                        }
+                        .background(CvTheme.colors.ink),
+                ) {
+                    SegmentedTabs(
+                        tabs = tabsFor(detail),
+                        selected = state.tab,
+                        onSelect = viewModel::selectTab,
+                    )
+                    // Chapters: jump straight to a part of the page.
+                    val chapters = buildList {
+                        if (detail.isSeries) add(Chapter("Episodes", androidx.compose.material.icons.Icons.Rounded.VideoLibrary, DetailTab.Episodes, "seasons"))
+                        if (detail.cast.isNotEmpty()) add(Chapter("Cast", androidx.compose.material.icons.Icons.Rounded.Groups, DetailTab.About, "cast"))
+                        if (detail.providers.isNotEmpty()) add(Chapter("Where to watch", androidx.compose.material.icons.Icons.Rounded.LiveTv, state.tab, "providers"))
+                        if (!detail.isSeries && wiki.takings.any) add(Chapter("Box office", androidx.compose.material.icons.Icons.Rounded.AttachMoney, DetailTab.About, "takings"))
+                        if (places.isNotEmpty()) add(Chapter("Map", androidx.compose.material.icons.Icons.Rounded.Place, DetailTab.About, "places"))
+                    }
+                    ChapterBar(chapters, onJump = { chapter ->
+                        if (chapter.tab != state.tab) viewModel.selectTab(chapter.tab)
+                        chapterScope.launchChapter {
+                            androidx.compose.runtime.withFrameNanos { }
+                            androidx.compose.runtime.withFrameNanos { }
+                            // Clear of the bar and of this header beneath it.
+                            listState.scrollToKey(chapter.key, barPx + with(density) { 112.dp.roundToPx() })
+                        }
+                    })
+                }
             }
 
             when (state.tab) {
@@ -353,7 +409,7 @@ fun DetailScreen(
                     onSeasonRecap = { viewModel.openSeasonRecap(it) },
                     onSeriesRecap = { viewModel.openSeriesRecap() },
                     onPreviously = { viewModel.loadPreviously() },
-                    catchUpSeason = if (settings.geminiOn) viewModel.catchUpSeason(progress) else null,
+                    catchUpSeason = if (geminiHere) viewModel.catchUpSeason(progress) else null,
                     onCatchUp = viewModel::loadCatchUp,
                     onOpenEpisode = { season, episode ->
                         viewModel.selectSeason(season)
@@ -361,7 +417,8 @@ fun DetailScreen(
                     },
                     seasonScores = seasonScores,
                     onRateEpisode = { season, episode, score -> viewModel.rateEpisode(season, episode, score) },
-                    adviseSkip = if (settings.geminiOn) viewModel::adviseSkip else null,
+                    adviseSkip = if (geminiHere) viewModel::adviseSkip else null,
+                    critics = critics.takeIf { geminiHere },
                 )
 
                 DetailTab.About -> aboutSection(
@@ -373,6 +430,8 @@ fun DetailScreen(
                     castHours = castHours,
                     places = places,
                     wiki = wiki,
+                    chart = chartRun,
+                    chartSince = chartSince,
                 )
 
                 DetailTab.More -> item(key = "more") {
@@ -403,18 +462,18 @@ fun DetailScreen(
             }
         }
         FloatingTitleToolbar(
-            visible = headGone,
+            visible = headGone && settings.floatingToolbar,
             accent = com.cineverse.app.core.ui.LocalTitleAccent.current,
             saved = library.isSaved(detail.key),
             watched = library.isWatched(detail.key),
             rating = library.ratingOf(detail.key),
             hasTrailer = detail.trailer != null,
             onTrailer = { detail.trailer?.key?.let { key -> onPlayTrailer(key, detail.title) } },
-            onSave = viewModel::toggleSaved,
+            onSave = { sheet = TitleSheet.Lists },
             onWatched = viewModel::toggleWatched,
             onRate = { sheet = TitleSheet.Rate },
             onShare = { onShare(detail) },
-            onAsk = if (settings.geminiOn) ({ asking = true }) else null,
+            onAsk = if (geminiHere) ({ asking = true }) else null,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.cineverse.app.core.ui.LocalPinnedBarLift.current),
         )
 
@@ -446,7 +505,7 @@ fun DetailScreen(
         null -> Unit
     }
 
-    compare?.takeIf { settings.geminiOn }?.let { current ->
+    compare?.takeIf { geminiHere }?.let { current ->
         state.detail?.let { detail ->
             CompareSheet(
                 detail = detail,
@@ -459,7 +518,7 @@ fun DetailScreen(
         }
     }
 
-    if (asking && settings.geminiOn) {
+    if (asking && geminiHere) {
         state.detail?.let { detail ->
             val line = androidx.compose.runtime.remember(detail, progress, library.watched.size) { viewModel.spoilerLine() }
             if (line != null) {
@@ -495,8 +554,8 @@ fun DetailScreen(
 
         TitleSheet.Lists -> ListSheet(
             title = detail.title,
-            lists = library.lists,
-            membership = library.saved[detail.key]?.lists.orEmpty(),
+            allLists = library.lists,
+            membership = library.saved[detail.key]?.lists?.ifEmpty { listOf("watchlist") }.orEmpty(),
             onToggle = viewModel::setInList,
             onCreate = viewModel::createList,
             onRename = viewModel::renameList,
@@ -665,4 +724,8 @@ private fun DetailAppBar(title: String, alpha: Float, onBack: () -> Unit) {
                 .graphicsLayer { this.alpha = alpha },
         )
     }
+}
+
+private fun kotlinx.coroutines.CoroutineScope.launchChapter(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+    this.launch(block = block)
 }

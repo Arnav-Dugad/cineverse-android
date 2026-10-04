@@ -103,7 +103,21 @@ class DetailViewModel(
     /** The next episode's broadcast time to the minute, when TVmaze knows it. */
     val exactAir: StateFlow<Long?> = _exactAir.asStateFlow()
 
-    private val _chat = MutableStateFlow(app.chatStore.load(key))
+    /** In a locked list (or adult): Gemini may answer here, but nothing is kept. */
+    private val private_: Boolean get() = app.privacy.hidden(key)
+
+    private val _chat = MutableStateFlow(if (app.privacy.hidden(key)) { forgetHidden(); emptyList() } else app.chatStore.load(key))
+
+    /**
+     * A title locked away after Gemini wrote about it: its conversation and
+     * every answer kept for it (hook, critics, trivia, skip advice) go.
+     */
+    private fun forgetHidden() {
+        app.chatStore.clear(key)
+        runCatching { app.lines.forget(key, id) }
+        runCatching { app.trivia.forget(key) }
+        if (type == MediaType.Tv) runCatching { app.skipAdvice.forget(id) }
+    }
 
     /** The conversation in the "Ask about it" sheet, kept on the device across visits. */
     val chat: StateFlow<List<com.cineverse.app.data.ai.ChatTurn>> = _chat.asStateFlow()
@@ -125,6 +139,28 @@ class DetailViewModel(
     /** The selected season's episode scores: IMDb's with an OMDb key, TVmaze's without. */
     val seasonScores: StateFlow<com.cineverse.app.data.scores.SeasonScores> = _seasonScores.asStateFlow()
 
+    private val _hook = MutableStateFlow<String?>(null)
+
+    /** Gemini's hook for the synopsis. */
+    val hook: StateFlow<String?> = _hook.asStateFlow()
+
+    private val _critics = MutableStateFlow<String?>(null)
+
+    /** Gemini's line on the selected season's critics. */
+    val critics: StateFlow<String?> = _critics.asStateFlow()
+
+    private fun geminiAllowed(detail: TitleDetail) = app.settings.settings.value.geminiOn && !detail.adult
+
+    private fun loadHook(detail: TitleDetail) {
+        if (_hook.value != null || !geminiAllowed(detail) || !app.settings.settings.value.overviewHooks) return
+        viewModelScope.launch { _hook.value = runCatching { app.lines.hook(detail) }.getOrNull() }
+    }
+
+    private val _top250 = MutableStateFlow<Int?>(null)
+
+    /** Its place in TMDB's Top 250, when it has one. */
+    val top250: StateFlow<Int?> = _top250.asStateFlow()
+
     private val _wiki = MutableStateFlow(com.cineverse.app.data.wiki.WikiFacts())
 
     /** "Based on" and box office, from Wikidata. */
@@ -134,6 +170,11 @@ class DetailViewModel(
 
     /** Filming locations, from Wikidata. */
     val places: StateFlow<List<com.cineverse.app.data.places.Place>> = _places.asStateFlow()
+
+    private val _schedule = MutableStateFlow<String?>(null)
+
+    /** TVmaze's regular slot for the show, for when the episode has no time. */
+    val schedule: StateFlow<String?> = _schedule.asStateFlow()
 
     private val _nextStill = MutableStateFlow<String?>(null)
 
@@ -181,6 +222,7 @@ class DetailViewModel(
                 if (_state.value.tab == DetailTab.About) loadCastHours()
                 detail.nextEpisode?.let { loadExactAir(detail, it) }
                 loadPitch(detail)
+                loadHook(detail)
             }
             .onFailure { error ->
                 if (_state.value.detail == null) {
@@ -211,6 +253,7 @@ class DetailViewModel(
         )
         _exactAir.value = runCatching { app.airing.times.lookup(brief) }.getOrNull()
         _nextStill.value = app.airing.times.cachedImage(detail.id, next.season, next.number)
+        _schedule.value = app.airing.times.schedule(detail.id)
     }
 
     private fun loadCollection(id: Int) = viewModelScope.launch {
@@ -305,7 +348,7 @@ class DetailViewModel(
     private var asking: kotlinx.coroutines.Job? = null
 
     private val _trivia = MutableStateFlow<TriviaState>(
-        app.trivia.cached(key)?.let { TriviaState.Ready(it) } ?: TriviaState.Idle
+        app.trivia.cached(key)?.takeUnless { app.privacy.hidden(key) }?.let { TriviaState.Ready(it) } ?: TriviaState.Idle
     )
 
     /** "Did you know": locked until watched, then three facts on a tap. */
@@ -313,10 +356,11 @@ class DetailViewModel(
 
     fun loadTrivia() {
         val detail = _state.value.detail ?: return
-        if (_trivia.value is TriviaState.Loading || _trivia.value is TriviaState.Ready || !endingUnlocked()) return
+        if (_trivia.value is TriviaState.Loading || _trivia.value is TriviaState.Ready) return
+        val unfinished = !endingUnlocked()
         _trivia.value = TriviaState.Loading
         viewModelScope.launch {
-            val facts = runCatching { app.trivia.facts(detail) }.getOrNull()
+            val facts = runCatching { app.trivia.facts(detail, keep = !private_ && !unfinished, spoilerSafe = unfinished) }.getOrNull()
             _trivia.value = facts?.let { TriviaState.Ready(it) } ?: TriviaState.Failed
         }
     }
@@ -337,7 +381,7 @@ class DetailViewModel(
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 _chat.value = _chat.value.dropLast(1) + com.cineverse.app.data.ai.ChatTurn(question, "Something went wrong. Try again in a moment.")
             }
-            app.chatStore.save(key, _chat.value)
+            if (!private_) app.chatStore.save(key, _chat.value)
         }
     }
 
@@ -396,7 +440,7 @@ class DetailViewModel(
         if (!library.loaded || library.isWatched(detail.key) || app.episodes.progress.value[detail.id]?.watchedCount?.let { it > 0 } == true) return
         pitchAsked = true
         viewModelScope.launch {
-            _pitch.value = runCatching { app.forYou.pitch(detail, library) }.getOrNull()
+            _pitch.value = runCatching { app.forYou.pitch(detail, app.privacy.library(library)) }.getOrNull()
         }
     }
 
@@ -415,6 +459,17 @@ class DetailViewModel(
             allSeasons = _state.value.allSeasons + (season to episodes),
         )
         loadSeasonScores(season)
+        loadCritics(season)
+    }
+
+    private fun loadCritics(season: Int) = viewModelScope.launch {
+        _critics.value = null
+        val detail = _state.value.detail ?: return@launch
+        if (!geminiAllowed(detail) || season <= 0) return@launch
+        val show = app.episodes.progress.value[detail.id]
+        val finished = show != null && (show.structure[season] ?: 0) > 0 && show.watchedIn(season) >= (show.structure[season] ?: 0)
+        val line = runCatching { app.lines.critics(detail, season, spoilerSafe = !finished) }.getOrNull()
+        if (_state.value.season == season) _critics.value = line
     }
 
 
@@ -452,8 +507,14 @@ class DetailViewModel(
 
     suspend fun adviseSkip(episode: com.cineverse.app.data.model.Episode): com.cineverse.app.data.ai.Skip? {
         val detail = _state.value.detail ?: return null
-        return app.skipAdvice.of(detail.id, detail.title, episode)
+        return app.skipAdvice.of(detail.id, detail.title, episode, keep = !private_)
     }
+
+    /** Where this sat in the weekly Top 10, as the app has recorded it. */
+    fun chartRun() = app.topTenHistory.of(id, type)
+
+    fun chartSince(): String? = app.topTenHistory.since()
+        ?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()))
 
     /** Your score for an episode; 0 clears it. */
     fun rateEpisode(season: Int, episode: Int, score: Int) = viewModelScope.launch {
@@ -486,6 +547,7 @@ class DetailViewModel(
         if (awards.any) _state.value = _state.value.copy(awards = awards)
         // Where it was filmed, from the same source, after the trophies.
         _wiki.value = runCatching { app.wikiFacts.of(imdbId) }.getOrDefault(com.cineverse.app.data.wiki.WikiFacts())
+        _top250.value = runCatching { app.topRated.rank(id, type) }.getOrNull()
         val places = runCatching { app.filmingLocations.of(imdbId) }.getOrDefault(emptyList())
         _places.value = places
     }
@@ -676,6 +738,14 @@ class DetailViewModel(
         app.library.setRating(detail.key, value, detail.title)
     }
 
+    /** Watched on a particular day (the split button's menu). */
+    fun markWatchedOn(at: Long) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        val was = app.library.library.value.isWatched(detail.key)
+        app.library.markWatchedOn(detail.asItem(), detail, at)
+        if (!was && detail.isSeries) app.episodes.markShowWatched(detail, at)
+    }
+
     fun setDropped(dropped: Boolean) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
         app.episodes.setDropped(detail, dropped)
@@ -690,14 +760,23 @@ class DetailViewModel(
      * the membership would be written to a watchlist document that does not
      * exist and the choice would silently evaporate.
      */
+    /**
+     * In or out of one list. Saving goes through here now - the bookmark asks
+     * which list - so a title that is not saved yet is saved into just that
+     * list, and one taken out of its last list is unsaved.
+     */
     fun setInList(listId: String, member: Boolean) = viewModelScope.launch {
         val detail = _state.value.detail ?: return@launch
-        if (!app.library.library.value.isSaved(detail.key)) {
-            app.library.toggleSaved(detail.asItem(), detail)
+        val held = app.library.library.value.saved[detail.key]
+        when {
+            held == null && member -> app.library.addToList(detail.asItem(), listId, detail)
+            held == null -> Unit
+            else -> {
+                val next = (if (member) held.lists + listId else held.lists - listId).distinct()
+                if (next.isEmpty()) app.library.toggleSaved(detail.asItem(), detail)
+                else app.library.setLists(detail.key, next)
+            }
         }
-        val held = app.library.library.value.saved[detail.key]?.lists ?: listOf("watchlist")
-        val next = if (member) held + listId else held - listId
-        app.library.setLists(detail.key, next)
     }
 
     fun createList(name: String) = viewModelScope.launch {

@@ -26,6 +26,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.AttachMoney
+import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
@@ -90,6 +94,8 @@ fun SearchScreen(
     onNavigate: (page: String) -> Unit = {},
     /** Opened from a "Search by voice" shortcut: start listening at once. */
     startListening: Boolean = false,
+    /** Discover's pages, reached from an empty search now that Discover is not a tab. */
+    onExplore: (com.cineverse.app.nav.Route) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -277,6 +283,9 @@ fun SearchScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
+                    item(key = "explore", span = { GridItemSpan(maxLineSpan) }) {
+                        ExploreRow(onExplore)
+                    }
                     if (state.history.isNotEmpty()) {
                         item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
                             RecentSearches(
@@ -574,5 +583,39 @@ private fun GroupHeader(label: String, count: Int) {
                 .background(colors.text.copy(alpha = 0.07f))
                 .padding(horizontal = 7.dp, vertical = 1.dp),
         )
+    }
+}
+
+/** What Discover used to hold, one tap from an empty search. */
+@Composable
+private fun ExploreRow(onExplore: (com.cineverse.app.nav.Route) -> Unit) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val entries = listOf(
+        Triple("Discover", androidx.compose.material.icons.Icons.Rounded.Explore, com.cineverse.app.nav.Route.Discover),
+        Triple("Top 10", androidx.compose.material.icons.Icons.Rounded.EmojiEvents, com.cineverse.app.nav.Route.TopTen("movie")),
+        Triple("Box office", androidx.compose.material.icons.Icons.Rounded.AttachMoney, com.cineverse.app.nav.Route.BoxOffice),
+        Triple("Franchises", androidx.compose.material.icons.Icons.Rounded.Collections, com.cineverse.app.nav.Route.Franchises),
+    )
+    Column {
+        Text("EXPLORE", style = KickerStyle, color = colors.text3)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((label, icon, route) in entries) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(CvShape.Large)
+                        .background(colors.text.copy(alpha = 0.05f))
+                        .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onExplore(route) }
+                        .padding(vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(icon, null, tint = colors.text2, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.height(6.dp))
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.text2, maxLines = 1)
+                }
+            }
+        }
     }
 }

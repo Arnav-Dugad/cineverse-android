@@ -12,6 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
@@ -187,6 +188,12 @@ fun HomeScreen(
             if (state.returning.isNotEmpty()) {
                 item(key = "returning") {
                     ReturningSection(state.returning, onOpen)
+                }
+            }
+
+            state.unfinished?.takeIf { settings.geminiOn }?.let { unfinished ->
+                item(key = "unfinished") {
+                    UnfinishedCard(unfinished, onOpen, viewModel::dropUnfinished, viewModel::snoozeUnfinished)
                 }
             }
 
@@ -1187,6 +1194,77 @@ private fun CleanserCard(
             items(cleanser.picks.size, key = { cleanser.picks[it].key }) { index ->
                 val item = cleanser.picks[index]
                 com.cineverse.app.core.ui.PosterCard(item = item, onOpen = onOpen, width = 104.dp, onLongPress = onPeek)
+            }
+        }
+    }
+}
+
+/**
+ * "Finish or drop?": the title you left half-watched, where you stopped,
+ * Gemini's honest line on whether to go back, and three answers.
+ */
+@Composable
+private fun UnfinishedCard(
+    unfinished: com.cineverse.app.data.ai.Unfinished,
+    onOpen: (MediaItem) -> Unit,
+    onDrop: () -> Unit,
+    onLater: () -> Unit,
+) {
+    val colors = CvTheme.colors
+    val haptics = com.cineverse.app.core.design.LocalHaptics.current
+    val shown = com.cineverse.app.core.ui.rememberArrival(1f, durationMillis = 620)
+    Box(
+        Modifier
+            .padding(horizontal = ScreenPadding)
+            .fillMaxWidth()
+            .graphicsLayer { alpha = shown; translationY = (1f - shown) * 20f }
+            .geminiGlow(corner = 24.dp, width = 1.3.dp)
+            .clip(com.cineverse.app.core.design.CvShape.XLarge),
+    ) {
+        com.cineverse.app.core.ui.CvImage(
+            com.cineverse.app.core.ui.Img.backdrop(unfinished.item.backdropPath ?: unfinished.item.posterPath),
+            null,
+            Modifier.matchParentSize(),
+        )
+        Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(colors.ink.copy(alpha = 0.96f), colors.ink.copy(alpha = 0.78f)))))
+        Column(Modifier.padding(16.dp)) {
+            Text("FINISH OR DROP?", style = com.cineverse.app.core.design.KickerStyle, color = colors.text3)
+            Spacer(Modifier.height(6.dp))
+            Text(unfinished.item.title, style = MaterialTheme.typography.titleLarge, color = colors.text, maxLines = 2)
+            Text(unfinished.where, style = MaterialTheme.typography.labelMedium, color = colors.text3)
+            Spacer(Modifier.height(10.dp))
+            Text(unfinished.line, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Keep going",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.ink,
+                    modifier = Modifier
+                        .clip(com.cineverse.app.core.design.CvShape.Pill)
+                        .background(colors.text)
+                        .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onOpen(unfinished.item) }
+                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                )
+                Text(
+                    "Drop it",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.text,
+                    modifier = Modifier
+                        .clip(com.cineverse.app.core.design.CvShape.Pill)
+                        .border(1.dp, colors.hairline, com.cineverse.app.core.design.CvShape.Pill)
+                        .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Drop); onDrop() }
+                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                )
+                Text(
+                    "Not now",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.text3,
+                    modifier = Modifier
+                        .clip(com.cineverse.app.core.design.CvShape.Pill)
+                        .clickableNoRipple { haptics?.play(com.cineverse.app.core.design.Haptic.Tap); onLater() }
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                )
             }
         }
     }

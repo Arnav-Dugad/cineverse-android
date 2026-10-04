@@ -13,6 +13,7 @@ import com.cineverse.app.data.model.ShowProgress
 class EpisodeHook(private val app: AppContainer) {
 
     suspend fun line(show: ShowProgress, new: Episode): String? {
+        if (app.privacy.hidden(show.key)) return null
         // The episode you saw last, by the log; failing that, the one before the new one.
         val last = show.log.filter { !it.bulk }.maxByOrNull { it.stamp }
             ?: show.log.maxByOrNull { it.stamp }
